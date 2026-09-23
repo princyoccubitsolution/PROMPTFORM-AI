@@ -6,7 +6,7 @@ import {
   StopCircle, Edit3, Copy, Mic, MicOff, FileText, Check, Plus, AlertCircle 
 } from 'lucide-react';
 import { Button } from './ui/Button';
-import { BASE_URL } from '@/lib/api';
+import { getBaseUrl } from '@/lib/api';
 
 interface Message {
   id: string;
@@ -233,7 +233,7 @@ export function AssistantChat({ formId, onFormGenerated, onRestrictionTriggered 
       }
 
       let token = localStorage.getItem('promptform_access_token');
-      let response = await fetch(`${BASE_URL}/ai/chat-stream`, {
+      let response = await fetch(`${getBaseUrl()}/ai/chat-stream`, {
         method: 'POST',
         headers: token ? { 'Authorization': `Bearer ${token}` } : {},
         body: formData,
@@ -244,7 +244,7 @@ export function AssistantChat({ formId, onFormGenerated, onRestrictionTriggered 
         const refreshToken = localStorage.getItem('promptform_refresh_token');
         if (refreshToken) {
           try {
-            const refreshRes = await fetch(`${BASE_URL}/auth/refresh`, {
+            const refreshRes = await fetch(`${getBaseUrl()}/auth/refresh`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ refreshToken })
@@ -256,7 +256,7 @@ export function AssistantChat({ formId, onFormGenerated, onRestrictionTriggered 
                 localStorage.setItem('promptform_refresh_token', data.refreshToken);
               }
               // Retry
-              response = await fetch(`${BASE_URL}/ai/chat-stream`, {
+              response = await fetch(`${getBaseUrl()}/ai/chat-stream`, {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${data.accessToken}` },
                 body: formData,

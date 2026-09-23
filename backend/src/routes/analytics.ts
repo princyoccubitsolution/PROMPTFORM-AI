@@ -141,7 +141,7 @@ router.get('/form/:formId', authMiddleware, async (req: AuthenticatedRequest, re
 router.post('/form/:formId/view', async (req: Request, res: Response) => {
   try {
     const { formId } = req.params;
-    const ipAddress = req.ip || req.socket.remoteAddress;
+    const ipAddress = (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() || req.ip || req.socket.remoteAddress;
     const userAgent = req.headers['user-agent'] || '';
 
     await AnalyticsService.logEvent({
@@ -168,7 +168,7 @@ router.post('/form/:formId/event', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Invalid event type' });
     }
 
-    const ipAddress = req.ip || req.socket.remoteAddress;
+    const ipAddress = (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() || req.ip || req.socket.remoteAddress;
     const userAgent = req.headers['user-agent'] || '';
 
     await AnalyticsService.logEvent({

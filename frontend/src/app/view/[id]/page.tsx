@@ -420,7 +420,7 @@ export default function ViewFormPage() {
       answers: finalAnswers,
       browserMetadata: {
         user_agent: navigator.userAgent,
-        ip_address: "127.0.0.1",
+        ip_address: "",
         tab_switches: tabSwitchCount,
         is_flagged: isFlagged
       },

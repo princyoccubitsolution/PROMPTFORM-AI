@@ -178,6 +178,31 @@ router.get('/', authMiddleware, async (req: AuthenticatedRequest, res: Response)
   }
 });
 
+// LIVE NOTIFICATIONS (must precede /:id)
+router.get('/notifications/live', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
+    const userNotifications = inMemoryNotifications.filter(n => n.userId === req.user!.id || n.userId === 'all_users');
+    return res.json(userNotifications);
+  } catch (error) {
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/notifications/live/read-all', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
+    inMemoryNotifications.forEach(n => {
+      if (n.userId === req.user!.id || n.userId === 'all_users') {
+        n.read = true;
+      }
+    });
+    return res.json({ success: true });
+  } catch (error) {
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // 2. GET FORM BY ID (Public details vs Authenticated editor details)
 router.get('/:id', async (req: Request, res: Response) => {
   try {
@@ -499,12 +524,19 @@ router.post('/:id/submit', async (req: Request, res: Response) => {
       }
     }
 
+    // Resolve real client IP address (supporting reverse proxies like Render / Cloudflare)
+    const rawIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() || req.ip || req.socket.remoteAddress || '';
+    const finalBrowserMetadata = {
+      ...browserMetadata,
+      ip_address: browserMetadata?.ip_address && browserMetadata.ip_address !== '127.0.0.1' ? browserMetadata.ip_address : rawIp
+    };
+
     // Save user response
     const response = await db.response.create({
       data: {
         formId: form.id,
         answers,
-        browserMetadata,
+        browserMetadata: finalBrowserMetadata,
         timeTaken,
         submittedBy: submittedBy || req.body.submittedBy || null,
         email: responderEmail || null
@@ -521,13 +553,12 @@ router.post('/:id/submit', async (req: Request, res: Response) => {
     });
 
     // Log submit event in analytics
-    const ipAddress = req.ip || req.socket.remoteAddress;
     const userAgent = req.headers['user-agent'] || '';
     await AnalyticsService.logEvent({
       formId: form.id,
       eventType: 'SUBMIT',
       userAgent,
-      ipAddress
+      ipAddress: rawIp
     });
 
     // Update analytics submissions counter
@@ -875,32 +906,6 @@ router.get('/:id/export', authMiddleware, validateUuidMiddleware, async (req: Au
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', `attachment; filename="responses-export-${id}.csv"`);
     return res.status(200).send(csvString);
-  } catch (error) {
-    return res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// GET ALL NOTIFICATIONS FOR LOGGED IN USER
-router.get('/notifications/live', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
-    const userNotifications = inMemoryNotifications.filter(n => n.userId === req.user!.id || n.userId === 'all_users');
-    return res.json(userNotifications);
-  } catch (error) {
-    return res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// MARK ALL NOTIFICATIONS AS READ
-router.post('/notifications/live/read-all', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
-    inMemoryNotifications.forEach(n => {
-      if (n.userId === req.user!.id || n.userId === 'all_users') {
-        n.read = true;
-      }
-    });
-    return res.json({ success: true });
   } catch (error) {
     return res.status(500).json({ error: 'Internal server error' });
   }

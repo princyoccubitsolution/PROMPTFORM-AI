@@ -9,7 +9,7 @@ export function getBaseUrl(): string {
   return 'http://127.0.0.1:5050/api';
 }
 
-export const BASE_URL = 'http://127.0.0.1:5050/api';
+export const BASE_URL = getBaseUrl();
 
 const getHeaders = () => {
   const headers: Record<string, string> = {
@@ -203,7 +203,7 @@ export const api = {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
-    const url = `${BASE_URL}${endpoint}`;
+    const url = `${getBaseUrl()}${endpoint}`;
     let response;
     try {
       response = await fetch(url, {

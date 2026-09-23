@@ -18,7 +18,7 @@ import { Input } from '@/components/ui/Input';
 import { Switch } from '@/components/ui/Switch';
 import { useTheme } from 'next-themes';
 import { useFormStore, Question } from '@/store/useFormStore';
-import { api, BASE_URL } from '@/lib/api';
+import { api, getBaseUrl } from '@/lib/api';
 import { Modal } from '@/components/ui/Modal';
 import { ShareModal } from '@/components/ShareModal';
 import { UpgradeModal } from '@/components/UpgradeModal';
@@ -256,7 +256,7 @@ export default function BuilderPage() {
   const handleExportCSV = async () => {
     try {
       const token = localStorage.getItem('promptform_access_token');
-      const response = await fetch(`${BASE_URL}/forms/${formId}/export`, {
+      const response = await fetch(`${getBaseUrl()}/forms/${formId}/export`, {
         headers: token ? { 'Authorization': `Bearer ${token}` } : {}
       });
       if (!response.ok) throw new Error("Could not export responses.");
