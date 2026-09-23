@@ -1,0 +1,35 @@
+<svg viewBox="28 28 184 184" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="g" x1="40" y1="40" x2="200" y2="200" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#8B6B55"/>
+      <stop offset="50%" stop-color="#9C7C66"/>
+      <stop offset="100%" stop-color="#795D49"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Main P Body and Tail -->
+  <path d="
+    M 40 160 
+    L 40 40 
+    L 140 40 
+    A 60 60 0 0 1 140 160 
+    L 100 160 
+    A 30 30 0 0 0 70 190 
+    L 70 200
+  " stroke="url(#g)" stroke-width="16" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+  
+  <!-- 3 Form Lines -->
+  <path d="
+    M 104 70 L 170 70
+    M 104 100 L 145 100
+    M 104 130 L 120 130
+  " stroke="url(#g)" stroke-width="16" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+  
+  <!-- Form Dots -->
+  <circle cx="80" cy="70" r="8" fill="url(#g)"/>
+  <circle cx="80" cy="100" r="8" fill="url(#g)"/>
+  <circle cx="80" cy="130" r="8" fill="url(#g)"/>
+  
+  <!-- Bottom Standalone Dot -->
+  <circle cx="40" cy="200" r="8" fill="url(#g)"/>
+</svg>

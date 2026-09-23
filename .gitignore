@@ -1,0 +1,79 @@
+# Dependencies
+node_modules/
+**/node_modules/
+.pnp
+.pnp.js
+.yarn/install-state.gz
+
+# Next.js & Frontend build outputs
+.next/
+**/.next/
+out/
+**/out/
+build/
+**/build/
+
+# Backend build outputs & runtime data
+dist/
+**/dist/
+backend/dist/
+backend/storage/
+storage/
+**/storage/
+backend/public/uploads/*
+!backend/public/uploads/.gitkeep
+!backend/public/uploads/temp/.gitkeep
+*.sqlite
+*.sqlite3
+
+# Environment files & Secrets (STRICTLY IGNORED)
+.env
+.env*.local
+.env.*
+*.env
+*.env.local
+*.env.*.local
+backend/.env
+backend/.env.*
+frontend/.env
+frontend/.env.*
+!backend/.env.example
+!frontend/.env.example
+*.pem
+*.key
+*.cert
+
+# Logs & Debug
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Testing & Coverage
+coverage/
+**/coverage/
+
+# OS & Editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Temporary audit & local test scripts/artifacts
+ai_generator_qa_report.json
+audit_results.json
+audit_script.ps1
+temp_audit.json
+test_frontend.ps1
+test_intent_engine.ts
+test_login.ps1
+test_topic_ai.ps1
+qa_test_report.json
+promptform-forms-backup/

@@ -1,0 +1,374 @@
+export interface UnderstandingSummary {
+  topic: string;
+  purpose: string;
+  formType: string;
+  difficulty: string;
+  questionCount: number;
+  summaryText: string;
+}
+
+export interface IntentResult {
+  category: 'quiz' | 'survey' | 'rsvp' | 'job' | 'contact' | 'general' | 'medical' | 'complaint' | 'invoice' | 'booking' | 'order' | 'appointment' | 'crm';
+  topic: string;
+  purpose: string;
+  formType: string;
+  difficulty: 'Beginner' | 'Intermediate' | 'Difficult' | 'Advanced';
+  questionCount: number;
+  normalizedPrompt: string;
+  industry: string;
+  expandedFields: string[];
+  relevanceRules: {
+    allowGenericIdentity: boolean;
+    requireQuizValidation: boolean;
+  };
+  understandingSummary: UnderstandingSummary;
+}
+
+export function spellingRecovery(text: string): string {
+  let cleaned = text.toLowerCase().replace(/\s+/g, " ").trim();
+
+  // Phonetic/slang corrections
+  cleaned = cleaned.replace(/\b(clg|colg|colleg)\b/g, "college");
+  cleaned = cleaned.replace(/\b(valu|walu|valoo)\b/g, "form");
+  cleaned = cleaned.replace(/\b(from|fom|fram|porm|formm)\b/g, "form");
+  cleaned = cleaned.replace(/\b(squert|survet|survay|surviy|surve|reviw|reveiw|riview|rivew|revue|reviwe|feedbackk|feedbak|fedback|fedbak)\b/g, "survey");
+  cleaned = cleaned.replace(/\b(quz|qiz|quizz|quize|quise)\b/g, "quiz");
+  cleaned = cleaned.replace(/\b(regitration|regis|ragistration|reg)\b/g, "registration");
+  cleaned = cleaned.replace(/\b(trevel|traval|traveling)\b/g, "travel");
+  cleaned = cleaned.replace(/\b(bookig|boking|bokingg)\b/g, "booking");
+  cleaned = cleaned.replace(/\b(perfcat|perfact|perfec|perfectt|perfeckt)\b/g, "perfect");
+  
+  // Regional verbs and nouns mapping
+  cleaned = cleaned.replace(/\b(banavo|bnao|banao|banado|likho|tayyar karo|tayarkaro|create|make)\b/g, "generate");
+  cleaned = cleaned.replace(/\b(mahiti|suchna|suchan|chakasni|mahitia)\b/g, "evaluation");
+  cleaned = cleaned.replace(/\b(suqrey|surgrey|sugery|surgeryy)\b/g, "surgery");
+
+  return cleaned;
+}
+
+export function detectLanguage(text: string): { lang: string; isRtl: boolean } {
+  const lowercase = text.toLowerCase();
+  
+  if (lowercase.includes("gujarati") || lowercase.includes("ગુજરાતી") || lowercase.includes("gujrish")) return { lang: "gujarati", isRtl: false };
+  if (lowercase.includes("hindi") || lowercase.includes("हिंदी") || lowercase.includes("हिन्दी") || lowercase.includes("hinglish")) return { lang: "hindi", isRtl: false };
+  if (lowercase.includes("arabic") || lowercase.includes("عربي") || lowercase.includes("العربية")) return { lang: "arabic", isRtl: true };
+  if (lowercase.includes("urdu") || lowercase.includes("اردو")) return { lang: "urdu", isRtl: true };
+  if (lowercase.includes("french") || lowercase.includes("français") || lowercase.includes("francais")) return { lang: "french", isRtl: false };
+  if (lowercase.includes("spanish") || lowercase.includes("español") || lowercase.includes("espanol")) return { lang: "spanish", isRtl: false };
+  if (lowercase.includes("german") || lowercase.includes("deutsch")) return { lang: "german", isRtl: false };
+  if (lowercase.includes("japanese") || lowercase.includes("日本語")) return { lang: "japanese", isRtl: false };
+  if (lowercase.includes("russian") || lowercase.includes("русский")) return { lang: "russian", isRtl: false };
+
+  const cleanWords = lowercase.split(/\s+/);
+  const gujaratiKeywords = ["banavo", "bnao", "banaoo", "karo", "aapo", "lakho", "kem", "cho", "nathi", "thatu", "maheko", "tayar", "tayyar", "motu", "navu", "dakhla", "prashno", "nathi", "thatu", "che", "chhe"];
+  const hindiKeywords = ["banao", "banado", "kijiye", "kro", "likho", "chahiye", "hai", "ko", "se", "ek", "karne"];
+  
+  if (gujaratiKeywords.some(w => cleanWords.includes(w))) return { lang: "gujarati", isRtl: false };
+  if (hindiKeywords.some(w => cleanWords.includes(w))) return { lang: "hindi", isRtl: false };
+
+  if (/[\u0A80-\u0AFF]/.test(text)) return { lang: "gujarati", isRtl: false };
+  if (/[\u0900-\u097F]/.test(text)) return { lang: "hindi", isRtl: false };
+  if (/[\u0600-\u06FF]/.test(text)) return { lang: "arabic", isRtl: true };
+
+  return { lang: "english", isRtl: false };
+}
+
+export function detectTranslationIntent(text: string): { isTranslation: boolean; targetLang: string; isRtl: boolean } {
+  const lowercase = text.toLowerCase();
+  const isTranslation = /\b(translate|translation|tarjuma|anuvad|trans|અનુવાદ|अनुवाद|ഭാഷാંતരം)\b/.test(lowercase);
+  const info = detectLanguage(text);
+  return {
+    isTranslation: isTranslation || lowercase.includes("translate to") || lowercase.includes("translate in"),
+    targetLang: info.lang,
+    isRtl: info.isRtl
+  };
+}
+
+function extractTopic(normalized: string): string {
+  // Sort techTopics by length descending so longer keys match first (e.g. node.js before js)
+  const techTopics: Record<string, string> = {
+    "javascript": "JavaScript",
+    "typescript": "TypeScript",
+    "node.js": "Node.js",
+    "nodejs": "Node.js",
+    "react.js": "React.js",
+    "reactjs": "React.js",
+    "postgres": "PostgreSQL",
+    "postgresql": "PostgreSQL",
+    "mongodb": "MongoDB",
+    "python": "Python",
+    "docker": "Docker",
+    "react": "React.js",
+    "html5": "HTML5",
+    "css3": "CSS3",
+    "html": "HTML5",
+    "css": "CSS3",
+    "java": "Java",
+    "c++": "C++",
+    "cpp": "C++",
+    "sql": "SQL Database",
+    "aws": "AWS Cloud",
+    "git": "Git",
+    "node": "Node.js",
+    "js": "JavaScript"
+  };
+
+  for (const [key, name] of Object.entries(techTopics)) {
+    const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`\\b${escapedKey}\\b`, 'i');
+    if (regex.test(normalized)) {
+      return name;
+    }
+  }
+
+  if (normalized.includes("coffee") || normalized.includes("cafe") || normalized.includes("café")) return "Coffee Shop & Café";
+  if (normalized.includes("dentist") || normalized.includes("dentistry") || normalized.includes("dental")) return "Dentistry Clinic";
+  if (normalized.includes("hospital") || normalized.includes("patient") || normalized.includes("medical") || normalized.includes("surgery") || normalized.includes("doctor")) return "Medical Patient Intake";
+  if (normalized.includes("restaurant") || normalized.includes("dining") || normalized.includes("food") || normalized.includes("bakery")) return "Food & Dining Experience";
+  if (normalized.includes("hotel") || normalized.includes("resort") || normalized.includes("stay") || normalized.includes("room")) return "Hotel & Hospitality";
+  if (normalized.includes("gym") || normalized.includes("fitness") || normalized.includes("workout") || normalized.includes("trainer")) return "Fitness & Gym";
+  if (normalized.includes("travel") || normalized.includes("flight") || normalized.includes("tour") || normalized.includes("trip")) return "Travel & Flight Booking";
+  if (normalized.includes("car") || normalized.includes("vehicle") || normalized.includes("rent")) return "Vehicle Rental";
+  if (normalized.includes("property") || normalized.includes("real estate") || normalized.includes("house") || normalized.includes("apartment")) return "Real Estate Property";
+  if (normalized.includes("clothing") || normalized.includes("apparel") || normalized.includes("store") || normalized.includes("shop")) return "Clothing Store Customer Experience";
+  if (normalized.includes("bug") || normalized.includes("issue") || normalized.includes("support") || normalized.includes("ticket")) return "Technical Support Ticket";
+  if (normalized.includes("donate") || normalized.includes("donation") || normalized.includes("charity")) return "Donation & Fundraiser";
+  if (normalized.includes("mobile app") || normalized.includes("app satisfaction")) return "Mobile Application";
+  if (normalized.includes("website")) return "Website User Experience";
+  if (normalized.includes("coding workshop") || normalized.includes("coding event") || normalized.includes("webinar") || normalized.includes("course")) return "Course & Workshop Registration";
+  if (normalized.includes("conference") || normalized.includes("tech conference") || normalized.includes("summit") || normalized.includes("event") || normalized.includes("rsvp")) return "Event Registration";
+  if (normalized.includes("backend developer") || normalized.includes("backend engineer")) return "Backend Developer Role";
+  if (normalized.includes("frontend developer") || normalized.includes("frontend engineer")) return "Frontend Developer Role";
+  if (normalized.includes("customer satisfaction") || normalized.includes("satisfaction")) return "Customer Satisfaction";
+  if (normalized.includes("product feedback") || normalized.includes("feedback")) return "Product Experience";
+
+  // Regex extract "about X" or "for X" or "X quiz"
+  const topicPatterns = [
+    /(?:about|on|regarding)\s+([a-z0-9\s\-\.\#\+]+?)(?:\s+(?:quiz|survey|form|feedback|exam|test|mcq|mcqs|registration|application)|$)/i,
+    /([a-z0-9\s\-\.\#\+]+?)\s+(?:quiz|survey|feedback|exam|test|mcq|mcqs|registration|application|evaluation|poll|form)/i
+  ];
+
+  for (const pattern of topicPatterns) {
+    const match = normalized.match(pattern);
+    if (match && match[1]) {
+      let candidate = match[1].replace(/^(a|an|the|my|our|difficult|easy|beginner|intermediate|advanced|10|15|20|5)\s+/i, '').trim();
+      candidate = candidate.replace(/\b(create|make|generate|build|give|get|created|built)\b/gi, '').trim();
+      candidate = candidate.replace(/[\.\,\;\!\?]+$/g, '').trim();
+      if (candidate.length > 2 && candidate !== "form" && candidate !== "survey" && candidate !== "quiz") {
+        return candidate.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+      }
+    }
+  }
+
+  // Clean fallback from prompt
+  const cleanedPrompt = normalized.replace(/\b(create|make|generate|build|form|survey|quiz|test|exam|created|built|please|for|a|an|the)\b/gi, "").trim();
+  if (cleanedPrompt.length > 2) {
+    return cleanedPrompt.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+  }
+
+  return "General Subject";
+}
+
+export function detectIntent(text: string): IntentResult {
+  const normalized = spellingRecovery(text);
+  const topic = extractTopic(normalized);
+
+  let category: IntentResult['category'] = 'general';
+  let formType = 'General Form';
+  let purpose = 'General Information Collection';
+  let industry = 'General';
+  let allowGenericIdentity = false;
+  let requireQuizValidation = false;
+  let expandedFields: string[] = [];
+
+  // Form Type & Purpose Classification
+  if (
+    normalized.includes("mcq") || 
+    normalized.includes("quiz") || 
+    normalized.includes("exam") || 
+    normalized.includes("test") ||
+    normalized.includes("assignment") ||
+    normalized.includes("assessment") ||
+    normalized.includes("homework") ||
+    normalized.includes("practical") ||
+    normalized.includes("paper") ||
+    normalized.includes("prashno") ||
+    normalized.includes("dakhla")
+  ) {
+    category = 'quiz';
+    formType = normalized.includes("assignment") 
+      ? "Assignment Quiz" 
+      : (normalized.includes("mcq") ? "MCQ Quiz" : (normalized.includes("exam") ? "Exam" : "Quiz"));
+    purpose = "Knowledge Testing & Skill Assessment";
+    industry = "Education & Skill Verification";
+    requireQuizValidation = true;
+    allowGenericIdentity = false; // ZERO generic fields for quizzes
+  } else if (normalized.includes("survey")) {
+    category = 'survey';
+    formType = "Survey";
+    purpose = "Opinion Collection & Preference Analysis";
+    industry = "Market Research & Feedback";
+    allowGenericIdentity = false;
+  } else if (normalized.includes("feedback") || normalized.includes("review") || normalized.includes("rating")) {
+    category = 'survey';
+    formType = "Feedback Form";
+    purpose = "Customer Experience & Satisfaction Measurement";
+    industry = "Customer Success";
+    allowGenericIdentity = false;
+  } else if (normalized.includes("job") || normalized.includes("application") || normalized.includes("career") || normalized.includes("developer")) {
+    category = 'job';
+    formType = "Application Form";
+    purpose = "Candidate Recruitment & Skill Evaluation";
+    industry = "Human Resources & Hiring";
+    allowGenericIdentity = true; // Identity fields relevant for applications
+    expandedFields = ["Full Name", "Email Address", "Phone Number", "Resume / CV", "Portfolio / GitHub", "Years of Experience"];
+  } else if (normalized.includes("registration") || normalized.includes("signup") || normalized.includes("register")) {
+    category = 'contact';
+    formType = normalized.includes("event") || normalized.includes("conference") ? "Event Registration" : "Registration Form";
+    purpose = "Participant Onboarding & Identity Collection";
+    industry = "Event & Membership";
+    allowGenericIdentity = true; // Identity fields relevant for registration
+    expandedFields = ["Full Name", "Email Address", "Phone Number", "Organization / College", "Session Selection"];
+  } else if (normalized.includes("contact") || normalized.includes("lead")) {
+    category = 'contact';
+    formType = "Contact Form";
+    purpose = "Lead Generation & Communication Inquiry";
+    industry = "Sales & Marketing";
+    allowGenericIdentity = true;
+  } else if (normalized.includes("poll")) {
+    category = 'survey';
+    formType = "Poll";
+    purpose = "Single-Question Opinion Gauge";
+    industry = "Audience Engagement";
+    allowGenericIdentity = false;
+  }
+
+  // Difficulty Detection
+  let difficulty: IntentResult['difficulty'] = 'Intermediate';
+  if (normalized.includes("beginner") || normalized.includes("easy") || normalized.includes("basic") || normalized.includes("starter")) {
+    difficulty = 'Beginner';
+  } else if (normalized.includes("difficult") || normalized.includes("hard") || normalized.includes("advanced") || normalized.includes("complex")) {
+    difficulty = 'Difficult';
+  }
+
+  // Question Count Extraction
+  const digitExtract = normalized.match(/(\d+)\s*(?:question|questions|mcq|mcqs|field|fields)?/i);
+  let questionCount = digitExtract ? parseInt(digitExtract[1]) : (requireQuizValidation ? 10 : 6);
+  if (questionCount > 50) questionCount = 50;
+  if (questionCount < 1) questionCount = requireQuizValidation ? 10 : 6;
+
+  const summaryText = `I understood this as: Topic: ${topic} | Purpose: ${purpose} | Type: ${formType} | Difficulty: ${difficulty} | Questions: ${questionCount}`;
+
+  return {
+    category,
+    topic,
+    purpose,
+    formType,
+    difficulty,
+    questionCount,
+    normalizedPrompt: normalized,
+    industry,
+    expandedFields,
+    relevanceRules: {
+      allowGenericIdentity,
+      requireQuizValidation
+    },
+    understandingSummary: {
+      topic,
+      purpose,
+      formType,
+      difficulty,
+      questionCount,
+      summaryText
+    }
+  };
+}
+
+export function buildSystemInstruction(intent: IntentResult, documentContext?: string, targetLang: string = "english", isRtl: boolean = false): string {
+  let contextSnippet = "";
+  if (documentContext) {
+    contextSnippet = `\nContextual Source Document Content:\n---\n${documentContext}\n---\nAnalyze this document context and base the form questions on it.`;
+  }
+
+  const langInstruction = `\nCRITICAL REQUIREMENT: You MUST generate the form entire content (title, description, field labels, and options) in this language: "${targetLang}".`;
+
+  return `You are the True Topic-Based AI Form Generator for PromptForm AI.
+Your primary objective is to analyze the user's intent, extract the core topic, and generate a topic-specific form.
+
+STRICT GENERATION RULES:
+1. TOPIC RELEVANCE: Every question MUST directly relate to the detected topic: "${intent.topic}". Never use generic filler questions.
+2. NO GENERIC FIELD FALLBACK:
+   ${intent.relevanceRules.allowGenericIdentity 
+     ? 'Identity fields (Full Name, Email Address, Phone Number) ARE relevant for this form type (' + intent.formType + '). Include them appropriately.'
+     : 'CRITICAL RULE: Do NOT automatically add common personal fields like Phone Number, Address, Date of Birth, Gender, Company, Email, or Name UNLESS they are genuinely relevant or explicitly requested. Focus 100% of the form on topic-specific questions!'}
+
+3. FORM TYPE & QUIZ INTELLIGENCE:
+   - Form Type: "${intent.formType}"
+   - Topic: "${intent.topic}"
+   - Purpose: "${intent.purpose}"
+   - Difficulty: "${intent.difficulty}"
+   - Number of Questions to Generate: ${intent.questionCount}
+   ${intent.relevanceRules.requireQuizValidation 
+     ? `- THIS IS A QUIZ / MCQ EXAM ON "${intent.topic}".
+     - STRICT WIDGET TYPE REQUIREMENT: Every single evaluation question MUST be of type "mcq" (Multiple Choice Question) or "checkbox" / "dropdown". DO NOT use "short_text" or "long_text" for quiz questions.
+     - TOPIC RIGOR: Questions must be deep, non-trivial, highly relevant to "${intent.topic}", challenging, and tailored for a "${intent.difficulty}" skill level.
+     - OPTIONS MANDATE: Every MCQ question MUST have an "options" array containing EXACTLY 4 distinct, plausible choices (1 correct answer and 3 realistic distractors).
+     - EVALUATION METADATA: Every question MUST specify:
+       * "correctAnswer": Exact string matching one of the 4 items in "options"
+       * "points": Point value for the question (e.g. 10)
+       * "difficulty": "${intent.difficulty}"
+       * "explanation": Detailed step-by-step explanation of why the correct answer is right and why other options are incorrect.` 
+     : '- This is a Survey / Feedback / Form. Use appropriate ratings, options, Likert scales, or text fields. Do NOT include correct answers or exam pass/fail settings.'}
+
+4. STRUCTURED JSON OUTPUT: You MUST output valid JSON matching this schema:
+{
+  "understandingSummary": {
+    "topic": "${intent.topic}",
+    "purpose": "${intent.purpose}",
+    "formType": "${intent.formType}",
+    "difficulty": "${intent.difficulty}",
+    "questionCount": ${intent.questionCount},
+    "summaryText": "${intent.understandingSummary.summaryText}"
+  },
+  "title": string,
+  "description": string,
+  "questions": Array<{
+    "type": "short_text" | "long_text" | "mcq" | "checkbox" | "dropdown" | "rating" | "file_upload" | "name" | "email" | "phone" | "price" | "agreement" | "feedback",
+    "label": string,
+    "required": boolean,
+    "options": string[],
+    "correctAnswer"?: string,
+    "points"?: number,
+    "explanation"?: string,
+    "difficulty"?: string
+  }>,
+  "theme": {
+    "primary_color": string,
+    "background_color": string,
+    "font_family": string
+  },
+  "settings": {
+    "collect_emails": boolean,
+    "limit_responses": boolean,
+    "shuffle_questions": boolean,
+    "timer_limit": number,
+    "anti_cheat_detection": boolean
+  }
+}
+${contextSnippet}${langInstruction}`;
+}
+
+export function isGreetingOrHelp(prompt: string): boolean {
+  const clean = prompt.toLowerCase().trim();
+  const greetings = ['hi', 'hello', 'hey', 'help', 'hlo', 'kem cho', 'namaste', 'kaise ho', 'what can you do', 'who are you', 'how to use'];
+  return greetings.some(g => clean === g || clean.startsWith(g + ' ') || clean.endsWith(' ' + g));
+}
+
+export function translateFormConfig(formObj: any, targetLang: string): any {
+  if (!formObj) return formObj;
+  return {
+    ...formObj,
+    targetLanguage: targetLang
+  };
+}
+

@@ -1,0 +1,43 @@
+services:
+  # 1. Express API backend service
+  - type: web
+    name: promptform-api
+    env: node
+    plan: starter
+    buildCommand: npm install && npm run build --workspace=backend
+    startCommand: npm run start --workspace=backend
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: DATABASE_URL
+        fromDatabase:
+          name: promptform-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: promptform-redis
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DISABLE_REDIS
+        value: "false"
+    disk:
+      name: uploads-data
+      mountPath: /opt/render/project/src/backend/public/uploads
+      sizeGB: 10
+
+  # 2. Redis service (Cache + BullMQ queues)
+  - type: redis
+    name: promptform-redis
+    plan: starter
+    ipAllowList: [] # internal access only
+
+databases:
+  # 3. PostgreSQL database service
+  - name: promptform-db
+    plan: starter
+    databaseName: promptform_ai
+    user: promptform_admin

@@ -1,0 +1,207 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id               String       @id @default(uuid())
+  email            String       @unique
+  name             String?
+  password         String
+  role             String       @default("user") // "user" or "admin"
+  subscriptionPlan String       @default("free") // "free", "pro", "enterprise"
+  credits          Int          @default(100)    // AI credits
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  forms            Form[]       @relation("UserForms")
+  teamMembers      TeamMember[]
+  teamsOwned       Team[]       @relation("TeamOwner")
+  transactions     Transaction[]
+  activeSessionToken String?
+}
+
+model Form {
+  id           String      @id @default(uuid())
+  title        String
+  description  String?
+  status       String      @default("DRAFT") // "DRAFT", "PUBLISHED", "CLOSED"
+  isTemplate   Boolean     @default(false)
+  category     String?     // for templates: "education", "business", "feedback", etc.
+  settings     Json        // JSON object: { collect_emails, limit_responses, password, allow_editing, shuffle_questions, timer_limit, anti_cheat_detection }
+  theme        Json        // JSON object: { primary_color, background_color, font_family, logo_url }
+  ownerId      String
+  owner        User        @relation("UserForms", fields: [ownerId], references: [id], onDelete: Cascade)
+  teamId       String?
+  team         Team?       @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  uniqueShareId String?     @unique
+  publicUrl     String?
+  isPublic      Boolean     @default(true)
+  responseLimit Int?
+  questions    Question[]
+  responses    Response[]
+  workflows    Workflow[]
+  analytics    Analytics[]
+  events       FormEvent[]
+  dailyMetrics FormDailyMetric[]
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@index([ownerId])
+  @@index([teamId])
+}
+
+model Question {
+  id          String   @id @default(uuid())
+  formId      String
+  form        Form     @relation(fields: [formId], references: [id], onDelete: Cascade)
+  type        String   // "short_text", "long_text", "mcq", "checkbox", "dropdown", "rating", "date", "time", "file_upload", "payment", "signature"
+  label       String
+  required    Boolean  @default(false)
+  orderIndex  Int
+  options     Json     // array of options for mcq/checkbox/dropdown e.g. ["Option 1", "Option 2"]
+  validations Json     // JSON object: { min_length, max_length, pattern, file_size_limit, allowed_file_types }
+  logic       Json     // JSON object for branching logic: { action: "goto" / "show" / "hide", target_question_id: String, condition: { operator: "equals" / "not_equals" / "contains", value: String } }
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([formId])
+}
+
+model Response {
+  id             String   @id @default(uuid())
+  formId         String
+  form           Form     @relation(fields: [formId], references: [id], onDelete: Cascade)
+  answers        Json     // JSON mapping: { questionId: answerValue }
+  browserMetadata Json     // JSON details: { user_agent, ip_address, tab_switches, is_flagged }
+  timeTaken      Int      // in seconds
+  submittedBy    String?  // user ID of submitter (optional)
+  email          String?  // email of responder (optional)
+  completedAt    DateTime @default(now())
+  createdAt      DateTime @default(now())
+
+  @@index([formId])
+}
+
+model Team {
+  id          String       @id @default(uuid())
+  name        String
+  ownerId     String
+  owner       User         @relation("TeamOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  members     TeamMember[]
+  forms       Form[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model TeamMember {
+  id        String   @id @default(uuid())
+  teamId    String
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      String   @default("editor") // "admin", "editor", "viewer"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([teamId, userId])
+  @@index([userId])
+}
+
+model Workflow {
+  id        String   @id @default(uuid())
+  formId    String
+  form      Form     @relation(fields: [formId], references: [id], onDelete: Cascade)
+  trigger   String   // "on_submit", "on_score_threshold", etc.
+  action    String   // "send_email", "send_webhook", "slack_notify"
+  config    Json     // JSON payload config: { email_recipient, webhook_url, template }
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([formId])
+}
+
+model Analytics {
+  id               String   @id @default(uuid())
+  formId           String
+  form             Form     @relation(fields: [formId], references: [id], onDelete: Cascade)
+  views            Int      @default(0)
+  submissions      Int      @default(0)
+  deviceStats      Json     // JSON mapping: { desktop, mobile, tablet }
+  countryStats     Json     // JSON mapping: { US, IN, GB, etc. }
+  dropoutRates     Json     // JSON mapping of dropout points per questionId: { questionId: count }
+  sentimentSummary Json?    // JSON summary: { average_score: 0.8, sentiment_distribution: { positive, neutral, negative } }
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([formId])
+}
+
+model Template {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  category    String   // "education", "business", "feedback", "personal"
+  structure   Json     // JSON mapping of preconfigured questions and settings
+  thumbnail   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Transaction {
+  id            String   @id @default(uuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan          String   // "pro", "enterprise"
+  billingPeriod String   // "monthly", "yearly"
+  amount        Float
+  currency      String   @default("USD")
+  paymentMethod String   // "card", "upi", "paypal"
+  status        String   // "success", "failed"
+  couponCode    String?
+  receiptNumber String   @unique
+  createdAt     DateTime @default(now())
+
+  @@index([userId])
+}
+
+model Coupon {
+  id              String   @id @default(uuid())
+  code            String   @unique
+  discountPercent Float
+  isActive        Boolean  @default(true)
+  usedCount       Int      @default(0)
+  createdAt       DateTime @default(now())
+}
+
+model FormEvent {
+  id         String   @id @default(uuid())
+  formId     String
+  form       Form     @relation(fields: [formId], references: [id], onDelete: Cascade)
+  eventType  String   // "VIEW", "START", "SUBMIT", "DROPOUT"
+  questionId String?  // Optional: which question they dropped out on
+  device     String   // "desktop", "mobile", "tablet"
+  country    String   // "US", "IN", "GB", etc.
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  @@index([formId, eventType, createdAt])
+}
+
+model FormDailyMetric {
+  id          String   @id @default(uuid())
+  formId      String
+  form        Form     @relation(fields: [formId], references: [id], onDelete: Cascade)
+  date        DateTime // Truncated to 00:00:00
+  views       Int      @default(0)
+  submissions Int      @default(0)
+  deviceStats Json     // { desktop: X, mobile: Z, tablet: Y }
+  countryStats Json    // { US: X, IN: Y, ... }
+  
+  @@unique([formId, date])
+  @@index([formId, date])
+}
