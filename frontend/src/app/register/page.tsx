@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Mail, Lock, User, Eye, EyeOff, Building, ArrowRight } from 'lucide-react';
 import { api } from '@/lib/api';
-import { registerSchema } from '@promptform/shared';
+import { registerSchema } from '@/lib/validations';
 import { useTheme } from 'next-themes';
 import { BrandedLogo } from '@/components/NavigationHeader';
 

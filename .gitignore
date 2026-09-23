@@ -77,3 +77,6 @@ test_login.ps1
 test_topic_ai.ps1
 qa_test_report.json
 promptform-forms-backup/
+
+.vercel
+.env*
