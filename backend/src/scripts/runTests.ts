@@ -35,7 +35,7 @@ function request(
   path: string,
   body?: any,
   headers: Record<string, string> = {}
-): Promise<{ status: number; body: string }> {
+): Promise<{ status: number; body: string; headers: http.IncomingHttpHeaders }> {
   return new Promise((resolve, reject) => {
     const payload = body ? JSON.stringify(body) : undefined;
     const reqHeaders = {
@@ -55,7 +55,7 @@ function request(
       (res) => {
         let responseData = '';
         res.on('data', (chunk) => (responseData += chunk));
-        res.on('end', () => resolve({ status: res.statusCode || 500, body: responseData }));
+        res.on('end', () => resolve({ status: res.statusCode || 500, body: responseData, headers: res.headers }));
       }
     );
 
@@ -141,6 +141,75 @@ async function runTests() {
     results.push({ name: 'GET User Profile (/api/auth/me)', passed: isOk, status: res.status });
   } catch (err: any) {
     results.push({ name: 'GET User Profile (/api/auth/me)', passed: false, error: err.message });
+  }
+
+  // Test 6.1: Google OAuth Initiation - Missing Client ID handling
+  try {
+    const origClientId = process.env.GOOGLE_CLIENT_ID;
+    delete process.env.GOOGLE_CLIENT_ID;
+    const res = await request('GET', '/api/auth/google');
+    const isRedirect = res.status === 302;
+    const loc = res.headers.location || '';
+    const isSafeErrorRedirect = loc.includes('/login?error=') && loc.includes('GOOGLE_CLIENT_ID');
+    process.env.GOOGLE_CLIENT_ID = origClientId;
+    results.push({
+      name: 'GET Google OAuth Initiation (Missing Client ID)',
+      passed: isRedirect && isSafeErrorRedirect,
+      status: res.status
+    });
+  } catch (err: any) {
+    results.push({ name: 'GET Google OAuth Initiation (Missing Client ID)', passed: false, error: err.message });
+  }
+
+  // Test 6.2: Google OAuth Initiation - Configured Client ID URL formatting
+  try {
+    process.env.GOOGLE_CLIENT_ID = 'test-client-id-123.apps.googleusercontent.com';
+    const res = await request('GET', '/api/auth/google?redirect=dashboard');
+    const isRedirect = res.status === 302;
+    const loc = res.headers.location || '';
+    const hasGoogleUrl = loc.startsWith('https://accounts.google.com/o/oauth2/v2/auth');
+    const hasClientId = loc.includes('client_id=test-client-id-123.apps.googleusercontent.com');
+    const hasCallback = loc.includes('redirect_uri=') && loc.includes('%2Fapi%2Fauth%2Fgoogle%2Fcallback');
+    const hasScope = loc.includes('scope=openid+email+profile') || loc.includes('scope=openid%20email%20profile');
+    delete process.env.GOOGLE_CLIENT_ID;
+
+    results.push({
+      name: 'GET Google OAuth Initiation (Valid Auth URL)',
+      passed: isRedirect && hasGoogleUrl && hasClientId && hasCallback && hasScope,
+      status: res.status
+    });
+  } catch (err: any) {
+    results.push({ name: 'GET Google OAuth Initiation (Valid Auth URL)', passed: false, error: err.message });
+  }
+
+  // Test 6.3: Google OAuth Callback - User Cancellation Handling
+  try {
+    const res = await request('GET', '/api/auth/google/callback?error=access_denied&error_description=User+cancelled');
+    const isRedirect = res.status === 302;
+    const loc = res.headers.location || '';
+    const hasCancelMsg = loc.includes('error=Google%20sign-in%20was%20cancelled');
+    results.push({
+      name: 'GET Google OAuth Callback (User Cancelled)',
+      passed: isRedirect && hasCancelMsg,
+      status: res.status
+    });
+  } catch (err: any) {
+    results.push({ name: 'GET Google OAuth Callback (User Cancelled)', passed: false, error: err.message });
+  }
+
+  // Test 6.4: Google OAuth Callback - Missing Code Handling
+  try {
+    const res = await request('GET', '/api/auth/google/callback');
+    const isRedirect = res.status === 302;
+    const loc = res.headers.location || '';
+    const hasMissingCodeMsg = loc.includes('error=Authorization%20code%20is%20missing');
+    results.push({
+      name: 'GET Google OAuth Callback (Missing Code)',
+      passed: isRedirect && hasMissingCodeMsg,
+      status: res.status
+    });
+  } catch (err: any) {
+    results.push({ name: 'GET Google OAuth Callback (Missing Code)', passed: false, error: err.message });
   }
 
   // Test 7: Multilingual Sifter Unit Tests

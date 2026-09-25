@@ -1,13 +1,24 @@
 export function getBaseUrl(): string {
   let url = process.env.NEXT_PUBLIC_API_URL;
   if (!url && typeof window !== 'undefined') {
-    const host = window.location.hostname || '127.0.0.1';
-    url = `http://${host}:5050/api`;
+    const host = window.location.hostname || '';
+    if (host.includes('vercel.app') || host.includes('promptform')) {
+      url = 'https://promptform-api.onrender.com/api';
+    } else {
+      url = `http://${host || '127.0.0.1'}:5050/api`;
+    }
   }
   if (!url) {
-    url = 'http://127.0.0.1:5050/api';
+    url = process.env.NODE_ENV === 'production'
+      ? 'https://promptform-api.onrender.com/api'
+      : 'http://127.0.0.1:5050/api';
   }
   return url.replace(/\/+$/, '');
+}
+
+export function getOAuthGoogleUrl(redirectTarget: string = 'dashboard'): string {
+  const cleanTarget = redirectTarget ? redirectTarget.replace(/^\/+/, '') : 'dashboard';
+  return `${getBaseUrl()}/auth/google?redirect=${encodeURIComponent(cleanTarget)}`;
 }
 
 export const BASE_URL = getBaseUrl();
@@ -143,6 +154,14 @@ async function request(endpoint: string, options: RequestInit) {
 }
 
 export const api = {
+  getBaseUrl() {
+    return getBaseUrl();
+  },
+
+  getOAuthGoogleUrl(redirectTarget?: string) {
+    return getOAuthGoogleUrl(redirectTarget);
+  },
+
   async get(endpoint: string) {
     return request(endpoint, {
       method: 'GET',

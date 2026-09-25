@@ -36,11 +36,13 @@ export class AIFormBrain {
     if (domain === 'quiz' || domain === 'survey' || domain === 'medical') {
       const assessmentPlan = EnterpriseQuizEngine.resolve(domain, context.normalizedPrompt, formConfig.questions);
       
-      formConfig.questions = formConfig.questions.map((q: any) => {
-        const matchingQ = assessmentPlan.questions.find((aq: any) => aq.label === q.label);
+      formConfig.questions = formConfig.questions.map((q: any, idx: number) => {
+        const matchingQ = assessmentPlan.questions.find((aq: any) => aq.label === q.label) || assessmentPlan.questions[idx];
         if (matchingQ) {
           return {
             ...q,
+            type: domain === 'quiz' ? (matchingQ.type || 'mcq') : (matchingQ.type || q.type),
+            options: (matchingQ.options && matchingQ.options.length >= 2) ? matchingQ.options : (domain === 'quiz' ? ["Option A (Correct)", "Option B", "Option C", "Option D"] : (q.options || [])),
             correctAnswer: matchingQ.correctAnswer,
             explanation: matchingQ.explanation,
             difficulty: matchingQ.difficulty,

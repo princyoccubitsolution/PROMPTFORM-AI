@@ -41,7 +41,8 @@ export class SmartFieldIntelligenceEngine {
       sections,
       suggestedAdditions: suggestions,
       rules,
-      normalizedPrompt
+      normalizedPrompt,
+      documentContext
     };
   }
 }

@@ -38,13 +38,16 @@ async function queryGemini(
   }
 
   const candidateModels = [
-    'gemini-2.5-flash',
-    'gemini-2.0-flash',
-    'gemini-1.5-flash',
+    'gemini-3.8-flash',
+    'gemini-3.7-flash',
+    'gemini-3.6-flash',
+    'gemini-3.5-flash',
     'gemini-flash-latest',
-    'gemini-1.5-pro',
-    'gemini-2.0-flash-lite',
-    'gemini-2.5-flash-lite'
+    'gemini-2.5-flash-lite',
+    'gemini-2.5-pro',
+    'gemini-2.5-flash',
+    'gemini-flash-lite-latest',
+    'gemini-pro-latest'
   ];
 
   const contents: any[] = [];
@@ -258,7 +261,7 @@ async function ultraCognitiveSemanticSifting(
   fileSize: number = 0
 ): Promise<string> {
   const documentContext = fileBuffer ? await getOrParseDocument(fileBuffer, mimeType, originalName, fileSize) : "";
-  const intent = detectIntent(rawInput);
+  const intent = detectIntent(rawInput, documentContext);
   return buildSystemInstruction(intent, documentContext);
 }
 
@@ -374,9 +377,9 @@ function parsePromptFallback(prompt: string) {
       { type: "long_text", label: "Message / Comments", required: false, options: [] }
     ];
   } else if (lowercasePrompt.includes("quiz") || lowercasePrompt.includes("exam") || lowercasePrompt.includes("test") || lowercasePrompt.includes("mcq")) {
-    const topicClean = prompt.replace(/create|make|generate|build|a|an|the|quiz|mcq|test|exam|for|about|with|questions/gi, "").trim();
+    const topicClean = prompt.replace(/\b(create|make|generate|build|a|an|the|quiz|mcq|mcqs|test|exam|for|about|with|questions|analysis|analyze|analysing|pdf|document|doc|docx|file|notes|summary|upload|uploaded|this|that|these|and|created|built)\b/gi, "").trim();
     const displayTopic = topicClean.length > 2 ? topicClean.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') : "General Knowledge";
-    title = `${displayTopic} MCQ Quiz & Skill Assessment`;
+    title = `${displayTopic} Quiz`;
     description = `Test your comprehensive knowledge and skills on ${displayTopic}. Each question carries 10 points.`;
     isQuiz = true;
 
@@ -694,8 +697,7 @@ router.post(['/generate', '/generate-from-file'], optionalAuthMiddleware, upload
       );
     }
 
-    const combinedPromptContext = `${userPrompt} ${parsedDocText.substring(0, 400)}`;
-    const intent = detectIntent(combinedPromptContext);
+    const intent = detectIntent(userPrompt, parsedDocText);
     let systemInstruction = "";
 
     if (fileBuffer) {

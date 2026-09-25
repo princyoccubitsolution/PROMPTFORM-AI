@@ -84,7 +84,30 @@ export function detectTranslationIntent(text: string): { isTranslation: boolean;
   };
 }
 
-function extractTopic(normalized: string): string {
+function extractTopicFromDocument(documentText: string): string | null {
+  if (!documentText || documentText.trim().length < 5) return null;
+  const lines = documentText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  for (const line of lines.slice(0, 20)) {
+    // Check for lecture/chapter/title patterns
+    const lectureMatch = line.match(/(?:lecture\s*\d*|chapter\s*\d*|module\s*\d*|unit\s*\d*|topic|title)\s*[:\-–]\s*([^.,;\n\r]+)/i);
+    if (lectureMatch && lectureMatch[1] && lectureMatch[1].trim().length > 3) {
+      let clean = lectureMatch[1].replace(/^(?:understanding|introduction to|fundamentals of|overview of)\s+/i, '').replace(/[\-–]\s*[IVX\d]+$/i, '').trim();
+      if (clean.length > 3 && clean.length < 50) {
+        return clean.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+      }
+    }
+    // Check if line looks like a title
+    if (line.length >= 6 && line.length <= 60 && !line.includes("?") && !line.includes("http") && !line.startsWith("(") && !line.toLowerCase().startsWith("page")) {
+      const clean = line.replace(/^\d+[\s.)\-]+/, '').replace(/^(?:understanding|introduction to|lecture\s*\d*[:\-]?)\s*/i, '').replace(/[\-–]\s*[IVX\d]+$/i, '').trim();
+      if (clean.length > 4 && clean.length < 50 && !/^(true|false|option|section|table|figure|where|when|what|which|how|who)\b/i.test(clean)) {
+        return clean.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+      }
+    }
+  }
+  return null;
+}
+
+function extractTopic(normalized: string, documentContext?: string): string {
   // Sort techTopics by length descending so longer keys match first (e.g. node.js before js)
   const techTopics: Record<string, string> = {
     "javascript": "JavaScript",
@@ -142,6 +165,8 @@ function extractTopic(normalized: string): string {
   if (normalized.includes("customer satisfaction") || normalized.includes("satisfaction")) return "Customer Satisfaction";
   if (normalized.includes("product feedback") || normalized.includes("feedback")) return "Product Experience";
 
+  const metaNoiseRegex = /\b(analysis|analyze|analysing|create|make|generate|build|please|quiz|exam|test|mcq|mcqs|form|survey|feedback|pdf|document|doc|docx|file|notes|summary|upload|uploaded|attachment|image|scan|this|that|these|those|and|for|a|an|the|around|with|based\s+on|about|from|into|give|get|created|built)\b/gi;
+
   // Regex extract "about X" or "for X" or "X quiz"
   const topicPatterns = [
     /(?:about|on|regarding)\s+([a-z0-9\s\-\.\#\+]+?)(?:\s+(?:quiz|survey|form|feedback|exam|test|mcq|mcqs|registration|application)|$)/i,
@@ -152,9 +177,9 @@ function extractTopic(normalized: string): string {
     const match = normalized.match(pattern);
     if (match && match[1]) {
       let candidate = match[1].replace(/^(a|an|the|my|our|difficult|easy|beginner|intermediate|advanced|10|15|20|5)\s+/i, '').trim();
-      candidate = candidate.replace(/\b(create|make|generate|build|give|get|created|built)\b/gi, '').trim();
+      candidate = candidate.replace(metaNoiseRegex, ' ').replace(/\s+/g, ' ').trim();
       candidate = candidate.replace(/[\.\,\;\!\?]+$/g, '').trim();
-      if (candidate.length > 2 && candidate !== "form" && candidate !== "survey" && candidate !== "quiz") {
+      if (candidate.length > 2 && candidate.toLowerCase() !== "form" && candidate.toLowerCase() !== "survey" && candidate.toLowerCase() !== "quiz") {
         return candidate.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
       }
     }
@@ -162,25 +187,33 @@ function extractTopic(normalized: string): string {
 
   // Clean fallback from prompt: remove instructions and cut off at conjunctions
   let cleanedPrompt = normalized
-    .replace(/\b(create|make|generate|build|please\s+create|please\s+build|please\s+generate|form|survey|quiz|test|exam|created|built|please|for|a|an|the|modern)\b/gi, "")
+    .replace(metaNoiseRegex, ' ')
     .trim();
 
   // Cut off at conjunctions (with, using, containing, use, include, etc.)
   cleanedPrompt = cleanedPrompt.split(/\b(with|using|use|containing|include|including|having|after|where|for|and|by|based\s+on)\b/i)[0].trim();
   cleanedPrompt = cleanedPrompt.replace(/\b(smart\s+field\s+types|required\s+validation|conditional\s+questions|clean\s+responsive\s+layout|booking\s+confirmation|after\s+submission|net\s+promoter\s+score|nps|rating\s+scales|anti[\s\-]?cheat|timer\s+limit|mcq|mcqs|general|structured)\b/gi, '').trim();
 
-  let words = cleanedPrompt.split(/\s+/).filter(w => w.length > 1 && !["this", "id", "remove", "field", "form", "option"].includes(w.toLowerCase()));
+  let words = cleanedPrompt.split(/\s+/).filter(w => w.length > 1 && !["this", "id", "remove", "field", "form", "option", "analysis", "pdf", "document", "doc", "file"].includes(w.toLowerCase()));
   if (words.length > 0) {
     if (words.length > 4) words = words.slice(0, 4);
     return words.map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
   }
 
-  return "General Subject";
+  // If no topic found in prompt, try extracting from document context if available
+  if (documentContext) {
+    const docTopic = extractTopicFromDocument(documentContext);
+    if (docTopic) {
+      return docTopic;
+    }
+  }
+
+  return "Knowledge Assessment";
 }
 
-export function detectIntent(text: string): IntentResult {
+export function detectIntent(text: string, documentContext?: string): IntentResult {
   const normalized = spellingRecovery(text);
-  const topic = extractTopic(normalized);
+  const topic = extractTopic(normalized, documentContext);
 
   let category: IntentResult['category'] = 'general';
   let formType = 'General Form';

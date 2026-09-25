@@ -86,27 +86,10 @@ export default function RegisterPage() {
     }
   };
 
-  const handleMockGoogleRegister = async () => {
+  const handleGoogleSignup = () => {
     setIsLoading(true);
     setError(null);
-    try {
-      const data = await api.post('/auth/login', { idToken: 'mock_google_tester' });
-      localStorage.setItem('promptform_access_token', data.accessToken);
-      localStorage.setItem('promptform_refresh_token', data.refreshToken);
-      localStorage.setItem('promptform_user_email', data.user.email);
-      localStorage.setItem('promptform_user_name', data.user.name || '');
-      
-      if (data.isNewUser) {
-        localStorage.setItem('promptform_needs_onboarding', 'true');
-        window.location.href = '/onboarding';
-      } else {
-        window.location.href = '/dashboard';
-      }
-    } catch (err: any) {
-      setError(err.message || 'Mock Google Signup failed.');
-    } finally {
-      setIsLoading(false);
-    }
+    window.location.href = api.getOAuthGoogleUrl('dashboard');
   };
 
   if (!mounted) return null;
@@ -258,8 +241,10 @@ export default function RegisterPage() {
 
         {/* Google Signup */}
         <button
-          onClick={handleMockGoogleRegister}
-          className="w-full h-11 flex items-center justify-center gap-2 border border-border hover:bg-accent text-foreground rounded-xl text-sm font-semibold transition-all duration-200 active:scale-[0.98] shadow-2xs"
+          type="button"
+          onClick={handleGoogleSignup}
+          disabled={isLoading}
+          className="w-full h-11 flex items-center justify-center gap-2 border border-border hover:bg-accent text-foreground rounded-xl text-sm font-semibold transition-all duration-200 active:scale-[0.98] shadow-2xs disabled:opacity-50 cursor-pointer"
         >
           <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
@@ -267,7 +252,7 @@ export default function RegisterPage() {
             <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05"/>
             <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" fill="#EA4335"/>
           </svg>
-          <span>Continue with Google</span>
+          <span>{isLoading ? 'Connecting to Google...' : 'Continue with Google'}</span>
         </button>
 
         {/* Footer actions */}

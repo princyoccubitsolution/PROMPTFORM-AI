@@ -44,7 +44,7 @@ export class JsonAssembler {
         formTitle = "Travel Booking Request Form";
       } else {
         let topicClean = (plan.normalizedPrompt || "")
-          .replace(/\b(\d+[\s\-]question|\d+|\d+\-question|create|make|generate|build|form|survey|quiz|test|exam|created|built|please|for|a|an|the|around|questions|form type|feedback|intake|application|rsvp|medical|with|net promoter score|net|promoter|score|rating|ratings|scale|scales|and|or|set|minutes|timer|anti[\s\-]?cheat|add|marks|options|exact|correct|answers|this|id|number|field|remove)\b/gi, "")
+          .replace(/\b(\d+[\s\-]question|\d+|\d+\-question|create|make|generate|build|form|survey|quiz|test|exam|created|built|please|for|a|an|the|around|questions|form type|feedback|intake|application|rsvp|medical|with|net promoter score|net|promoter|score|rating|ratings|scale|scales|and|or|set|minutes|timer|anti[\s\-]?cheat|add|marks|options|exact|correct|answers|this|id|number|field|remove|analysis|analyze|analysing|pdf|document|doc|docx|file|notes|summary|upload|uploaded|attachment|image|scan)\b/gi, "")
           .replace(/\([^)]*\)/g, "")
           .replace(/[\-\_\.]+/g, " ")
           .replace(/\s+/g, " ")
@@ -55,14 +55,37 @@ export class JsonAssembler {
 
         let topicName = "";
         if (topicClean.length > 1) {
-          let words = topicClean.split(/\s+/).filter(w => w.length > 1 && !["this", "id", "remove", "field"].includes(w.toLowerCase()));
+          let words = topicClean.split(/\s+/).filter(w => w.length > 1 && !["this", "id", "remove", "field", "analysis", "pdf", "document", "doc", "file", "and"].includes(w.toLowerCase()));
           if (words.length > 0) {
             if (words.length > 4) words = words.slice(0, 4);
             topicName = words.map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
           }
         }
 
-        if (!topicName || topicName.length > 30) {
+        if (!topicName || topicName.length > 30 || topicName === "Topic") {
+          if (plan.documentContext) {
+            const lines = plan.documentContext.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+            for (const line of lines.slice(0, 15)) {
+              const lectureMatch = line.match(/(?:lecture\s*\d*|chapter\s*\d*|module\s*\d*|unit\s*\d*|topic|title)\s*[:\-–]\s*([^.,;\n\r]+)/i);
+              if (lectureMatch && lectureMatch[1] && lectureMatch[1].trim().length > 3) {
+                let clean = lectureMatch[1].trim().replace(/^(?:the\s+|understanding\s+|introduction\s+to\s+|fundamentals\s+of\s+|overview\s+of\s+)+/i, '').replace(/[\-–]\s*[IVX\d]+$/i, '').trim();
+                if (clean.length > 3 && clean.length < 40) {
+                  topicName = clean.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+                  break;
+                }
+              }
+              if (line.length >= 6 && line.length <= 45 && !line.includes("?") && !line.includes("http")) {
+                const clean = line.replace(/^\d+[\s.)\-]+/, '').replace(/^(?:understanding|introduction to|lecture\s*\d*[:\-]?)\s*/i, '').replace(/[\-–]\s*[IVX\d]+$/i, '').trim();
+                if (clean.length > 4 && clean.length < 40 && !/^(true|false|option|section|table|figure|where|when|what|which|how|who)\b/i.test(clean)) {
+                  topicName = clean.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+                  break;
+                }
+              }
+            }
+          }
+        }
+
+        if (!topicName || topicName.length > 30 || topicName === "Topic") {
           topicName = text.includes("javascript") || text.includes("js") ? "JavaScript" :
                       text.includes("python") ? "Python" :
                       text.includes("react") ? "React" :
@@ -70,7 +93,8 @@ export class JsonAssembler {
                       text.includes("coffee") ? "Coffee Shop" :
                       text.includes("dentist") || text.includes("dental") ? "Dentistry" :
                       text.includes("travel") || text.includes("booking") ? "Travel Booking" :
-                      text.includes("food") || text.includes("restaurant") ? "Food & Dining" : "Topic";
+                      text.includes("food") || text.includes("restaurant") ? "Food & Dining" :
+                      (plan.domain === 'quiz' ? "Knowledge Assessment" : "General Topic");
         }
 
         if (plan.domain === 'quiz') {

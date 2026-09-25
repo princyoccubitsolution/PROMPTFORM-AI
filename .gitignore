@@ -12,6 +12,7 @@ out/
 **/out/
 build/
 **/build/
+*.tsbuildinfo
 
 # Backend build outputs & runtime data
 dist/

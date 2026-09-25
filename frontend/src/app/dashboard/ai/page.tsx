@@ -414,7 +414,16 @@ export default function AIPage() {
             const trimmed = rawTitle.trim();
             if (trimmed.length > 0 && trimmed.length < 80) {
               const lower = trimmed.toLowerCase();
-              const isBad = ["create a form with id", "system prompt", "json format", "options with field remove"].some(bad => lower.includes(bad));
+              const isBad = [
+                "create a form with id", 
+                "system prompt", 
+                "json format", 
+                "options with field remove", 
+                "analysis this pdf", 
+                "analysis this", 
+                "analysis pdf",
+                "created a quiz"
+              ].some(bad => lower.includes(bad));
               if (!isBad) return trimmed;
             }
           }
@@ -428,6 +437,9 @@ export default function AIPage() {
           if (lowerPrompt.includes("patient") || lowerPrompt.includes("medical") || lowerPrompt.includes("dentist")) return "Dentistry Patient Intake Form";
           if (lowerPrompt.includes("nps") || lowerPrompt.includes("net promoter")) return "Net Promoter Score Survey";
           if (lowerPrompt.includes("feedback") || lowerPrompt.includes("survey")) return "Customer Feedback Survey";
+          if (mode === 'pdf') {
+            return (formType.toLowerCase().includes("quiz") || formType.toLowerCase().includes("assessment")) ? "Document Assessment Quiz" : "Document Extracted Form";
+          }
           return "AI Generated Form";
         };
 

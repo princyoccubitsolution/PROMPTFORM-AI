@@ -31,6 +31,7 @@ import { db } from './lib/db';
 import { cache } from './lib/cache';
 
 const app = express();
+app.set('trust proxy', 1);
 const PORT = Number(process.env.PORT || 5050);
 
 // Enable Security Headers
@@ -44,6 +45,7 @@ const envFrontendUrl = sanitizeOrigin(process.env.FRONTEND_URL);
 const allowedOrigins = [
   envFrontendUrl,
   'https://promptform-ai-frontend.vercel.app',
+  'https://accounts.google.com',
   'http://localhost:4500',
   'http://127.0.0.1:4500',
   'http://localhost:3000',
@@ -67,6 +69,10 @@ const isLocalOrigin = (origin: string): boolean => {
 
 // Immediate rejection middleware for non-matching Origin headers
 app.use((req, res, next) => {
+  // Allow Google OAuth browser navigation and callbacks without origin restriction
+  if (req.path.startsWith('/api/auth/google')) {
+    return next();
+  }
   const origin = req.headers.origin;
   if (origin && !isLocalOrigin(origin)) {
     logger.warn(`CORS Blocking request from unauthorized origin: ${origin}`);
@@ -135,10 +141,11 @@ app.use('/api/templates', templatesRouter);
 
 // Root welcome message
 app.get('/', (req: Request, res: Response) => {
+  const feUrl = process.env.FRONTEND_URL || (process.env.NODE_ENV === 'production' ? 'https://promptform-ai-frontend.vercel.app' : 'http://127.0.0.1:4500');
   return res.json({
     message: "PromptForm AI REST API Server is running successfully.",
-    frontendUrl: "http://127.0.0.1:4500",
-    healthCheck: `http://127.0.0.1:${PORT}/health`
+    frontendUrl: feUrl,
+    healthCheck: "/health"
   });
 });
 

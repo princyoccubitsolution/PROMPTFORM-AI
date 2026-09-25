@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import crypto from 'crypto';
 import { db } from '../lib/db';
+import { logger } from '../lib/logger';
 import { authMiddleware, AuthenticatedRequest } from '../middlewares/auth';
 import { registerSchema, loginSchema } from '@promptform/shared';
 
@@ -11,6 +12,34 @@ const router = Router();
 
 const jwtSecret = process.env.JWT_SECRET!;
 const jwtRefreshSecret = process.env.JWT_REFRESH_SECRET!;
+
+// Helper to determine the production or local frontend URL
+export const getFrontendUrl = (req?: Request): string => {
+  if (process.env.FRONTEND_URL) {
+    return process.env.FRONTEND_URL.replace(/\/+$/, '');
+  }
+  if (process.env.NODE_ENV === 'production') {
+    return 'https://promptform-ai-frontend.vercel.app';
+  }
+  if (req) {
+    const origin = req.headers.origin || (req.headers.referer ? new URL(req.headers.referer as string).origin : null);
+    if (origin && !origin.includes('localhost:5050')) {
+      return origin.replace(/\/+$/, '');
+    }
+  }
+  return 'http://localhost:4500';
+};
+
+// Helper to determine the Google OAuth callback redirect URI
+export const getGoogleCallbackUrl = (req?: Request): string => {
+  if (process.env.GOOGLE_REDIRECT_URI) {
+    return process.env.GOOGLE_REDIRECT_URI;
+  }
+  const backendBase = process.env.BACKEND_URL || 
+                      process.env.RENDER_EXTERNAL_URL || 
+                      (process.env.NODE_ENV === 'production' ? 'https://promptform-api.onrender.com' : (req ? `${req.protocol}://${req.get('host')}` : 'http://localhost:5050'));
+  return `${backendBase.replace(/\/+$/, '')}/api/auth/google/callback`;
+};
 
 // Helper to generate tokens
 const generateTokens = (user: { id: string; email: string; role: string; subscriptionPlan: string; activeSessionToken?: string | null }) => {
@@ -25,6 +54,177 @@ const generateTokens = (user: { id: string; email: string; role: string; subscri
   const refreshToken = jwt.sign({ id: user.id, sessionToken: user.activeSessionToken || null }, jwtRefreshSecret, { expiresIn: '7d' });
   return { accessToken, refreshToken };
 };
+
+// ==========================================
+// Google OAuth Flow Routes
+// ==========================================
+
+// 1. Google OAuth Initiation Endpoint
+router.get('/google', (req: Request, res: Response) => {
+  const frontendUrl = getFrontendUrl(req);
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+
+  if (!clientId) {
+    logger.warn('Google OAuth requested but GOOGLE_CLIENT_ID is not configured.');
+    return res.redirect(`${frontendUrl}/login?error=${encodeURIComponent('Google OAuth is not configured on the server. Please add GOOGLE_CLIENT_ID in the backend environment.')}`);
+  }
+
+  const redirectTarget = typeof req.query.redirect === 'string' ? req.query.redirect : 'dashboard';
+  const callbackUrl = getGoogleCallbackUrl(req);
+
+  // Encode state as base64url JSON to preserve target redirect path
+  const statePayload = Buffer.from(JSON.stringify({ redirect: redirectTarget })).toString('base64url');
+
+  const googleAuthUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+  googleAuthUrl.searchParams.set('client_id', clientId);
+  googleAuthUrl.searchParams.set('redirect_uri', callbackUrl);
+  googleAuthUrl.searchParams.set('response_type', 'code');
+  googleAuthUrl.searchParams.set('scope', 'openid email profile');
+  googleAuthUrl.searchParams.set('access_type', 'offline');
+  googleAuthUrl.searchParams.set('prompt', 'select_account');
+  googleAuthUrl.searchParams.set('state', statePayload);
+
+  return res.redirect(googleAuthUrl.toString());
+});
+
+// 2. Google OAuth Callback Endpoint
+router.get('/google/callback', async (req: Request, res: Response) => {
+  const frontendUrl = getFrontendUrl(req);
+  const { code, state, error, error_description } = req.query;
+
+  // Extract redirect target from state
+  let redirectTarget = 'dashboard';
+  if (state && typeof state === 'string') {
+    try {
+      const decoded = JSON.parse(Buffer.from(state, 'base64url').toString('utf-8'));
+      if (decoded.redirect && typeof decoded.redirect === 'string') {
+        redirectTarget = decoded.redirect.replace(/^\/+/, '');
+      }
+    } catch {
+      redirectTarget = state.replace(/^\/+/, '');
+    }
+  }
+
+  // Handle user cancellation or OAuth error
+  if (error) {
+    logger.warn(`Google OAuth callback error received: ${error}`, { error_description });
+    const userMessage = error === 'access_denied'
+      ? 'Google sign-in was cancelled.'
+      : (typeof error_description === 'string' ? error_description : `Google authentication failed: ${error}`);
+    return res.redirect(`${frontendUrl}/login?error=${encodeURIComponent(userMessage)}`);
+  }
+
+  if (!code || typeof code !== 'string') {
+    logger.warn('Google OAuth callback called without authorization code.');
+    return res.redirect(`${frontendUrl}/login?error=${encodeURIComponent('Authorization code is missing from Google.')}`);
+  }
+
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+
+  if (!clientId || !clientSecret) {
+    logger.error('Google OAuth credentials missing on backend during callback.');
+    return res.redirect(`${frontendUrl}/login?error=${encodeURIComponent('Google OAuth server credentials are not configured.')}`);
+  }
+
+  const callbackUrl = getGoogleCallbackUrl(req);
+
+  try {
+    // 1. Exchange authorization code for tokens
+    const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        code,
+        client_id: clientId,
+        client_secret: clientSecret,
+        redirect_uri: callbackUrl,
+        grant_type: 'authorization_code',
+      }),
+    });
+
+    const tokenData = (await tokenResponse.json()) as any;
+
+    if (!tokenResponse.ok || !tokenData.access_token) {
+      logger.error('Google token exchange error', tokenData);
+      const desc = tokenData.error_description || tokenData.error || 'Failed to exchange authorization code with Google.';
+      return res.redirect(`${frontendUrl}/login?error=${encodeURIComponent(desc)}`);
+    }
+
+    // 2. Fetch user profile from Google UserInfo
+    const userInfoResponse = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: {
+        Authorization: `Bearer ${tokenData.access_token}`,
+      },
+    });
+
+    if (!userInfoResponse.ok) {
+      logger.error('Google userinfo fetch failed', { status: userInfoResponse.status });
+      return res.redirect(`${frontendUrl}/login?error=${encodeURIComponent('Failed to retrieve user profile from Google.')}`);
+    }
+
+    const profile = (await userInfoResponse.json()) as { email?: string; name?: string; sub?: string };
+    const email = profile.email;
+    const name = profile.name || (email ? email.split('@')[0] : 'Google User');
+
+    if (!email) {
+      return res.redirect(`${frontendUrl}/login?error=${encodeURIComponent('No email address provided by your Google account.')}`);
+    }
+
+    // 3. User lookup or creation
+    let user = await db.user.findUnique({
+      where: { email },
+    });
+
+    const sessionToken = crypto.randomUUID();
+    let isNewUser = false;
+
+    if (!user) {
+      isNewUser = true;
+      const randomPassword = await bcrypt.hash(crypto.randomBytes(32).toString('hex'), 10);
+      user = await db.user.create({
+        data: {
+          email,
+          name,
+          password: randomPassword,
+          role: 'user',
+          subscriptionPlan: 'free',
+          credits: 100,
+          activeSessionToken: sessionToken,
+        },
+      });
+      logger.info(`New user registered via Google OAuth: ${email}`);
+    } else {
+      user = await db.user.update({
+        where: { id: user.id },
+        data: {
+          activeSessionToken: sessionToken,
+          ...(user.name ? {} : { name }),
+        },
+      });
+      logger.info(`Existing user authenticated via Google OAuth: ${email}`);
+    }
+
+    // 4. Generate application JWT tokens
+    const tokens = generateTokens(user);
+
+    // 5. Redirect back to frontend callback handler
+    const callbackRedirectUrl = new URL(`${frontendUrl}/auth/callback`);
+    callbackRedirectUrl.searchParams.set('accessToken', tokens.accessToken);
+    callbackRedirectUrl.searchParams.set('refreshToken', tokens.refreshToken);
+    callbackRedirectUrl.searchParams.set('email', user.email);
+    callbackRedirectUrl.searchParams.set('name', user.name || '');
+    callbackRedirectUrl.searchParams.set('isNewUser', String(isNewUser));
+    callbackRedirectUrl.searchParams.set('redirect', redirectTarget);
+
+    return res.redirect(callbackRedirectUrl.toString());
+  } catch (error: any) {
+    logger.error('Google OAuth callback unhandled exception:', error);
+    return res.redirect(`${frontendUrl}/login?error=${encodeURIComponent('An unexpected error occurred during Google authentication. Please try again.')}`);
+  }
+});
 
 // Register Route
 router.post('/register', async (req: Request, res: Response) => {

@@ -30,4 +30,5 @@ export interface IFieldPlan {
   suggestedAdditions: string[];
   rules: string[];
   normalizedPrompt?: string;
+  documentContext?: string;
 }
