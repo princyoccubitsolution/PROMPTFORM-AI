@@ -9,42 +9,75 @@ export class JsonAssembler {
     const isTech = text.includes("tech") || text.includes("science") || text.includes("antigravity") || text.includes("aerospace");
     const isReview = plan.domain === 'survey' || text.includes("review") || text.includes("feedback") || text.includes("restaurant");
 
-    // Extract clean topic name
-    let topicName = "";
-    if (plan.normalizedPrompt) {
-      let topicClean = plan.normalizedPrompt
-        .replace(/\b(\d+[\s\-]question|\d+|\d+\-question|create|make|generate|build|form|survey|quiz|test|exam|created|built|please|for|a|an|the|around|questions|form type|feedback|intake|application|rsvp|medical)\b/gi, "")
-        .replace(/\([^)]*\)/g, "")
-        .replace(/[\-\_\.]+/g, " ")
-        .trim();
-      if (topicClean.length > 1) {
-        topicName = topicClean.split(/\s+/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+    // Extract clean topic name and form title
+    let formTitle = "";
+
+    // Check for explicit user title override commands
+    const explicitTitleMatch = plan.normalizedPrompt?.match(/(?:change title to|rename title to|set title to|title is|title:)\s*["']?([^"'\n\r,]+)["']?/i);
+    if (explicitTitleMatch && explicitTitleMatch[1] && explicitTitleMatch[1].trim().length > 1) {
+      formTitle = explicitTitleMatch[1].trim();
+    } else if ((plan as any)?.title && typeof (plan as any).title === 'string' && (plan as any).title.length > 3 && (plan as any).title.length < 50 && !(plan as any).title.toLowerCase().includes("with net promoter") && !(plan as any).title.toLowerCase().includes("set 10 minutes") && !(plan as any).title.toLowerCase().includes("anti cheat")) {
+      formTitle = (plan as any).title;
+    }
+
+    if (!formTitle) {
+      if (text.includes("gta v") || text.includes("gta 5") || text.includes("grand theft auto")) {
+        formTitle = plan.domain === 'quiz' ? "GTA V Gaming Quiz" : "GTA V Feedback Form";
+      } else if (text.includes("minecraft")) {
+        formTitle = plan.domain === 'quiz' ? "Minecraft Gaming Quiz" : "Minecraft Feedback Form";
+      } else if (text.includes("valorant")) {
+        formTitle = plan.domain === 'quiz' ? "Valorant Esports Quiz" : "Valorant Feedback Form";
+      } else if (text.includes("cricket")) {
+        formTitle = plan.domain === 'quiz' ? "Cricket World Cup Quiz" : "Cricket Feedback Form";
+      } else if (text.includes("customer") && (text.includes("feedback") || text.includes("survey") || text.includes("nps") || text.includes("net promoter") || text.includes("satisfaction"))) {
+        formTitle = "Customer Feedback Survey";
+      } else if (text.includes("nps") || text.includes("net promoter")) {
+        formTitle = "Net Promoter Score (NPS) Survey";
+      } else if (text.includes("employee") && (text.includes("feedback") || text.includes("survey"))) {
+        formTitle = "Employee Feedback Survey";
+      } else if (text.includes("patient") || text.includes("dental") || text.includes("medical")) {
+        formTitle = "Patient Intake & Medical Form";
+      } else if (text.includes("event") || text.includes("rsvp") || text.includes("conference")) {
+        formTitle = "Event Registration & RSVP";
+      } else {
+        let topicClean = (plan.normalizedPrompt || "")
+          .replace(/\b(\d+[\s\-]question|\d+|\d+\-question|create|make|generate|build|form|survey|quiz|test|exam|created|built|please|for|a|an|the|around|questions|form type|feedback|intake|application|rsvp|medical|with|net promoter score|net|promoter|score|rating|ratings|scale|scales|and|or|set|minutes|timer|anti[\s\-]?cheat|add|marks|options|exact|correct|answers|this|id|number|field|remove)\b/gi, "")
+          .replace(/\([^)]*\)/g, "")
+          .replace(/[\-\_\.]+/g, " ")
+          .replace(/\s+/g, " ")
+          .trim();
+        let topicName = "";
+        if (topicClean.length > 1) {
+          const words = topicClean.split(/\s+/).filter(w => w.length > 1 && !["this", "id", "remove", "field"].includes(w.toLowerCase()));
+          if (words.length > 0 && words.length <= 4) {
+            topicName = words.map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+          }
+        }
+
+        if (!topicName || topicName.length > 30) {
+          topicName = text.includes("javascript") || text.includes("js") ? "JavaScript" :
+                      text.includes("python") ? "Python" :
+                      text.includes("react") ? "React" :
+                      text.includes("node") ? "Node.js" :
+                      text.includes("coffee") ? "Coffee Shop" :
+                      text.includes("dentist") || text.includes("dental") ? "Dentistry" :
+                      text.includes("food") || text.includes("restaurant") ? "Food & Dining" : "Topic";
+        }
+
+        if (plan.domain === 'quiz') {
+          formTitle = topicName.includes("Quiz") ? topicName : `${topicName} Quiz`;
+        } else if (plan.domain === 'survey') {
+          formTitle = topicName.includes("Survey") ? topicName : `${topicName} Survey`;
+        } else if (plan.domain === 'job') {
+          formTitle = topicName.includes("Application") ? topicName : `${topicName} Application Form`;
+        } else if (plan.domain === 'rsvp') {
+          formTitle = topicName.includes("RSVP") || topicName.includes("Invitation") ? topicName : `${topicName} Event RSVP`;
+        } else if (plan.domain === 'medical') {
+          formTitle = topicName.includes("Intake") || topicName.includes("Medical") ? topicName : `${topicName} Medical Intake Form`;
+        } else {
+          formTitle = topicName.includes("Form") ? topicName : `${topicName} Form`;
+        }
       }
-    }
-
-    if (!topicName || topicName === "General Subject") {
-      topicName = text.includes("javascript") || text.includes("js") ? "JavaScript" :
-                  text.includes("python") ? "Python" :
-                  text.includes("react") ? "React" :
-                  text.includes("node") ? "Node.js" :
-                  text.includes("coffee") ? "Coffee Shop" :
-                  text.includes("dentist") || text.includes("dental") ? "Dentistry" :
-                  text.includes("food") || text.includes("restaurant") ? "Food & Dining" : "Topic";
-    }
-
-    let formTitle = topicName.includes("Form") ? topicName : `${topicName} Form`;
-    if (plan.domain === 'quiz') {
-      formTitle = topicName.includes("Quiz") ? topicName : `${topicName} Quiz & Skill Assessment`;
-    } else if (plan.domain === 'survey') {
-      formTitle = topicName.includes("Survey") ? topicName : `${topicName} Feedback Survey`;
-    } else if (plan.domain === 'job') {
-      formTitle = topicName.includes("Application") ? topicName : `${topicName} Application Form`;
-    } else if (plan.domain === 'rsvp') {
-      formTitle = topicName.includes("RSVP") || topicName.includes("Invitation") ? topicName : `${topicName} Event RSVP Invitation`;
-    } else if (plan.domain === 'medical') {
-      formTitle = topicName.includes("Intake") || topicName.includes("Medical") ? topicName : `${topicName} Medical Intake Form`;
-    } else if (plan.domain === 'contact') {
-      formTitle = topicName.includes("Contact") ? topicName : `${topicName} Contact Form`;
     }
 
     // Determine Topic-Specific Niche Theme (Matching HSL / Brand niche rules)
@@ -87,7 +120,7 @@ export class JsonAssembler {
 
     return {
       title: formTitle,
-      description: `Structured ${topicName} ${plan.domain} form generated automatically by PromptForm AI.`,
+      description: `Structured ${formTitle} generated automatically by PromptForm AI.`,
       questions: flatQuestions,
       theme: {
         primary_color: primaryColor,

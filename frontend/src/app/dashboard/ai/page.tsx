@@ -382,7 +382,11 @@ export default function AIPage() {
         result = await api.postMultipart('/ai/generate', formData);
       } else {
         const fullPrompt = `${basePrompt} ${configSuffix}`;
-        result = await api.post('/ai/generate', { prompt: fullPrompt });
+        const payload: any = { prompt: fullPrompt };
+        if (generatedForm && generatedForm.id && !generatedForm.id.startsWith('gen-')) {
+          payload.formId = generatedForm.id;
+        }
+        result = await api.post('/ai/generate', payload);
       }
 
       const formObj = result?.form || result;
@@ -392,11 +396,30 @@ export default function AIPage() {
         if (targetId && !targetId.startsWith('gen-')) {
           await api.patch(`/forms/${targetId}`, { settings: { display_mode: displayMode } }).catch(() => {});
         }
+        const sanitizeTitle = (rawTitle: string, userPromptText: string) => {
+          if (rawTitle && typeof rawTitle === 'string' && rawTitle.trim().length > 0 && rawTitle.trim().length < 50) {
+            const lower = rawTitle.toLowerCase();
+            const isBad = ["create a", "set 10", "anti-cheat", "anti cheat", "score marks", "options with", "field remove", "form id", "questions", "timer"].some(bad => lower.includes(bad));
+            if (!isBad) return rawTitle.trim();
+          }
+          const lowerPrompt = (userPromptText || "").toLowerCase();
+          if (lowerPrompt.includes("gta v") || lowerPrompt.includes("gta 5") || lowerPrompt.includes("grand theft auto") || lowerPrompt.includes("gta")) {
+            return "GTA V Gaming Quiz";
+          }
+          if (lowerPrompt.includes("minecraft")) return "Minecraft Gaming Quiz";
+          if (lowerPrompt.includes("valorant")) return "Valorant Esports Quiz";
+          if (lowerPrompt.includes("cricket")) return "Cricket World Cup Quiz";
+          if (lowerPrompt.includes("patient") || lowerPrompt.includes("medical")) return "Patient Intake Form";
+          if (lowerPrompt.includes("nps") || lowerPrompt.includes("net promoter")) return "Net Promoter Score Survey";
+          if (lowerPrompt.includes("feedback") || lowerPrompt.includes("survey")) return "Customer Feedback Survey";
+          return "AI Generated Form";
+        };
+
         const createdForm = {
           id: targetId,
           uniqueShareId: formObj.uniqueShareId,
           publicUrl: formObj.publicUrl,
-          title: formObj.title || prompt || "AI Generated Form",
+          title: sanitizeTitle(formObj.title, prompt),
           description: formObj.description || "Created with PromptForm AI",
           category: summary?.formType ? summary.formType.toUpperCase() : (formObj.category || "AI FORM"),
           questions: (formObj.questions || []).map((q: any, i: number) => ({
@@ -421,6 +444,28 @@ export default function AIPage() {
 
   const handleOpenBuilder = async () => {
     if (generatedForm && generatedForm.id) {
+      if (generatedForm.id.startsWith('gen-')) {
+        setIsGenerating(true);
+        try {
+          const savedForm = await api.post('/forms', {
+            title: generatedForm.title || "AI Generated Form",
+            description: generatedForm.description || "Created with PromptForm AI",
+            settings: generatedForm.settings || { display_mode: displayMode },
+            theme: generatedForm.theme || { primary_color: "#8B6B55", background_color: "#FAF6EF" }
+          });
+          if (generatedForm.questions?.length > 0) {
+            await api.put(`/forms/${savedForm.id}/questions`, generatedForm.questions);
+          }
+          setGeneratedForm(savedForm);
+          router.push(`/builder/${savedForm.id}`);
+        } catch (err: any) {
+          setError(err.message || "Failed to save generated form.");
+        } finally {
+          setIsGenerating(false);
+        }
+        return;
+      }
+      await api.patch(`/forms/${generatedForm.id}`, { settings: { display_mode: displayMode } }).catch(() => {});
       router.push(`/builder/${generatedForm.id}`);
       return;
     }
@@ -475,6 +520,27 @@ export default function AIPage() {
 
   const handleSharePublic = async () => {
     if (generatedForm && generatedForm.id) {
+      if (generatedForm.id.startsWith('gen-')) {
+        setIsGenerating(true);
+        try {
+          const savedForm = await api.post('/forms', {
+            title: generatedForm.title || "AI Generated Form",
+            description: generatedForm.description || "Created with PromptForm AI",
+            settings: generatedForm.settings || { display_mode: displayMode },
+            theme: generatedForm.theme || { primary_color: "#8B6B55", background_color: "#FAF6EF" }
+          });
+          if (generatedForm.questions?.length > 0) {
+            await api.put(`/forms/${savedForm.id}/questions`, generatedForm.questions);
+          }
+          setGeneratedForm(savedForm);
+          setShareModalOpen(true);
+        } catch (err: any) {
+          setError(err.message || "Failed to save form for sharing.");
+        } finally {
+          setIsGenerating(false);
+        }
+        return;
+      }
       await api.patch(`/forms/${generatedForm.id}`, { settings: { display_mode: displayMode } }).catch(() => {});
       setShareModalOpen(true);
       return;

@@ -208,10 +208,12 @@ export class FieldDiscovery {
         { type: "agreement", label: "Declaration Consent", required: true, options: ["I declare all information is correct and true"] }
       );
     } else if (domain === 'quiz' || text.includes("quiz") || text.includes("exam") || text.includes("test") || text.includes("mcq")) {
-      fields.push(
-        { type: "name", label: "Student Full Name", required: true, options: [] },
-        { type: "amount", label: "Student Roll / ID Number", required: true, options: [] }
-      );
+      if (text.includes("student") || text.includes("roll") || text.includes("candidate name") || text.includes("student name")) {
+        fields.push(
+          { type: "name", label: "Student Full Name", required: true, options: [] },
+          { type: "amount", label: "Student Roll / ID Number", required: true, options: [] }
+        );
+      }
 
       if (text.includes("js") || text.includes("javascript")) {
         fields.push(
@@ -252,15 +254,35 @@ export class FieldDiscovery {
           { type: "mcq", label: "Q3: Which JOIN returns all records when there is a match in left or right table?", required: true, options: ["FULL OUTER JOIN", "INNER JOIN", "LEFT JOIN", "CROSS JOIN"] },
           { type: "mcq", label: "Q4: What SQL command quickly empties a table without logging individual row deletions?", required: true, options: ["TRUNCATE TABLE", "DELETE FROM", "DROP TABLE", "REMOVE ALL"] }
         );
+      } else if (text.includes("gta v") || text.includes("gta 5") || text.includes("grand theft auto") || text.includes("gta")) {
+        fields.push(
+          { type: "mcq", label: "Q1: Who are the three main playable protagonists in GTA V?", required: true, options: ["Michael, Franklin, Trevor", "Niko, CJ, Tommy", "Claude, Lester, Lamar", "Arthur, John, Dutch"], correctAnswer: "Michael, Franklin, Trevor", explanation: "Michael De Santa, Franklin Clinton, and Trevor Philips are the three main protagonists." },
+          { type: "mcq", label: "Q2: What is the name of the fictional state where GTA V takes place?", required: true, options: ["San Andreas", "Vice City", "Liberty City", "San Fierro"], correctAnswer: "San Andreas", explanation: "GTA V is set in the fictional state of San Andreas, based on Southern California." },
+          { type: "mcq", label: "Q3: What major heist is the first planned robbery executed by Michael and Franklin?", required: true, options: ["The Jewel Store Job", "The Paleto Score", "The Pacific Standard Job", "The Bureau Raid"], correctAnswer: "The Jewel Store Job", explanation: "The Jewel Store Job is the first major heist in story mode." },
+          { type: "mcq", label: "Q4: Which technology company in GTA V parodies Apple?", required: true, options: ["iFruit", "Lifeinvader", "Whiz", "Facade"], correctAnswer: "iFruit", explanation: "iFruit is the parody of Apple in GTA V." },
+          { type: "mcq", label: "Q5: What is Lester Crest's primary role in planning heists?", required: true, options: ["The Brains & Master Planner", "The Getaway Driver", "The Demolitionist", "The Weapons Expert"], correctAnswer: "The Brains & Master Planner", explanation: "Lester plans the logistics and targets for main heists." }
+        );
+      } else if (text.includes("cricket")) {
+        fields.push(
+          { type: "mcq", label: "Q1: How many players are on the field for one team in a cricket match?", required: true, options: ["11 Players", "10 Players", "12 Players", "9 Players"], correctAnswer: "11 Players" },
+          { type: "mcq", label: "Q2: What is the maximum number of overs per innings in a T20 match?", required: true, options: ["20 Overs", "50 Overs", "10 Overs", "15 Overs"], correctAnswer: "20 Overs" },
+          { type: "mcq", label: "Q3: Which country won the inaugural ICC Men's T20 World Cup in 2007?", required: true, options: ["India", "Pakistan", "Australia", "West Indies"], correctAnswer: "India" }
+        );
       } else {
-        const topicClean = text.replace(/create|make|generate|build|a|an|the|quiz|mcq|test|exam|for|about|with|questions/gi, "").trim();
-        const displayTopic = topicClean.length > 2 ? topicClean.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') : "General Knowledge";
+        let topicClean = text
+          .replace(/\b(\d+[\s\-]question|\d+|\d+\-question|create|make|generate|build|form|survey|quiz|test|exam|created|built|please|for|a|an|the|around|questions|form type|feedback|intake|application|rsvp|medical|with|net promoter score|net|promoter|score|rating|ratings|scale|scales|and|or|set|minutes|timer|anti[\s\-]?cheat|add|marks|options|exact|correct|answers|this|id|number|field|remove|option|layout|inline|horizontal)\b/gi, "")
+          .replace(/\([^)]*\)/g, "")
+          .replace(/[^\w\s]/gi, " ")
+          .replace(/\s+/g, " ")
+          .trim();
+        const words = topicClean.split(/\s+/).filter(w => w.length > 1 && !["this", "id", "remove", "field", "option", "layout", "horizontal", "inline"].includes(w.toLowerCase()));
+        const displayTopic = words.length > 0 && words.length <= 3 ? words.map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') : "General Knowledge";
 
         fields.push(
-          { type: "mcq", label: `Q1: Which fundamental principle is essential to ${displayTopic}?`, required: true, options: ["Core Standard Principle", "Secondary Alternative", "Legacy Protocol", "Experimental Draft"] },
-          { type: "mcq", label: `Q2: What is the primary objective when applying ${displayTopic}?`, required: true, options: ["Maximizing Efficiency & Quality", "Bypassing Verification Steps", "Increasing Execution Delay", "Manual File Mutation"] },
-          { type: "mcq", label: `Q3: Which methodology is widely considered best practice in ${displayTopic}?`, required: true, options: ["Structured Continuous Verification", "Unchecked Ad-hoc Changes", "Hardcoded Configurations", "Ignoring System Logs"] },
-          { type: "mcq", label: `Q4: How should errors or edge cases be handled when dealing with ${displayTopic}?`, required: true, options: ["Explicit Validation & Defensive Error Handling", "Silent Error Suppression", "Ignoring Output Warnings", "Hard-crashing System Threads"] }
+          { type: "mcq", label: `Q1: Which core concept is essential to ${displayTopic}?`, required: true, options: ["Core Principle A", "Standard Concept B", "Advanced Practice C", "Experimental Option D"] },
+          { type: "mcq", label: `Q2: What is the main objective when evaluating ${displayTopic}?`, required: true, options: ["Maximizing Accuracy & Performance", "Bypassing Key Rules", "Increasing System Delay", "Manual Override"] },
+          { type: "mcq", label: `Q3: Which methodology represents best practice for ${displayTopic}?`, required: true, options: ["Structured Continuous Verification", "Unchecked Random Changes", "Hardcoded Fallbacks", "Ignoring Guidelines"] },
+          { type: "mcq", label: `Q4: How should key requirements be handled in ${displayTopic}?`, required: true, options: ["Explicit Validation & Systematic Checking", "Silent Suppression", "Ignoring Warnings", "Unvalidated Execution"] }
         );
       }
     } else if (domain === 'rsvp' || text.includes("rsvp") || text.includes("event") || text.includes("wedding")) {

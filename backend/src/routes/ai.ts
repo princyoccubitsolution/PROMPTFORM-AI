@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import { z } from 'zod';
 import multer from 'multer';
 import { db } from '../lib/db';
-import { authMiddleware, AuthenticatedRequest } from '../middlewares/auth';
+import { authMiddleware, optionalAuthMiddleware, AuthenticatedRequest } from '../middlewares/auth';
 import { subscriptionMiddleware } from '../middlewares/subscription';
 import { parseDocument } from '../lib/documentParser';
 import { getOrParseDocument } from '../lib/queue';
@@ -38,12 +38,13 @@ async function queryGemini(
   }
 
   const candidateModels = [
-    'gemini-3.6-flash',
-    'gemini-3.5-flash',
-    'gemini-3.7-flash',
+    'gemini-2.5-flash',
+    'gemini-2.0-flash',
+    'gemini-1.5-flash',
     'gemini-flash-latest',
-    'gemini-3.5-flash-lite',
-    'gemini-flash-lite-latest'
+    'gemini-1.5-pro',
+    'gemini-2.0-flash-lite',
+    'gemini-2.5-flash-lite'
   ];
 
   const contents: any[] = [];
@@ -403,15 +404,30 @@ function parsePromptFallback(prompt: string) {
         { type: "mcq", label: `Q4: How should errors or edge cases be handled when dealing with ${displayTopic}?`, required: true, options: ["Explicit Validation & Defensive Error Handling", "Silent Error Suppression", "Ignoring Output Warnings", "Hard-crashing System Threads"] }
       ];
     }
-  } else if (lowercasePrompt.includes("feedback") || lowercasePrompt.includes("survey") || lowercasePrompt.includes("satisfaction")) {
+  } else if (lowercasePrompt.includes("feedback") || lowercasePrompt.includes("survey") || lowercasePrompt.includes("satisfaction") || lowercasePrompt.includes("nps") || lowercasePrompt.includes("net promoter")) {
     title = "Customer Feedback Survey";
-    description = "Help us improve our service by providing your feedback.";
-    questions = [
-      { type: "rating", label: "Overall Satisfaction", required: true, options: [] },
-      { type: "mcq", label: "How often do you use our product?", required: true, options: ["Daily", "Weekly", "Monthly", "Rarely"] },
-      { type: "checkbox", label: "What features do you use most? (Select all)", required: false, options: ["AI Form Builder", "Real-time Analytics", "Slack Integrations", "Export Features"] },
-      { type: "long_text", label: "What is one thing we could improve?", required: false, options: [] }
-    ];
+    description = "Please take a few minutes to share your thoughts. Your feedback directly helps us improve our products and services.";
+    
+    if (lowercasePrompt.includes("nps") || lowercasePrompt.includes("net promoter") || lowercasePrompt.includes("rating scale") || lowercasePrompt.includes("scale")) {
+      questions = [
+        { type: "mcq", label: "How likely are you to recommend us to a friend or colleague? (Net Promoter Score)", required: true, options: ["0 - Not at all likely", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10 - Extremely likely"] },
+        { type: "long_text", label: "What is the primary reason for your score above?", required: false, options: [] },
+        { type: "mcq", label: "Overall Product Quality & Performance", required: true, options: ["1 - Poor", "2 - Fair", "3 - Good", "4 - Very Good", "5 - Excellent"] },
+        { type: "mcq", label: "Ease of Use / Navigation", required: true, options: ["1 - Poor", "2 - Fair", "3 - Good", "4 - Very Good", "5 - Excellent"] },
+        { type: "mcq", label: "Value for Money", required: true, options: ["1 - Poor", "2 - Fair", "3 - Good", "4 - Very Good", "5 - Excellent"] },
+        { type: "mcq", label: "Customer Support & Responsiveness", required: true, options: ["1 - Strongly Disagree", "2 - Disagree", "3 - Neutral", "4 - Agree", "5 - Strongly Agree"] },
+        { type: "mcq", label: "Overall, how satisfied are you with your experience?", required: true, options: ["Very Satisfied", "Satisfied", "Neutral", "Dissatisfied", "Very Dissatisfied"] },
+        { type: "long_text", label: "What feature or service improvement would make your experience significantly better?", required: false, options: [] },
+        { type: "long_text", label: "Is there anything else you would like us to know?", required: false, options: [] }
+      ];
+    } else {
+      questions = [
+        { type: "rating", label: "Overall Satisfaction", required: true, options: [] },
+        { type: "mcq", label: "How often do you use our product?", required: true, options: ["Daily", "Weekly", "Monthly", "Rarely"] },
+        { type: "checkbox", label: "What features do you use most? (Select all)", required: false, options: ["AI Form Builder", "Real-time Analytics", "Slack Integrations", "Export Features"] },
+        { type: "long_text", label: "What is one thing we could improve?", required: false, options: [] }
+      ];
+    }
   } else if (lowercasePrompt.includes("rsvp") || lowercasePrompt.includes("event")) {
     title = "Event RSVP Invitation";
     description = "Confirm your attendance for our upcoming conference.";
@@ -644,10 +660,8 @@ function runResponseFallback(answers: any) {
 }
 
 // POST: /ai/generate & /ai/generate-from-file
-router.post(['/generate', '/generate-from-file'], authMiddleware, subscriptionMiddleware, upload.single('file'), async (req: AuthenticatedRequest, res: Response) => {
+router.post(['/generate', '/generate-from-file'], optionalAuthMiddleware, upload.single('file'), async (req: AuthenticatedRequest, res: Response) => {
   try {
-    if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
-
     const fileBuffer = req.file ? req.file.buffer : null;
     const mimeType = req.file ? req.file.mimetype : "application/pdf";
     const userPrompt = typeof req.body?.prompt === 'string' ? req.body.prompt : '';
@@ -662,10 +676,11 @@ router.post(['/generate', '/generate-from-file'], authMiddleware, subscriptionMi
       });
     }
 
-    const user = await db.user.findUnique({ where: { id: req.user.id } });
-    if (!user) return res.status(404).json({ error: 'User not found' });
-    if (user.credits < 5) {
-      return res.status(403).json({ error: 'Insufficient credits. AI generation requires at least 5 credits.' });
+    if (req.user) {
+      const user = await db.user.findUnique({ where: { id: req.user.id } });
+      if (user && user.credits < 5) {
+        return res.status(403).json({ error: 'Insufficient credits. AI generation requires at least 5 credits.' });
+      }
     }
 
     let formConfig;
@@ -724,7 +739,7 @@ router.post(['/generate', '/generate-from-file'], authMiddleware, subscriptionMi
           });
           if (!existingForm) return res.status(404).json({ error: 'Form not found' });
           
-          if (existingForm.ownerId !== req.user.id) {
+          if (req.user && existingForm.ownerId !== req.user.id) {
             if (existingForm.teamId) {
               const membership = await db.teamMember.findUnique({
                 where: { teamId_userId: { teamId: existingForm.teamId, userId: req.user.id } }
@@ -744,7 +759,7 @@ router.post(['/generate', '/generate-from-file'], authMiddleware, subscriptionMi
           const docSnippet = parsedDocText ? `\nExtracted Document Content:\n"""\n${parsedDocText.substring(0, 10000)}\n"""` : '';
           const modelPrompt = fileBuffer
             ? `Extract and generate a complete topic-specific form or quiz paper based on this uploaded document/image and instructions: "${userPrompt || 'Extract all questions and fields from document'}". ${docSnippet} ${isQuizIntent ? 'CRITICAL: This is an assignment/exam/quiz. Extract EVERY single question as an interactive multiple-choice question (mcq) with 4 options, the exact correctAnswer string, points, and an explanation.' : 'Generate appropriate topic-specific fields matching the document.'}`
-            : `Generate a topic-specific form for: "${userPrompt}"`;
+            : `Analyze the topic "${intent.topic}" for user prompt: "${userPrompt}". Perform a deep factual domain analysis of "${intent.topic}" using world knowledge (video games, esports, sports, movies, science, pop culture, history, technology, medicine, general trivia, etc.). Generate a factually 100% accurate, high-quality, topic-authentic ${intent.formType} with ${intent.questionCount} questions.`;
           formConfig = await queryGemini(modelPrompt, systemInstruction, fileBuffer, mimeType);
         }
       } catch (geminiError: any) {
@@ -809,67 +824,100 @@ router.post(['/generate', '/generate-from-file'], authMiddleware, subscriptionMi
       const frontendBaseUrl = process.env.FRONTEND_URL || 'http://127.0.0.1:4500';
       const publicUrl = `${frontendBaseUrl}/f/${shareCode}`;
 
-      form = await db.form.create({
-        data: {
+      if (req.user) {
+        form = await db.form.create({
+          data: {
+            title: formConfig.title,
+            description: formConfig.description,
+            status: "PUBLISHED",
+            uniqueShareId: shareCode,
+            publicUrl: publicUrl,
+            isPublic: true,
+            ownerId: req.user.id,
+            settings: formConfig.settings,
+            theme: formConfig.theme
+          }
+        });
+
+        await db.question.createMany({
+          data: formConfig.questions.map((q: any, idx: number) => ({
+            formId: form.id,
+            type: q.type,
+            label: q.label,
+            required: q.required || false,
+            orderIndex: idx,
+            options: q.options || [],
+            validations: {
+              ...(q.validations || {}),
+              points: q.points !== undefined ? Number(q.points) : (q.validations?.points !== undefined ? Number(q.validations.points) : 5),
+              correctAnswer: q.correctAnswer,
+              explanation: q.explanation,
+              difficulty: q.difficulty,
+              negativePoints: q.negativePoints,
+              bloomsTaxonomy: q.bloomsTaxonomy,
+              accessibilityLabel: q.accessibilityLabel
+            },
+            logic: q.logic || {}
+          }))
+        });
+
+        await db.analytics.create({
+          data: {
+            formId: form.id,
+            views: 0,
+            submissions: 0,
+            deviceStats: { desktop: 0, mobile: 0, tablet: 0 },
+            countryStats: {},
+            dropoutRates: {}
+          }
+        });
+      } else {
+        // Preview form object for guests
+        form = {
+          id: `gen-${Date.now()}`,
           title: formConfig.title,
           description: formConfig.description,
           status: "PUBLISHED",
           uniqueShareId: shareCode,
           publicUrl: publicUrl,
           isPublic: true,
-          ownerId: req.user.id,
           settings: formConfig.settings,
-          theme: formConfig.theme
-        }
-      });
+          theme: formConfig.theme,
+          questions: formConfig.questions.map((q: any, idx: number) => ({
+            id: `q_${idx}`,
+            type: q.type,
+            label: q.label,
+            required: q.required || false,
+            orderIndex: idx,
+            options: q.options || [],
+            validations: {
+              ...(q.validations || {}),
+              points: q.points !== undefined ? Number(q.points) : 5,
+              correctAnswer: q.correctAnswer,
+              explanation: q.explanation
+            }
+          }))
+        };
+      }
+    }
 
-      await db.question.createMany({
-        data: formConfig.questions.map((q: any, idx: number) => ({
-          formId: form.id,
-          type: q.type,
-          label: q.label,
-          required: q.required || false,
-          orderIndex: idx,
-          options: q.options || [],
-          validations: {
-            ...(q.validations || {}),
-            points: q.points !== undefined ? Number(q.points) : (q.validations?.points !== undefined ? Number(q.validations.points) : 5),
-            correctAnswer: q.correctAnswer,
-            explanation: q.explanation,
-            difficulty: q.difficulty,
-            negativePoints: q.negativePoints,
-            bloomsTaxonomy: q.bloomsTaxonomy,
-            accessibilityLabel: q.accessibilityLabel
-          },
-          logic: q.logic || {}
-        }))
-      });
+    if (req.user) {
+      await db.user.update({
+        where: { id: req.user.id },
+        data: { credits: { decrement: 5 } }
+      }).catch(() => {});
+    }
 
-      await db.analytics.create({
-        data: {
-          formId: form.id,
-          views: 0,
-          submissions: 0,
-          deviceStats: { desktop: 0, mobile: 0, tablet: 0 },
-          countryStats: {},
-          dropoutRates: {}
-        }
+    let fullForm = form;
+    if (req.user && form.id && !form.id.startsWith('gen-')) {
+      fullForm = await db.form.findUnique({
+        where: { id: form.id },
+        include: { questions: { orderBy: { orderIndex: 'asc' } } }
       });
     }
 
-    await db.user.update({
-      where: { id: req.user.id },
-      data: { credits: { decrement: 5 } }
-    });
-
-    const fullForm = await db.form.findUnique({
-      where: { id: form.id },
-      include: { questions: { orderBy: { orderIndex: 'asc' } } }
-    });
-
     return res.json({
       message: "Form generated successfully using PromptForm AI engine.",
-      creditsRemaining: user.credits - 5,
       understandingSummary: formConfig.understandingSummary || intent.understandingSummary,
       form: fullForm
     });
@@ -1494,7 +1542,8 @@ HOW TO HANDLE REGIONAL HINGLISH/GUJRISH SLANG & TYPOS (TRAINING EXAMPLES):
   * This is the user asking to improve the Form Builder AI. Acknowledge this request in CHAT mode, and explain in Gujarati/Hinglish that you are now trained to understand their edits and can make their forms perfect in real-time.
 
 CLAUDE/CHATGPT ADAPTIVE INSTRUCTION CONFORMANCE PROTOCOL & ADVANCED ENTERPRISE KNOWLEDGE BASE:
-- **Strict Topic Intelligence & Topic-Specific Questions**: Every question generated MUST directly test or ask about the specific topic requested by the user (e.g. JavaScript, React, Node.js, Restaurant Satisfaction, Backend Developer Job).
+- **WORLD KNOWLEDGE & FACTUAL TRUTH MANDATE**: You possess vast, deep, factually accurate world knowledge on ALL topics across video games (e.g. GTA V, Minecraft, Valorant, Call of Duty, FIFA, Pokémon, League of Legends, Fortnite, Roblox, CS:GO, God of War, Cyberpunk, Genshin Impact, Chess, Board Games), sports (e.g. Cricket World Cup, Premier League, NBA, Tennis, F1, Olympics), pop culture, movies, anime, literature, history, geography, science, technology, medicine, and business. When given ANY user prompt on ANY topic in the world, perform deep domain analysis and generate 100% TRUE, ACCURATE, and topic-authentic factual questions, answers, and choices.
+- **Strict Topic Intelligence & Topic-Specific Questions**: Every question generated MUST directly test or ask about the specific topic requested by the user (e.g. JavaScript, React, Node.js, Restaurant Satisfaction, Backend Developer Job, GTA V, Cricket World Cup).
 - **ZERO GENERIC IDENTITY FALLBACK RULE**:
   * For QUIZZES, EXAMS, SURVEYS, FEEDBACK FORMS, and POLLS: Do NOT automatically add common personal fields like Phone Number, Address, Date of Birth, Gender, Company, Email, or Name UNLESS they are genuinely relevant or explicitly requested by the user. 100% of the questions MUST be topic-specific!
   * For REGISTRATION, EVENT REGISTRATION, APPLICATION, and CONTACT forms: Personal fields (Name, Email, Phone, Resume, Company, Session) ARE relevant and should be included appropriately.

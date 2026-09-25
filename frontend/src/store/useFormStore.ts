@@ -17,6 +17,7 @@ export interface FormSettings {
   password: string | null;
   allow_editing: boolean;
   shuffle_questions: boolean;
+  shuffle_options: boolean;
   timer_limit: number;
   anti_cheat_detection: boolean;
   team_members_only: boolean;
@@ -61,6 +62,17 @@ export interface FormState {
   setSaving: (saving: boolean) => void;
 }
 
+const generateUUID = (): string => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+};
+
 export const useFormStore = create<FormState>((set) => ({
   id: null,
   title: 'Untitled Form',
@@ -76,6 +88,7 @@ export const useFormStore = create<FormState>((set) => ({
     password: null,
     allow_editing: false,
     shuffle_questions: false,
+    shuffle_options: false,
     timer_limit: 0,
     anti_cheat_detection: false,
     team_members_only: false,
@@ -230,7 +243,7 @@ export const useFormStore = create<FormState>((set) => ({
     }
 
     const newQuestion: Question = {
-      id: `new-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      id: generateUUID(),
       type,
       label,
       required: false,

@@ -278,19 +278,25 @@ export default function BuilderPage() {
   const handleSaveForm = async () => {
     store.setSaving(true);
     try {
-      await api.put(`/forms/${formId}`, {
+      const updatedForm = await api.put(`/forms/${formId}`, {
         title: store.title,
         description: store.description,
-        status: store.status,
+        status: store.status || 'PUBLISHED',
         isPublic: store.isPublic,
         responseLimit: store.responseLimit,
         settings: store.settings,
         theme: store.theme
       });
-      await api.put(`/forms/${formId}/questions`, store.questions);
-      alert("All builder changes saved!");
+      const updatedQuestions = await api.put(`/forms/${formId}/questions`, store.questions);
+      
+      store.setForm({
+        ...updatedForm,
+        questions: updatedQuestions
+      });
+
+      alert("All builder changes saved successfully!");
     } catch (err: any) {
-      alert("Failed to save changes: " + err.message);
+      alert("Failed to save changes: " + (err.message || "Unknown error"));
     } finally {
       store.setSaving(false);
     }
@@ -605,10 +611,10 @@ export default function BuilderPage() {
     <div className={`min-h-screen ${darkMode ? 'dark ' : ''}bg-background text-foreground flex flex-col h-screen overflow-hidden transition-all duration-200 font-sans`}>
       
       {/* 1. TOP STICKY NAVIGATION (72px) */}
-      <header className="h-[72px] w-full sticky top-0 z-50 bg-card/95 dark:bg-background/95 backdrop-blur-md border-b border-border dark:border-border flex items-center justify-between px-6 select-none flex-shrink-0">
+      <header className="h-[72px] w-full sticky top-0 z-50 bg-card/95 dark:bg-background/95 backdrop-blur-md border-b border-border dark:border-border flex items-center justify-between px-3 sm:px-6 select-none flex-shrink-0">
         
         {/* Left Section */}
-        <div className="flex items-center space-x-4">
+        <div className="flex items-center space-x-2 sm:space-x-4">
           <button 
             onClick={() => router.push('/dashboard/ai')}
             className="p-2 rounded-lg hover:bg-zinc-200 dark:hover:bg-zinc-800 text-muted-foreground hover:text-foreground dark:hover:text-zinc-200 transition-all border-none bg-transparent cursor-pointer"
@@ -620,15 +626,15 @@ export default function BuilderPage() {
           <div className="h-6 w-[1px] bg-zinc-200 dark:bg-card" />
           
           <div className="flex items-center space-x-2">
-            <span className="text-sm font-bold tracking-wider text-primary uppercase select-none">PROMPTFORM AI</span>
-            <span className="text-xs px-2 py-0.5 rounded-md font-bold uppercase tracking-wider bg-zinc-200 dark:bg-card text-zinc-700 dark:text-muted-foreground border border-border dark:border-border select-none">v2.1</span>
+            <span className="text-xs sm:text-sm font-bold tracking-wider text-primary uppercase select-none">PROMPTFORM AI</span>
+            <span className="hidden sm:inline-block text-xs px-2 py-0.5 rounded-md font-bold uppercase tracking-wider bg-zinc-200 dark:bg-card text-zinc-700 dark:text-muted-foreground border border-border dark:border-border select-none">v2.1</span>
             
-            <div className="flex items-center space-x-1.5 ml-2">
+            <div className="flex items-center space-x-1.5 ml-1 sm:ml-2">
               <input
                 type="text"
                 value={store.title}
                 onChange={(e) => store.updateFormFields({ title: e.target.value })}
-                className="text-sm font-semibold bg-transparent border-b border-transparent hover:border-border focus:border-primary focus-visible:outline-none focus:ring-0 px-1 py-0.5 text-foreground transition-all w-48"
+                className="text-xs sm:text-sm font-semibold bg-transparent border-b border-transparent hover:border-border focus:border-primary focus-visible:outline-none focus:ring-0 px-1 py-0.5 text-foreground transition-all w-28 sm:w-48"
               />
               <span className={`text-xs font-semibold px-2 py-0.5 rounded ${
                 store.status === 'PUBLISHED' ? 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-404' : 'bg-amber-100 dark:bg-amber-950/30 text-amber-700 dark:text-amber-404'
@@ -710,38 +716,52 @@ export default function BuilderPage() {
 
           <div className="h-6 w-[1px] bg-zinc-200 dark:bg-card" />
 
-          {/* Quick Preview, Share, Publish */}
-          <div className="flex items-center space-x-2">
+          {/* Quick Preview, Save, Share, Publish */}
+          <div className="flex items-center space-x-1.5 sm:space-x-2">
             <Button 
               variant="outline" 
               size="sm" 
-              onClick={() => window.open(`/view/${formId}?preview=true`, '_blank')} 
-              className="h-9 px-3.5 rounded-lg border border-border dark:border-border hover:bg-accent dark:hover:bg-zinc-800 text-xs font-semibold text-foreground dark:text-zinc-200"
+              onClick={handleSaveForm} 
+              disabled={store.isSaving}
+              className="h-9 px-2.5 sm:px-3.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold cursor-pointer shadow-sm flex items-center justify-center border-none"
             >
-              <Eye className="w-4 h-4 mr-1.5" />
-              <span>Preview</span>
+              <Save className="w-4 h-4 sm:mr-1.5" />
+              <span className="hidden sm:inline">{store.isSaving ? 'Saving...' : 'Save Changes'}</span>
+              <span className="sm:hidden">{store.isSaving ? '...' : 'Save'}</span>
+            </Button>
+
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => window.open(`/f/${store.uniqueShareId || formId}?preview=true`, '_blank')} 
+              className="h-9 px-2.5 sm:px-3.5 rounded-lg border border-border dark:border-border hover:bg-accent dark:hover:bg-zinc-800 text-xs font-semibold text-foreground dark:text-zinc-200"
+            >
+              <Eye className="w-4 h-4 sm:mr-1.5" />
+              <span className="hidden sm:inline">Preview</span>
             </Button>
             
             <Button 
               variant="outline" 
               size="sm" 
               onClick={() => setIsShareModalOpen(true)} 
-              className="h-9 px-3.5 rounded-lg border border-border dark:border-border hover:bg-accent dark:hover:bg-zinc-800 text-xs font-semibold text-foreground dark:text-zinc-200"
+              className="h-9 px-2.5 sm:px-3.5 rounded-lg border border-border dark:border-border hover:bg-accent dark:hover:bg-zinc-800 text-xs font-semibold text-foreground dark:text-zinc-200"
             >
-              <Share2 className="w-4 h-4 mr-1.5" />
-              <span>Share</span>
+              <Share2 className="w-4 h-4 sm:mr-1.5" />
+              <span className="hidden sm:inline">Public / Share</span>
+              <span className="sm:hidden">Share</span>
             </Button>
 
             <button 
               onClick={handlePublishToggle} 
               disabled={isPublishing}
-              className={`h-9 px-4 rounded-lg text-xs font-semibold transition-all shadow-md active:scale-95 disabled:opacity-60 disabled:pointer-events-none flex items-center justify-center ${
+              className={`h-9 px-2.5 sm:px-4 rounded-lg text-xs font-semibold transition-all shadow-md active:scale-95 disabled:opacity-60 disabled:pointer-events-none flex items-center justify-center ${
                 store.status === 'PUBLISHED' 
                   ? 'bg-destructive hover:bg-rose-700 text-white shadow-md' 
                   : 'bg-primary hover:opacity-90 text-primary-foreground shadow-md'
               }`}
             >
-              {isPublishing ? 'Updating...' : store.status === 'PUBLISHED' ? 'Close Form' : 'Publish'}
+              <span className="hidden sm:inline">{isPublishing ? 'Updating...' : store.status === 'PUBLISHED' ? 'Close Form' : 'Publish'}</span>
+              <span className="sm:hidden">{isPublishing ? '...' : store.status === 'PUBLISHED' ? 'Close' : 'Publish'}</span>
             </button>
           </div>
 
@@ -1858,6 +1878,28 @@ export default function BuilderPage() {
                       onChange={(chk) => store.updateSettings({ anti_cheat_detection: chk })}
                     />
                   </div>
+
+                  <div className="flex justify-between items-center py-2.5 border-b border-zinc-100 dark:border-border">
+                    <div>
+                      <span className="text-xs font-semibold text-zinc-655 dark:text-zinc-350 uppercase tracking-wide block">Shuffle Questions</span>
+                      <span className="text-[10px] text-muted-foreground font-normal">Randomize question order for each respondent</span>
+                    </div>
+                    <Switch
+                      checked={store.settings.shuffle_questions}
+                      onChange={(chk) => store.updateSettings({ shuffle_questions: chk })}
+                    />
+                  </div>
+
+                  <div className="flex justify-between items-center py-2.5 border-b border-zinc-100 dark:border-border">
+                    <div>
+                      <span className="text-xs font-semibold text-zinc-655 dark:text-zinc-350 uppercase tracking-wide block">Shuffle Option Choices</span>
+                      <span className="text-[10px] text-muted-foreground font-normal">Randomize MCQ/Checkbox options for each respondent</span>
+                    </div>
+                    <Switch
+                      checked={store.settings.shuffle_options}
+                      onChange={(chk) => store.updateSettings({ shuffle_options: chk })}
+                    />
+                  </div>
                   
                   <div className="space-y-1 mt-2.5">
                     <label className="block text-xs font-medium text-muted-foreground dark:text-zinc-355 uppercase mb-1">Timer Constraint (Minutes)</label>
@@ -2434,6 +2476,7 @@ export default function BuilderPage() {
         formTitle={store.title}
         uniqueShareId={store.uniqueShareId || undefined}
         publicUrl={store.publicUrl || undefined}
+        defaultMode={store.settings.display_mode || 'full'}
       />
 
       {/* RESPONSE VIEWER DETAILS MODAL */}

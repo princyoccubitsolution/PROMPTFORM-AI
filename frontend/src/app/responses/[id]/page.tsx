@@ -41,7 +41,7 @@ export default function ResponsesPage() {
         label.includes('gr number')
       );
     });
-    return q ? String(resp.answers[q.id] || '').trim() : '';
+    return q ? String(resp?.answers?.[q.id] || '').trim() : '';
   };
 
   // Helper to extract Student Name
@@ -56,7 +56,7 @@ export default function ResponsesPage() {
         label.includes('name')
       );
     });
-    return q ? String(resp.answers[q.id] || '').trim() : (resp.answers.responder_email || "Anonymous");
+    return q ? String(resp?.answers?.[q.id] || '').trim() : (resp?.answers?.responder_email || "Anonymous");
   };
 
   // Helper to calculate Quiz score
@@ -73,7 +73,7 @@ export default function ResponsesPage() {
         totalGraded++;
         const pts = Number(validations.points || 5);
         maxPoints += pts;
-        const userAns = resp.answers[q.id];
+        const userAns = resp?.answers?.[q.id];
         const isCorrect = userAns !== undefined && userAns !== null && String(userAns).trim().toLowerCase() === String(validations.correctAnswer).trim().toLowerCase();
         if (isCorrect) {
           correctCount++;
@@ -140,10 +140,10 @@ export default function ResponsesPage() {
       const meta = resp.browserMetadata || {};
       const enroll = getEnrollmentNumber(resp);
       const name = getStudentName(resp);
-      const email = resp.answers.responder_email || "Anonymous";
+      const email = resp?.answers?.responder_email || "Anonymous";
 
       const qAnswers = form.questions.map((q: any) => {
-        const val = resp.answers[q.id];
+        const val = resp?.answers?.[q.id];
         if (val === undefined || val === null) return "";
         if (Array.isArray(val)) return `"${val.join(', ')}"`;
         const rawStr = String(val);
@@ -358,7 +358,7 @@ export default function ResponsesPage() {
                         <td className="p-4 font-mono font-semibold text-slate-550 truncate max-w-[150px]">
                           {isQuiz ? getStudentName(resp) : resp.id}
                         </td>
-                        <td className="p-4 font-bold">{resp.answers.responder_email || resp.email || "Anonymous"}</td>
+                        <td className="p-4 font-bold">{resp?.answers?.responder_email || resp?.email || "Anonymous"}</td>
                         
                         {isQuiz && (() => {
                           const stats = calculateQuizScore(resp);
@@ -425,7 +425,7 @@ export default function ResponsesPage() {
             <div className="p-5 border-b border-border dark:border-border flex justify-between items-center bg-muted/50 dark:bg-zinc-950/20">
               <div>
                 <h3 className="text-sm font-bold text-foreground dark:text-foreground truncate max-w-[400px]">
-                  {isQuiz ? getStudentName(selectedResponse) : (selectedResponse.answers.responder_email || "Anonymous Responder")}
+                  {isQuiz ? getStudentName(selectedResponse) : (selectedResponse?.answers?.responder_email || "Anonymous Responder")}
                 </h3>
                 <div className="flex items-center space-x-2 mt-0.5">
                   <span className="text-xs font-mono font-semibold text-muted-foreground">ID: {selectedResponse.id}</span>
@@ -506,7 +506,7 @@ export default function ResponsesPage() {
                 </h4>
                 
                 {form.questions.map((q: any, idx: number) => {
-                  const ansVal = selectedResponse.answers[q.id];
+                  const ansVal = selectedResponse?.answers?.[q.id];
                   const hasAnswer = ansVal !== undefined && ansVal !== null && ansVal !== "";
                   const isBase64Image = hasAnswer && typeof ansVal === 'string' && (ansVal.startsWith('data:image/') || ansVal.includes(';base64,'));
                   

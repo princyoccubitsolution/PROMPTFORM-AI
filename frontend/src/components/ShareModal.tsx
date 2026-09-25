@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Copy, Check, QrCode, Code, ExternalLink, Send, Share2, Mail } from 'lucide-react';
 import { Modal } from './ui/Modal';
 import { Button } from './ui/Button';
@@ -31,18 +31,26 @@ interface ShareModalProps {
   formTitle: string;
   uniqueShareId?: string;
   publicUrl?: string;
+  defaultMode?: 'full' | 'wizard' | 'chat';
 }
 
-export const ShareModal = ({ isOpen, onClose, formId, formTitle, uniqueShareId, publicUrl }: ShareModalProps) => {
+export const ShareModal = ({ isOpen, onClose, formId, formTitle, uniqueShareId, publicUrl, defaultMode = 'full' }: ShareModalProps) => {
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedEmbed, setCopiedEmbed] = useState(false);
   const [showQr, setShowQr] = useState(false);
   const [showEmbed, setShowEmbed] = useState(false);
+  const [shareMode, setShareMode] = useState<'full' | 'wizard' | 'chat'>(defaultMode);
+
+  useEffect(() => {
+    if (defaultMode) setShareMode(defaultMode);
+  }, [defaultMode, isOpen]);
 
   // Compute final URL: if uniqueShareId exists, use `/f/{uniqueShareId}`, otherwise `/f/{formId}`
   const shareCode = uniqueShareId || formId;
   const baseUrl = typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.host}` : 'https://promptform.ai';
-  const finalShareUrl = publicUrl || `${baseUrl}/f/${shareCode}`;
+  const cleanPublicUrl = publicUrl ? publicUrl.split('?')[0] : `${baseUrl}/f/${shareCode}`;
+  const modeQuery = shareMode !== 'full' ? `?mode=${shareMode}` : '';
+  const finalShareUrl = `${cleanPublicUrl}${modeQuery}`;
 
   const shareText = `Please fill out this form: ${formTitle}`;
   const embedCode = `<iframe src="${finalShareUrl}" width="100%" height="700px" frameborder="0" marginheight="0" marginwidth="0">Loading...</iframe>`;
@@ -131,10 +139,53 @@ export const ShareModal = ({ isOpen, onClose, formId, formTitle, uniqueShareId, 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Share Form" size="md">
       <div className="space-y-6 text-foreground dark:text-zinc-150">
-        
+        {/* Display Mode Selection */}
+        <div className="space-y-2">
+          <label className="text-xs font-bold text-muted-foreground dark:text-muted-foreground uppercase tracking-wider">Form Opening Mode</label>
+          <div className="grid grid-cols-3 gap-2">
+            <button
+              type="button"
+              onClick={() => setShareMode('full')}
+              className={`p-2.5 rounded-xl border text-xs font-semibold flex flex-col items-center justify-center transition-all cursor-pointer ${
+                shareMode === 'full'
+                  ? 'bg-primary/10 border-primary text-primary shadow-xs font-bold'
+                  : 'bg-muted/40 border-border text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <span className="text-sm mb-0.5">📋</span>
+              <span>All Questions</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setShareMode('wizard')}
+              className={`p-2.5 rounded-xl border text-xs font-semibold flex flex-col items-center justify-center transition-all cursor-pointer ${
+                shareMode === 'wizard'
+                  ? 'bg-primary/10 border-primary text-primary shadow-xs font-bold'
+                  : 'bg-muted/40 border-border text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <span className="text-sm mb-0.5">⚡</span>
+              <span>One-by-One</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setShareMode('chat')}
+              className={`p-2.5 rounded-xl border text-xs font-semibold flex flex-col items-center justify-center transition-all cursor-pointer ${
+                shareMode === 'chat'
+                  ? 'bg-primary/10 border-primary text-primary shadow-xs font-bold'
+                  : 'bg-muted/40 border-border text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <span className="text-sm mb-0.5">💬</span>
+              <span>AI Chatbot</span>
+            </button>
+          </div>
+          <p className="text-[11px] text-muted-foreground">The respondent will directly open this form in the chosen mode.</p>
+        </div>
+
         {/* Copy Link Container */}
         <div className="space-y-2">
-          <label className="text-xs font-bold text-muted-foreground dark:text-muted-foreground uppercase tracking-wider">Public Link</label>
+          <label className="text-xs font-bold text-muted-foreground dark:text-muted-foreground uppercase tracking-wider">Shareable Link</label>
           <div className="flex items-center space-x-3 bg-muted dark:bg-zinc-950 border border-border dark:border-border rounded-lg px-3.5 py-2">
             {/* The clickable blue link next to copy */}
             <a 

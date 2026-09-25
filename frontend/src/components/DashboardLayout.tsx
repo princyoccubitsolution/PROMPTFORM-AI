@@ -31,8 +31,8 @@ export function DashboardLayout({ children, activeTab }: DashboardLayoutProps) {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [userPopoverOpen, setUserPopoverOpen] = useState(false);
 
-  // Mock User Data
-  const [user] = useState<any>({ name: "Princy", email: "princy.occubit@gmail.com", subscriptionPlan: "pro", credits: 445 });
+  // User Data
+  const [user, setUser] = useState<any>({ name: "User", email: "", subscriptionPlan: "free", credits: 0 });
   const [notifications, setNotifications] = useState<any[]>([]);
 
   const notificationsRef = React.useRef<HTMLDivElement>(null);
@@ -65,6 +65,24 @@ export function DashboardLayout({ children, activeTab }: DashboardLayoutProps) {
   }, []);
 
   useEffect(() => {
+    const fetchUserProfile = async () => {
+      const token = localStorage.getItem('promptform_access_token');
+      if (!token) return;
+      try {
+        const profile = await api.get('/auth/me');
+        if (profile) {
+          setUser({
+            name: profile.name || profile.email?.split('@')[0] || "User",
+            email: profile.email || "",
+            subscriptionPlan: profile.subscriptionPlan || "free",
+            credits: profile.credits ?? 0
+          });
+        }
+      } catch (err) {
+        // Fallback silently if offline or token expired
+      }
+    };
+
     const fetchLiveNotifications = async () => {
       const token = localStorage.getItem('promptform_access_token');
       if (!token) return;
@@ -76,6 +94,7 @@ export function DashboardLayout({ children, activeTab }: DashboardLayoutProps) {
       }
     };
 
+    fetchUserProfile();
     fetchLiveNotifications();
     const interval = setInterval(fetchLiveNotifications, 5000);
     return () => clearInterval(interval);

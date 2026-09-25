@@ -1,10 +1,16 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { ThemeProvider } from "@/components/theme-provider";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "PromptForm AI | Enterprise Form Builder SaaS Platform",
   description: "Deploy AI-powered questionnaires, real-time proctored exams, conditional logic surveys, and automated Slack/Email workflows.",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
 };
 
 export default function RootLayout({

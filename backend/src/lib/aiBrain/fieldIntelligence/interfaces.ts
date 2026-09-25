@@ -13,6 +13,8 @@ export interface IFieldMetadata {
   autocomplete?: string;
   readOnly?: boolean;
   hidden?: boolean;
+  correctAnswer?: string;
+  explanation?: string;
 }
 
 export interface IFormSection {

@@ -35,7 +35,8 @@ const formSettingsSchema = z.object({
   password: z.string().nullable().default(null),
   allow_editing: z.boolean().default(false),
   shuffle_questions: z.boolean().default(false),
-  timer_limit: z.number().default(0), // 0 means no limit, otherwise minutes/seconds
+  shuffle_options: z.boolean().default(false),
+  timer_limit: z.coerce.number().default(0), // 0 means no limit, otherwise minutes/seconds
   anti_cheat_detection: z.boolean().default(false),
   team_members_only: z.boolean().default(false),
   invited_only: z.boolean().default(false),
@@ -438,22 +439,26 @@ router.post('/:id/submit', async (req: Request, res: Response) => {
       }
     }
 
-    // Validate required questions
+    // Validate required questions (skip if forced auto-submit due to timer expiration or anti-cheat violation)
     const formQuestions = await db.question.findMany({ where: { formId: form.id } });
-    const missingRequired: string[] = [];
-    for (const q of formQuestions) {
-      if (q.required) {
-        const ans = answers[q.id];
-        if (ans === undefined || ans === null || String(ans).trim() === '' || (Array.isArray(ans) && ans.length === 0)) {
-          missingRequired.push(q.label || q.id);
+    const isForceSubmit = Boolean(req.body.isForceSubmit || req.body.isTimeExpired || (req.body.browserMetadata?.is_flagged && Number(req.body.browserMetadata?.tab_switches) >= 3));
+
+    if (!isForceSubmit) {
+      const missingRequired: string[] = [];
+      for (const q of formQuestions) {
+        if (q.required) {
+          const ans = answers[q.id];
+          if (ans === undefined || ans === null || String(ans).trim() === '' || (Array.isArray(ans) && ans.length === 0)) {
+            missingRequired.push(q.label || q.id);
+          }
         }
       }
-    }
-    if (missingRequired.length > 0) {
-      return res.status(400).json({
-        error: `Please provide required answers for: ${missingRequired.join(', ')}`,
-        missingFields: missingRequired
-      });
+      if (missingRequired.length > 0) {
+        return res.status(400).json({
+          error: `Please provide required answers for: ${missingRequired.join(', ')}`,
+          missingFields: missingRequired
+        });
+      }
     }
 
     // Check responseLimit

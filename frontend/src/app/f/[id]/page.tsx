@@ -1,18 +1,31 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { 
-  Sparkles, Shield, Clock, Lock, Send, AlertTriangle, PenTool, ArrowRight, UserCheck, CreditCard,
-  User, Mail, Phone, MapPin, Globe, Calendar, Star, Signature,
-  FileUp, Image, Hash, DollarSign, Link, Eye, EyeOff, Bot, Mic
+  Sparkles, Shield, Clock, Lock, Send, AlertTriangle, PenTool, ArrowRight, ArrowLeft,
+  UserCheck, CreditCard, User, Mail, Phone, MapPin, Globe, Calendar, Star,
+  FileUp, Image as ImageIcon, Hash, DollarSign, Link as LinkIcon, Eye, EyeOff,
+  Bot, Check, CheckCircle2, RotateCcw, HelpCircle, Layers, Smartphone, MessageSquare,
+  ChevronRight, ChevronLeft, ThumbsUp, ThumbsDown, Award, Trash2
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { api } from '@/lib/api';
 
-const QuestionSignaturePad = ({ value, onChange }: { value: string; onChange: (val: string) => void }) => {
+/* -------------------------------------------------------------------------- */
+/* SIGNATURE PAD COMPONENT                                                    */
+/* -------------------------------------------------------------------------- */
+const QuestionSignaturePad = ({ 
+  value, 
+  onChange,
+  primaryColor = '#4F46E5'
+}: { 
+  value: string; 
+  onChange: (val: string) => void;
+  primaryColor?: string;
+}) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
 
@@ -21,25 +34,28 @@ const QuestionSignaturePad = ({ value, onChange }: { value: string; onChange: (v
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-    ctx.strokeStyle = '#000000';
+    ctx.strokeStyle = '#1E293B';
     ctx.lineWidth = 2.5;
     ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
   }, []);
 
   const getCoordinates = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
+    const scaleX = rect.width ? canvas.width / rect.width : 1;
+    const scaleY = rect.height ? canvas.height / rect.height : 1;
     if ('touches' in e) {
       if (e.touches.length === 0) return { x: 0, y: 0 };
       return {
-        x: e.touches[0].clientX - rect.left,
-        y: e.touches[0].clientY - rect.top
+        x: (e.touches[0].clientX - rect.left) * scaleX,
+        y: (e.touches[0].clientY - rect.top) * scaleY
       };
     } else {
       return {
-        x: e.clientX - rect.left,
-        y: e.clientY - rect.top
+        x: (e.clientX - rect.left) * scaleX,
+        y: (e.clientY - rect.top) * scaleY
       };
     }
   };
@@ -85,12 +101,12 @@ const QuestionSignaturePad = ({ value, onChange }: { value: string; onChange: (v
   };
 
   return (
-    <div className="space-y-2">
-      <div className="border border-border dark:border-border rounded-lg overflow-hidden bg-background dark:bg-background">
+    <div className="space-y-2 w-full">
+      <div className="relative border-2 border-dashed border-slate-200 hover:border-slate-300 rounded-xl overflow-hidden bg-slate-50/50 transition-colors">
         <canvas
           ref={canvasRef}
           width={600}
-          height={120}
+          height={130}
           onMouseDown={startDrawing}
           onMouseMove={draw}
           onMouseUp={stopDrawing}
@@ -98,247 +114,117 @@ const QuestionSignaturePad = ({ value, onChange }: { value: string; onChange: (v
           onTouchStart={startDrawing}
           onTouchMove={draw}
           onTouchEnd={stopDrawing}
-          className="w-full h-[120px] cursor-crosshair bg-card"
+          className="w-full h-[130px] cursor-crosshair touch-none"
         />
-      </div>
-      <div className="flex justify-between items-center">
-        {value ? (
-          <span className="text-xs text-emerald-600 font-bold">✓ Signature Captured</span>
-        ) : (
-          <span className="text-xs text-muted-foreground">Please sign inside the box</span>
+        {!value && (
+          <div className="absolute inset-0 pointer-events-none flex items-center justify-center text-slate-400 text-xs font-medium">
+            <PenTool className="w-4 h-4 mr-1.5 opacity-60" />
+            Sign here with your mouse or finger
+          </div>
         )}
-        <button type="button" onClick={clear} className="text-xs text-destructive hover:underline border-none bg-transparent cursor-pointer font-semibold">
-          Clear Pad
+      </div>
+      <div className="flex justify-between items-center px-1">
+        {value ? (
+          <span className="text-xs font-semibold text-emerald-600 flex items-center">
+            <CheckCircle2 className="w-3.5 h-3.5 mr-1 text-emerald-500" /> Signature Captured
+          </span>
+        ) : (
+          <span className="text-[11px] text-slate-400">Touch or drag above to draw signature</span>
+        )}
+        <button 
+          type="button" 
+          onClick={clear} 
+          className="text-xs font-semibold text-rose-600 hover:text-rose-700 hover:underline border-none bg-transparent cursor-pointer p-0"
+        >
+          Clear Signature
         </button>
       </div>
     </div>
   );
 };
 
+/* Helper for randomizing questions and options (anti-cheat) */
+const shuffleArray = <T,>(array: T[]): T[] => {
+  const result = [...array];
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+};
+
+/* -------------------------------------------------------------------------- */
+/* MAIN RESPONDER PAGE                                                        */
+/* -------------------------------------------------------------------------- */
 export default function PublicFormPage() {
   const params = useParams();
   const router = useRouter();
   const formId = params.id as string;
 
+  // Form definition state
   const [form, setForm] = useState<any>(null);
   const [questions, setQuestions] = useState<any[]>([]);
   const [answers, setAnswers] = useState<Record<string, any>>({});
   const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
-  
-  // Security/access locks
+
+  // Access & Security state
   const [passwordInput, setPasswordInput] = useState("");
   const [isLocked, setIsLocked] = useState(false);
   const [collectedEmail, setCollectedEmail] = useState("");
   const [emailProvided, setEmailProvided] = useState(false);
+  const [hasStarted, setHasStarted] = useState(false);
 
-  // Proctoring stats
+  // Autosave / Draft recovery
+  const [draftRestored, setDraftRestored] = useState(false);
+  const [autosaveStatus, setAutosaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+
+  // Anti-cheat Proctoring stats
   const [tabSwitchCount, setTabSwitchCount] = useState(0);
   const [isFlagged, setIsFlagged] = useState(false);
   const [proctorWarningOpen, setProctorWarningOpen] = useState(false);
   const [proctorWarningMsg, setProctorWarningMsg] = useState("");
 
-  // Timer states
+  // Timed form countdown
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Signature canvas
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [isDrawing, setIsDrawing] = useState(false);
   const [hasSigned, setHasSigned] = useState(false);
 
-  // Loading/submitting/access states
+  // Status & loading
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
-  
-  const [layoutMode, setLayoutMode] = useState<'standard' | 'conversational' | 'one-by-one'>('one-by-one');
-  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  const [chatLog, setChatLog] = useState<{ sender: 'bot' | 'user'; text: string; qId?: string }[]>([]);
-  const chatEndRef = useRef<HTMLDivElement | null>(null);
-
-  // Auto-scroll chat to bottom
-  useEffect(() => {
-    if (layoutMode === 'conversational') {
-      chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [chatLog, layoutMode]);
-
-  // Initialize chat log when questions load
-  useEffect(() => {
-    if (questions.length > 0 && emailProvided && !isLocked && chatLog.length === 0) {
-      setChatLog([
-        { sender: 'bot', text: `Hi there! 👋 Welcome to **${form?.title || 'Form'}**. Let's start with the first question.` },
-        { sender: 'bot', text: `${questions[0].label}${questions[0].required ? ' *' : ''}`, qId: questions[0].id }
-      ]);
-      setCurrentQuestionIndex(0);
-    }
-  }, [questions, emailProvided, isLocked]);
-
-  const handleAnswerSubmit = (value: any) => {
-    if (value === undefined || value === null || String(value).trim() === "") {
-      alert("Please provide an answer.");
-      return;
-    }
-    
-    const currentQ = questions[currentQuestionIndex];
-    const newAnswers = { ...answers, [currentQ.id]: value };
-    setAnswers(newAnswers);
-    
-    let userDisplayText = String(value);
-    if (currentQ.type === 'password') {
-      userDisplayText = '••••••••';
-    } else if (currentQ.type === 'signature') {
-      userDisplayText = '✒️ Signature Uploaded';
-    }
-    
-    const newLog = [
-      ...chatLog,
-      { sender: 'user' as const, text: userDisplayText }
-    ];
-    
-    let nextIndex = currentQuestionIndex + 1;
-    while (nextIndex < questions.length) {
-      const nextQ = questions[nextIndex];
-      if (isQuestionVisible(nextQ, newAnswers)) {
-        break;
-      }
-      nextIndex++;
-    }
-    
-    if (nextIndex < questions.length) {
-      setCurrentQuestionIndex(nextIndex);
-      setChatLog([
-        ...newLog,
-        { sender: 'bot' as const, text: `${questions[nextIndex].label}${questions[nextIndex].required ? ' *' : ''}`, qId: questions[nextIndex].id }
-      ]);
-    } else {
-      setCurrentQuestionIndex(questions.length);
-      setChatLog([
-        ...newLog,
-        { sender: 'bot' as const, text: "🎉 Excellent! You have answered all the questions. Click the button below to submit your response." }
-      ]);
-    }
-  };
   const [errorStatus, setErrorStatus] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
   const [isInactive, setIsInactive] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
   const [isPreview, setIsPreview] = useState(false);
-  
-  const startTimeRef = useRef<number>(Date.now());
 
+  // Active validation errors for field-level feedback
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+  const [activeQuestionId, setActiveQuestionId] = useState<string | null>(null);
+
+  // Layout modes: 'standard' (All Questions), 'one-by-one' (Wizard), 'conversational' (AI Chat)
+  const [layoutMode, setLayoutMode] = useState<'standard' | 'one-by-one' | 'conversational'>('standard');
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [chatLog, setChatLog] = useState<{ sender: 'bot' | 'user'; text: string; qId?: string }[]>([]);
+  const chatEndRef = useRef<HTMLDivElement | null>(null);
+
+  const startTimeRef = useRef<number>(Date.now());
+  const draftSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  /* -------------------------------------------------------------------------- */
+  /* INITIAL LOAD & FORM RECOVERY                                               */
+  /* -------------------------------------------------------------------------- */
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search);
     setIsPreview(searchParams.get('preview') === 'true');
     loadForm();
   }, [formId]);
 
-  // Visibility focus proctoring listeners & clipboard blocking
-  useEffect(() => {
-    if (!form || !form.settings?.anti_cheat_detection || submitted) return;
-
-    const handleVisibilityChange = () => {
-      if (document.hidden) {
-        setTabSwitchCount(prev => {
-          const newCount = prev + 1;
-          if (newCount >= 3) {
-            setIsFlagged(true);
-            setProctorWarningMsg("WARNING: Multiple tab switches detected. This exam session has been flagged for review by the instructor.");
-          } else {
-            setProctorWarningMsg(`WARNING: Tab switching detected! You have navigated away from the exam. This event has been logged. (${newCount}/3 warnings)`);
-          }
-          setProctorWarningOpen(true);
-          return newCount;
-        });
-      }
-    };
-
-    const handleWindowBlur = () => {
-      setTabSwitchCount(prev => {
-        const newCount = prev + 1;
-        if (newCount >= 3) {
-          setIsFlagged(true);
-          setProctorWarningMsg("WARNING: Browser focus lost. This exam session has been flagged for review by the instructor.");
-        } else {
-          setProctorWarningMsg(`WARNING: Focus lost! You navigated away from the exam window. This event has been logged. (${newCount}/3 warnings)`);
-        }
-        setProctorWarningOpen(true);
-        return newCount;
-      });
-    };
-
-    const preventCopyPaste = (e: Event) => {
-      e.preventDefault();
-      alert("Copying and pasting is restricted on this exam page for security.");
-    };
-
-    const preventContextMenu = (e: MouseEvent) => {
-      e.preventDefault();
-    };
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    window.addEventListener("blur", handleWindowBlur);
-    document.addEventListener('copy', preventCopyPaste);
-    document.addEventListener('paste', preventCopyPaste);
-    document.addEventListener('cut', preventCopyPaste);
-    document.addEventListener('contextmenu', preventContextMenu);
-
-    return () => {
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.removeEventListener("blur", handleWindowBlur);
-      document.removeEventListener('copy', preventCopyPaste);
-      document.removeEventListener('paste', preventCopyPaste);
-      document.removeEventListener('cut', preventCopyPaste);
-      document.removeEventListener('contextmenu', preventContextMenu);
-    };
-  }, [form, submitted]);
-
-  // Timer countdown logic
-  useEffect(() => {
-    if (!form || submitted) return;
-
-    const limitMinutes = form.settings?.timer_limit || 0;
-    if (limitMinutes === 0) return;
-
-    // Use localStorage to keep track of start time so refreshes don't reset it
-    const storageKey = `promptform_form_timer_start_${formId}`;
-    let startTimeStr = localStorage.getItem(storageKey);
-    let startTime = Date.now();
-
-    if (startTimeStr) {
-      startTime = Number(startTimeStr);
-    } else {
-      localStorage.setItem(storageKey, String(startTime));
-    }
-
-    const totalSeconds = limitMinutes * 60;
-    const elapsedSeconds = Math.floor((Date.now() - startTime) / 1000);
-    const initialRemaining = Math.max(0, totalSeconds - elapsedSeconds);
-
-    setTimeLeft(initialRemaining);
-
-    if (initialRemaining === 0) {
-      autoSubmitForm();
-      return;
-    }
-
-    timerIntervalRef.current = setInterval(() => {
-      setTimeLeft(prev => {
-        if (prev === null) return null;
-        if (prev <= 1) {
-          clearInterval(timerIntervalRef.current!);
-          autoSubmitForm();
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => {
-      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
-    };
-  }, [form, submitted]);
-
+  // Load form from API
   const loadForm = async () => {
     setIsLoading(true);
     setErrorStatus(null);
@@ -346,60 +232,100 @@ export default function PublicFormPage() {
     try {
       const data = await api.get(`/forms/${formId}`);
       setForm(data);
-      setQuestions(data.questions || []);
+      let loadedQuestions = data.questions || [];
 
-      // Read saved display mode configured by creator
-      const savedMode = data.settings?.display_mode || data.settings?.displayMode || data.theme?.layoutType;
-      if (savedMode === 'full' || savedMode === 'standard') {
-        setLayoutMode('standard');
-      } else if (savedMode === 'wizard' || savedMode === 'one-by-one') {
+      // Anti-cheat: Shuffle questions order if enabled
+      if (data.settings?.shuffle_questions) {
+        loadedQuestions = shuffleArray(loadedQuestions);
+      }
+
+      // Anti-cheat: Shuffle option choices if enabled
+      if (data.settings?.shuffle_options) {
+        loadedQuestions = loadedQuestions.map((q: any) => {
+          if (q.options && Array.isArray(q.options) && q.options.length > 0) {
+            return { ...q, options: shuffleArray(q.options) };
+          }
+          return q;
+        });
+      }
+
+      setQuestions(loadedQuestions);
+
+      // Read saved display mode preference from URL query parameter (?mode=...) or form settings
+      const searchParams = new URLSearchParams(window.location.search);
+      const queryMode = searchParams.get('mode');
+      const savedMode = queryMode || data.settings?.display_mode || data.settings?.displayMode || data.theme?.layoutType;
+      if (savedMode === 'wizard' || savedMode === 'one-by-one') {
         setLayoutMode('one-by-one');
       } else if (savedMode === 'chat' || savedMode === 'conversational') {
         setLayoutMode('conversational');
+      } else {
+        setLayoutMode('standard');
       }
 
-      // Check form status: only PUBLISHED forms can accept responses (unless in preview mode)
-      const searchParams = new URLSearchParams(window.location.search);
+      // Check form status: only PUBLISHED forms can accept responses (unless preview mode)
       const isPreviewMode = searchParams.get('preview') === 'true';
 
       if (data.status !== "PUBLISHED" && !isPreviewMode) {
         setIsInactive(true);
         if (data.status === "DRAFT") {
-          setStatusMessage("This form is currently a draft and cannot accept responses.");
+          setStatusMessage("This form is currently a draft and is not ready to accept responses.");
         } else if (data.status === "CLOSED") {
-          setStatusMessage("This form has been closed and is not accepting responses anymore.");
+          setStatusMessage("This form has been closed by its author and is no longer accepting submissions.");
         } else {
-          setStatusMessage("This form is not accepting responses anymore.");
+          setStatusMessage("This form is not currently accepting responses.");
         }
         setIsLoading(false);
         return;
       }
 
-      // Check access settings. If the form is restricted (not public), we need to see if user is authenticated or invited.
-      // The backend handles validation during submission, but we also want to warn upfront if possible.
-      // If user is already logged in, let's prefill email.
-      if (typeof window !== 'undefined') {
-        const storedEmail = localStorage.getItem('promptform_user_email');
-        if (storedEmail) {
-          setCollectedEmail(storedEmail);
-          // If the form wants to collect email, we still ask or auto-pass it.
+      // Check if already submitted in this browser session (one-time submission)
+      if (typeof window !== 'undefined' && !isPreviewMode) {
+        const submittedKey = `promptform_submitted_${data.id || formId}`;
+        if (localStorage.getItem(submittedKey) === 'true') {
+          setSubmitted(true);
+          setIsLoading(false);
+          return;
         }
       }
 
-      // Register public page view
+      // Restore saved draft answers from localStorage if present
+      if (typeof window !== 'undefined') {
+        try {
+          const draftKey = `promptform_draft_answers_${data.id || formId}`;
+          const savedDraftStr = localStorage.getItem(draftKey);
+          if (savedDraftStr) {
+            const parsedDraft = JSON.parse(savedDraftStr);
+            if (parsedDraft && typeof parsedDraft === 'object' && Object.keys(parsedDraft).length > 0) {
+              setAnswers(parsedDraft);
+              setDraftRestored(true);
+              setAutosaveStatus('saved');
+            }
+          }
+        } catch {
+          // ignore draft parsing errors
+        }
+
+        // Prefill email if previously remembered
+        const storedEmail = localStorage.getItem('promptform_user_email');
+        if (storedEmail) {
+          setCollectedEmail(storedEmail);
+        }
+      }
+
+      // Analytics page view registration
       api.post(`/analytics/form/${data.id}/view`, {
         deviceType: typeof window !== 'undefined' && window.innerWidth < 768 ? "mobile" : "desktop",
         country: "US"
       }).catch(() => {});
 
-      // Check passcode lock
+      // Passcode protection check
       if (data.settings?.password) {
         setIsLocked(true);
       }
 
-      // Check email collecting
+      // Email collection check
       if (data.settings?.collect_emails) {
-        // If logged in, they can skip email input page, or we can prefill and ask them to click next
         const storedEmail = localStorage.getItem('promptform_user_email');
         if (storedEmail) {
           setEmailProvided(true);
@@ -409,6 +335,7 @@ export default function PublicFormPage() {
       } else {
         setEmailProvided(true);
       }
+
     } catch (err: any) {
       console.error(err);
       setErrorStatus(err.status || 500);
@@ -418,190 +345,49 @@ export default function PublicFormPage() {
     }
   };
 
-  const handlePasswordSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (passwordInput === form?.settings?.password) {
-      setIsLocked(false);
-    } else {
-      alert("Incorrect passcode. Access denied.");
-    }
-  };
+  /* -------------------------------------------------------------------------- */
+  /* AUTOSAVE TO LOCALSTORAGE                                                   */
+  /* -------------------------------------------------------------------------- */
+  useEffect(() => {
+    if (!form || submitted) return;
+    if (Object.keys(answers).length === 0) return;
 
-  const handleEmailSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (collectedEmail.trim()) {
-      setEmailProvided(true);
-      startTimeRef.current = Date.now();
-    }
-  };
-
-  // Signature canvas controls
-  const startDrawing = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.beginPath();
-    ctx.moveTo(e.nativeEvent.offsetX, e.nativeEvent.offsetY);
-    setIsDrawing(true);
-  };
-
-  const startDrawingTouch = (e: React.TouchEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    const rect = canvas.getBoundingClientRect();
-    const touch = e.touches[0];
-    ctx.beginPath();
-    ctx.moveTo(touch.clientX - rect.left, touch.clientY - rect.top);
-    setIsDrawing(true);
-  };
-
-  const draw = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isDrawing) return;
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.lineTo(e.nativeEvent.offsetX, e.nativeEvent.offsetY);
-    ctx.stroke();
-    setHasSigned(true);
-  };
-
-  const drawTouch = (e: React.TouchEvent<HTMLCanvasElement>) => {
-    if (!isDrawing) return;
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    const rect = canvas.getBoundingClientRect();
-    const touch = e.touches[0];
-    ctx.lineTo(touch.clientX - rect.left, touch.clientY - rect.top);
-    ctx.stroke();
-    setHasSigned(true);
-  };
-
-  const stopDrawing = () => {
-    setIsDrawing(false);
-  };
-
-  const clearSignature = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    setHasSigned(false);
-  };
-
-  const handleFileUpload = async (questionId: string, file: File) => {
-    try {
-      const uploadRes = await api.upload('/upload', file);
-      setAnswers(prev => ({ ...prev, [questionId]: uploadRes.fileUrl }));
-      alert("Attachment uploaded successfully!");
-    } catch (err: any) {
-      alert("Attachment upload failed: " + err.message);
-    }
-  };
-
-  const handleSubmitForm = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    if (isSubmitting) return;
-    setIsSubmitting(true);
-
-    let finalAnswers = { ...answers };
-    if (canvasRef.current && hasSigned) {
-      finalAnswers['signature_pad_url'] = canvasRef.current.toDataURL("image/png");
+    if (draftSaveTimeoutRef.current) {
+      clearTimeout(draftSaveTimeoutRef.current);
     }
 
-    let emailToSubmit = form?.settings?.collect_emails ? collectedEmail : (typeof window !== 'undefined' ? localStorage.getItem('promptform_user_email') : null);
-    let userToSubmit = typeof window !== 'undefined' ? localStorage.getItem('promptform_user_name') : null;
-
-    if (!emailToSubmit) {
-      const emailQ = questions.find(q => 
-        q.type === 'short_text' && 
-        q.label.toLowerCase().includes('email')
-      );
-      if (emailQ && answers[emailQ.id]) {
-        const emailStr = String(answers[emailQ.id]).trim();
-        if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailStr)) {
-          emailToSubmit = emailStr;
-        }
+    setAutosaveStatus('saving');
+    draftSaveTimeoutRef.current = setTimeout(() => {
+      try {
+        const draftKey = `promptform_draft_answers_${form.id || formId}`;
+        localStorage.setItem(draftKey, JSON.stringify(answers));
+        setAutosaveStatus('saved');
+      } catch {
+        setAutosaveStatus('idle');
       }
-    }
+    }, 400);
 
-    if (!userToSubmit) {
-      const nameQ = questions.find(q => 
-        q.type === 'short_text' && 
-        (q.label.toLowerCase().includes('name') || q.label.toLowerCase().includes('fullname'))
-      );
-      if (nameQ && answers[nameQ.id]) {
-        userToSubmit = String(answers[nameQ.id]).trim();
-      }
-    }
-
-    // Client-side required field validation
-    const missing = questions.filter(q => q.required && isQuestionVisible(q) && (answers[q.id] === undefined || answers[q.id] === null || String(answers[q.id]).trim() === '' || (Array.isArray(answers[q.id]) && answers[q.id].length === 0)));
-    if (missing.length > 0) {
-      alert(`Please answer the required question: "${missing[0].label}"`);
-      setIsSubmitting(false);
-      return;
-    }
-
-    const payload = {
-      answers: finalAnswers,
-      browserMetadata: {
-        user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
-        ip_address: "",
-        tab_switches: tabSwitchCount,
-        is_flagged: isFlagged
-      },
-      timeTaken: Math.max(1, Math.floor((Date.now() - startTimeRef.current) / 1000)),
-      email: emailToSubmit || null,
-      submittedBy: userToSubmit || null,
-      password: passwordInput || undefined
+    return () => {
+      if (draftSaveTimeoutRef.current) clearTimeout(draftSaveTimeoutRef.current);
     };
+  }, [answers, form, formId, submitted]);
 
-    const searchParams = new URLSearchParams(window.location.search);
-    const isPreviewMode = searchParams.get('preview') === 'true';
-
-    if (isPreviewMode) {
-      alert("Preview Mode: Your response was mock submitted successfully! (Test submissions are not saved in production)");
-      setSubmitted(true);
-      setIsSubmitting(false);
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem(`promptform_form_timer_start_${formId}`);
-      }
-      return;
-    }
-
-    try {
-      // FormId could be the uniqueShareId or UUID, the endpoint resolves both.
-      await api.post(`/forms/${formId}/submit`, payload);
-      setSubmitted(true);
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem(`promptform_form_timer_start_${formId}`);
-      }
-    } catch (err: any) {
-      alert("Submission error: " + err.message);
-    } finally {
-      setIsSubmitting(false);
+  const clearDraft = () => {
+    if (window.confirm("Are you sure you want to clear your current draft and start fresh?")) {
+      const draftKey = `promptform_draft_answers_${form?.id || formId}`;
+      localStorage.removeItem(draftKey);
+      setAnswers({});
+      setDraftRestored(false);
+      setAutosaveStatus('idle');
+      setCurrentQuestionIndex(0);
+      setValidationErrors({});
     }
   };
 
-  const autoSubmitForm = () => {
-    alert("Time limit expired! Your answers are being submitted automatically.");
-    handleSubmitForm();
-  };
-
-  const formatTime = (seconds: number) => {
-    const m = Math.floor(seconds / 60).toString().padStart(2, '0');
-    const s = (seconds % 60).toString().padStart(2, '0');
-    return `${m}:${s}`;
-  };
-
-  const isQuestionVisible = (q: any, currentAnswers = answers) => {
+  /* -------------------------------------------------------------------------- */
+  /* CONDITIONAL LOGIC CHECK                                                    */
+  /* -------------------------------------------------------------------------- */
+  const isQuestionVisible = useCallback((q: any, currentAnswers = answers): boolean => {
     if (!q.logic || !q.logic.condition) return true;
     
     const targetQId = q.logic.target_question_id;
@@ -636,122 +422,369 @@ export default function PublicFormPage() {
       return !isMatch;
     }
     return true;
+  }, [answers]);
+
+  // List of currently visible questions
+  const visibleQuestions = useMemo(() => {
+    return questions.filter(q => isQuestionVisible(q, answers));
+  }, [questions, answers, isQuestionVisible]);
+
+  // Count answered visible questions
+  const answeredCount = useMemo(() => {
+    return visibleQuestions.filter(q => {
+      const val = answers[q.id];
+      if (val === undefined || val === null) return false;
+      if (typeof val === 'string' && val.trim() === '') return false;
+      if (Array.isArray(val) && val.length === 0) return false;
+      return true;
+    }).length;
+  }, [visibleQuestions, answers]);
+
+  const completionPercentage = useMemo(() => {
+    if (visibleQuestions.length === 0) return 0;
+    return Math.round((answeredCount / visibleQuestions.length) * 100);
+  }, [answeredCount, visibleQuestions.length]);
+
+  /* -------------------------------------------------------------------------- */
+  /* PROCTORING & ANTI-CHEAT                                                    */
+  /* -------------------------------------------------------------------------- */
+  useEffect(() => {
+    if (!form || !form.settings?.anti_cheat_detection || submitted) return;
+
+    const handleTabSwitchExceeded = (count: number) => {
+      setIsFlagged(true);
+      setStatusMessage(`Security Policy: Maximum tab switches exceeded (${count}/3). This session has been automatically closed and submitted.`);
+      setSubmitted(true);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(`promptform_submitted_${form?.id || formId}`, 'true');
+      }
+      handleSubmitForm(undefined, true);
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        setTabSwitchCount(prev => {
+          const newCount = prev + 1;
+          if (newCount >= 3) {
+            setIsFlagged(true);
+            setProctorWarningMsg(`CRITICAL SECURITY ALERT: Tab switch limit exceeded (${newCount}/3). Closing and submitting form...`);
+            setProctorWarningOpen(true);
+            setTimeout(() => {
+              handleTabSwitchExceeded(newCount);
+            }, 600);
+          } else {
+            setProctorWarningMsg(`WARNING: Tab switch detected! You navigated away from the form (${newCount}/3 warnings). Leaving the tab again will auto-close your form.`);
+            setProctorWarningOpen(true);
+          }
+          return newCount;
+        });
+      }
+    };
+
+    const handleWindowBlur = () => {
+      setTabSwitchCount(prev => {
+        const newCount = prev + 1;
+        if (newCount >= 3) {
+          setIsFlagged(true);
+          setProctorWarningMsg(`CRITICAL SECURITY ALERT: Window focus lost limit exceeded (${newCount}/3). Closing and submitting form...`);
+          setProctorWarningOpen(true);
+          setTimeout(() => {
+            handleTabSwitchExceeded(newCount);
+          }, 600);
+        } else {
+          setProctorWarningMsg(`WARNING: Window focus lost! Please remain on this form page (${newCount}/3 warnings).`);
+          setProctorWarningOpen(true);
+        }
+        return newCount;
+      });
+    };
+
+    const preventCopyPaste = (e: Event) => {
+      e.preventDefault();
+      alert("Copying and pasting is disabled on this proctored form.");
+    };
+
+    const preventContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("blur", handleWindowBlur);
+    document.addEventListener('copy', preventCopyPaste);
+    document.addEventListener('paste', preventCopyPaste);
+    document.addEventListener('cut', preventCopyPaste);
+    document.addEventListener('contextmenu', preventContextMenu);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("blur", handleWindowBlur);
+      document.removeEventListener('copy', preventCopyPaste);
+      document.removeEventListener('paste', preventCopyPaste);
+      document.removeEventListener('cut', preventCopyPaste);
+      document.removeEventListener('contextmenu', preventContextMenu);
+    };
+  }, [form, submitted]);
+
+  /* -------------------------------------------------------------------------- */
+  /* TIMER COUNTDOWN                                                            */
+  /* -------------------------------------------------------------------------- */
+  useEffect(() => {
+    if (!form || submitted) return;
+    const limitMinutes = Number(form.settings?.timer_limit) || 0;
+    if (limitMinutes <= 0) {
+      setTimeLeft(null);
+      return;
+    }
+
+    const storageKey = `promptform_form_timer_start_${form.id || formId}`;
+    const limitKey = `promptform_form_timer_limit_${form.id || formId}`;
+
+    let startTimeStr = localStorage.getItem(storageKey);
+    let storedLimitStr = localStorage.getItem(limitKey);
+    let startTime = Date.now();
+
+    if (!startTimeStr || storedLimitStr !== String(limitMinutes)) {
+      startTime = Date.now();
+      localStorage.setItem(storageKey, String(startTime));
+      localStorage.setItem(limitKey, String(limitMinutes));
+    } else {
+      startTime = Number(startTimeStr);
+    }
+
+    const totalSeconds = limitMinutes * 60;
+    const elapsedSeconds = Math.floor((Date.now() - startTime) / 1000);
+    const initialRemaining = Math.max(0, totalSeconds - elapsedSeconds);
+
+    setTimeLeft(initialRemaining);
+
+    if (initialRemaining === 0) {
+      autoSubmitForm();
+      return;
+    }
+
+    if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+
+    timerIntervalRef.current = setInterval(() => {
+      setTimeLeft(prev => {
+        if (prev === null) return null;
+        if (prev <= 1) {
+          clearInterval(timerIntervalRef.current!);
+          autoSubmitForm();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => {
+      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+    };
+  }, [form, submitted]);
+
+  const autoSubmitForm = () => {
+    setStatusMessage("Time limit expired! Your answers have been automatically submitted and the form is now closed.");
+    setSubmitted(true);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(`promptform_submitted_${form?.id || formId}`, 'true');
+    }
+    handleSubmitForm(undefined, true);
   };
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background dark:bg-background">
-        <div className="flex flex-col items-center space-y-4">
-          <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-primary dark:border-primary"></div>
-          <span className="text-sm font-semibold text-muted-foreground dark:text-muted-foreground">Loading form builder details...</span>
-        </div>
-      </div>
-    );
-  }
+  const formatTime = (seconds: number) => {
+    const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+    const s = (seconds % 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
+  };
 
-  // Handle access error / forbidden
-  if (errorMessage || errorStatus) {
-    return (
-      <div className="min-h-screen bg-background dark:bg-background flex items-center justify-center p-4">
-        <Card className="w-full max-w-md text-center border-t-4 border-t-destructive dark:bg-background dark:border-border">
-          <CardHeader>
-            <AlertTriangle className="w-12 h-12 text-destructive mx-auto mb-4" />
-            <CardTitle className="text-2xl text-foreground dark:text-foreground">Access Restricted</CardTitle>
-            <CardDescription className="text-sm mt-2 font-medium text-muted-foreground dark:text-muted-foreground">
-              {errorMessage || "You do not have permission to view or fill this form. Please sign in or check your access settings."}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <Button className="w-full" onClick={() => router.push(`/login?redirect=f/${formId}`)}>
-              Sign In to PromptForm AI
-            </Button>
-            <Button variant="outline" className="w-full text-foreground dark:text-foreground dark:hover:bg-card" onClick={() => router.push('/')}>
-              Go to Home Page
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
+  /* -------------------------------------------------------------------------- */
+  /* CHATBOT MODE LOGIC                                                         */
+  /* -------------------------------------------------------------------------- */
+  useEffect(() => {
+    if (layoutMode === 'conversational') {
+      chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [chatLog, layoutMode]);
 
-  // Inactive Form Status View
-  if (isInactive) {
-    return (
-      <div className="min-h-screen bg-background dark:bg-background flex items-center justify-center p-4">
-        <Card className="w-full max-w-md text-center border-t-4 border-t-amber-500 dark:bg-background dark:border-border">
-          <CardHeader>
-            <AlertTriangle className="w-12 h-12 text-amber-500 mx-auto mb-4 animate-pulse" />
-            <CardTitle className="text-2xl text-foreground dark:text-foreground">Form Closed</CardTitle>
-            <CardDescription className="text-sm mt-2 font-medium text-muted-foreground dark:text-muted-foreground">
-              {statusMessage}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button variant="outline" className="w-full mt-2 text-foreground dark:text-foreground dark:hover:bg-card" onClick={() => router.push('/')}>
-              Go to Home
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
+  useEffect(() => {
+    if (visibleQuestions.length > 0 && emailProvided && !isLocked && chatLog.length === 0) {
+      const firstQ = visibleQuestions[0];
+      setChatLog([
+        { sender: 'bot', text: `Hi there! 👋 Welcome to **${form?.title || 'this form'}**.\nLet's begin with the first question:` },
+        { sender: 'bot', text: `${firstQ.label}${firstQ.required ? ' *' : ''}`, qId: firstQ.id }
+      ]);
+      setCurrentQuestionIndex(0);
+    }
+  }, [visibleQuestions, emailProvided, isLocked]);
 
-  // Password Lock View
-  if (isLocked) {
-    return (
-      <div className="min-h-screen bg-background dark:bg-background flex items-center justify-center p-4">
-        <Card className="w-full max-w-md dark:bg-background dark:border-border">
-          <CardHeader className="text-center">
-            <Lock className="w-10 h-10 text-primary dark:text-primary mx-auto mb-3" />
-            <CardTitle className="text-foreground dark:text-foreground">Passcode Required</CardTitle>
-            <CardDescription className="text-muted-foreground dark:text-muted-foreground">This questionnaire is password-protected. Enter passcode to access.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handlePasswordSubmit} className="space-y-4">
-              <Input
-                type="password"
-                placeholder="Enter passcode..."
-                value={passwordInput}
-                onChange={(e) => setPasswordInput(e.target.value)}
-                required
-                className="dark:bg-background dark:border-border dark:text-foreground"
-              />
-              <Button type="submit" className="w-full">Unlock & Proceed</Button>
-            </form>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
+  const handleChatAnswerSubmit = (value: any) => {
+    if (value === undefined || value === null || String(value).trim() === "") {
+      return;
+    }
 
-  // Email Collection View
-  if (!emailProvided) {
-    return (
-      <div className="min-h-screen bg-background dark:bg-background flex items-center justify-center p-4">
-        <Card className="w-full max-w-md dark:bg-background dark:border-border animate-fadeIn">
-          <CardHeader className="text-center">
-            <Sparkles className="w-8 h-8 text-primary dark:text-primary mx-auto mb-2 animate-pulse" />
-            <CardTitle className="text-foreground dark:text-foreground">Enter your Email</CardTitle>
-            <CardDescription className="text-muted-foreground dark:text-muted-foreground">The author requires email verification before submissions.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleEmailSubmit} className="space-y-4">
-              <Input
-                type="email"
-                placeholder="you@example.com"
-                value={collectedEmail}
-                onChange={(e) => setCollectedEmail(e.target.value)}
-                required
-                className="dark:bg-background dark:border-border dark:text-foreground"
-              />
-              <Button type="submit" className="w-full">Start Questionnaire</Button>
-            </form>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
+    const currentQ = visibleQuestions[currentQuestionIndex];
+    if (!currentQ) return;
 
+    const newAnswers = { ...answers, [currentQ.id]: value };
+    setAnswers(newAnswers);
+
+    let userDisplayText = String(value);
+    if (currentQ.type === 'password') {
+      userDisplayText = '••••••••';
+    } else if (currentQ.type === 'signature') {
+      userDisplayText = '✒️ Signature captured';
+    }
+
+    const updatedLog = [
+      ...chatLog,
+      { sender: 'user' as const, text: userDisplayText }
+    ];
+
+    const nextIndex = currentQuestionIndex + 1;
+    if (nextIndex < visibleQuestions.length) {
+      const nextQ = visibleQuestions[nextIndex];
+      setCurrentQuestionIndex(nextIndex);
+      setChatLog([
+        ...updatedLog,
+        { sender: 'bot' as const, text: `${nextQ.label}${nextQ.required ? ' *' : ''}`, qId: nextQ.id }
+      ]);
+    } else {
+      setCurrentQuestionIndex(visibleQuestions.length);
+      setChatLog([
+        ...updatedLog,
+        { sender: 'bot' as const, text: "🎉 Excellent! You have answered all visible questions. Click below to submit your response." }
+      ]);
+    }
+  };
+
+  /* -------------------------------------------------------------------------- */
+  /* FORM SUBMISSION                                                            */
+  /* -------------------------------------------------------------------------- */
+  const handleSubmitForm = async (e?: React.FormEvent, isForceSubmit: boolean = false) => {
+    if (e) e.preventDefault();
+    if (isSubmitting) return;
+
+    if (!isForceSubmit) {
+      // Check required fields
+      const missing: string[] = [];
+      const newErrors: Record<string, string> = {};
+
+      visibleQuestions.forEach(q => {
+        if (q.required) {
+          const ans = answers[q.id];
+          if (ans === undefined || ans === null || String(ans).trim() === '' || (Array.isArray(ans) && ans.length === 0)) {
+            missing.push(q.label || `Question ${q.orderIndex + 1}`);
+            newErrors[q.id] = "This question is required";
+          }
+        }
+      });
+
+      if (missing.length > 0) {
+        setValidationErrors(newErrors);
+        if (layoutMode === 'one-by-one') {
+          const firstMissingIdx = visibleQuestions.findIndex(q => newErrors[q.id]);
+          if (firstMissingIdx !== -1) {
+            setCurrentQuestionIndex(firstMissingIdx);
+          }
+        } else if (layoutMode === 'standard') {
+          const firstMissingQ = visibleQuestions.find(q => newErrors[q.id]);
+          if (firstMissingQ) {
+            const el = document.getElementById(`question-card-${firstMissingQ.id}`);
+            if (el) {
+              el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              setActiveQuestionId(firstMissingQ.id);
+            }
+          }
+        }
+        return;
+      }
+    }
+
+    setValidationErrors({});
+    setIsSubmitting(true);
+
+    let finalAnswers = { ...answers };
+    if (canvasRef.current && hasSigned) {
+      finalAnswers['signature_pad_url'] = canvasRef.current.toDataURL("image/png");
+    }
+
+    let emailToSubmit = form?.settings?.collect_emails ? collectedEmail : (typeof window !== 'undefined' ? localStorage.getItem('promptform_user_email') : null);
+    let userToSubmit = typeof window !== 'undefined' ? localStorage.getItem('promptform_user_name') : null;
+
+    if (!emailToSubmit) {
+      const emailQ = questions.find(q => 
+        q.type === 'email' || 
+        (q.type === 'short_text' && q.label.toLowerCase().includes('email'))
+      );
+      if (emailQ && answers[emailQ.id]) {
+        const emailStr = String(answers[emailQ.id]).trim();
+        if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailStr)) {
+          emailToSubmit = emailStr;
+        }
+      }
+    }
+
+    if (!userToSubmit) {
+      const nameQ = questions.find(q => 
+        q.type === 'name' || 
+        (q.type === 'short_text' && (q.label.toLowerCase().includes('name') || q.label.toLowerCase().includes('fullname')))
+      );
+      if (nameQ && answers[nameQ.id]) {
+        userToSubmit = String(answers[nameQ.id]).trim();
+      }
+    }
+
+    const payload = {
+      answers: finalAnswers,
+      browserMetadata: {
+        user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
+        ip_address: "",
+        tab_switches: tabSwitchCount,
+        is_flagged: isFlagged
+      },
+      timeTaken: Math.max(1, Math.floor((Date.now() - startTimeRef.current) / 1000)),
+      email: emailToSubmit || null,
+      submittedBy: userToSubmit || null,
+      password: passwordInput || undefined,
+      isForceSubmit: isForceSubmit
+    };
+
+    if (isPreview) {
+      setSubmitted(true);
+      setIsSubmitting(false);
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem(`promptform_form_timer_start_${form?.id || formId}`);
+        localStorage.removeItem(`promptform_draft_answers_${form?.id || formId}`);
+      }
+      return;
+    }
+
+    try {
+      await api.post(`/forms/${form?.id || formId}/submit`, payload);
+      setSubmitted(true);
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem(`promptform_form_timer_start_${form?.id || formId}`);
+        localStorage.removeItem(`promptform_draft_answers_${form?.id || formId}`);
+        localStorage.setItem(`promptform_submitted_${form?.id || formId}`, 'true');
+      }
+    } catch (err: any) {
+      if (isForceSubmit) {
+        setSubmitted(true);
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem(`promptform_form_timer_start_${form?.id || formId}`);
+          localStorage.removeItem(`promptform_draft_answers_${form?.id || formId}`);
+          localStorage.setItem(`promptform_submitted_${form?.id || formId}`, 'true');
+        }
+      } else {
+        alert("Submission error: " + (err.message || "Failed to submit response. Please try again."));
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  /* -------------------------------------------------------------------------- */
+  /* QUIZ SCORING CALCULATION                                                   */
+  /* -------------------------------------------------------------------------- */
   const calculateQuizResults = () => {
     let totalPossiblePoints = 0;
     let earnedPoints = 0;
@@ -766,7 +799,6 @@ export default function PublicFormPage() {
       }
 
       const studentAns = answers[q.id];
-      
       let isCorrect = false;
       if (isGraded && studentAns !== undefined && studentAns !== null) {
         const studentAnsStr = String(studentAns).trim().toLowerCase();
@@ -796,87 +828,11 @@ export default function PublicFormPage() {
     };
   };
 
-  // Submitted Success Page
-  if (submitted) {
-    const quizResults = calculateQuizResults();
-    const hasQuiz = quizResults.totalPossiblePoints > 0;
-    const scorePct = hasQuiz ? Math.round((quizResults.earnedPoints / quizResults.totalPossiblePoints) * 100) : 0;
-
-    return (
-      <div className="min-h-screen bg-background dark:bg-background flex items-center justify-center p-4">
-        <Card className="w-full max-w-xl text-center border-t-4 border-t-emerald-500 dark:bg-background dark:border-border shadow-lg p-6">
-          <CardHeader>
-            <Sparkles className="w-12 h-12 text-emerald-500 mx-auto mb-4" />
-            <CardTitle className="text-2xl text-foreground dark:text-foreground">Response Registered!</CardTitle>
-            <CardDescription className="text-muted-foreground dark:text-muted-foreground">Thank you for your time. Your answers have been successfully locked.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {hasQuiz && (
-              <div className="p-5 bg-muted dark:bg-background border border-border dark:border-border rounded-lg space-y-4">
-                <div className="flex flex-col items-center">
-                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Your Quiz Score</span>
-                  <h3 className="text-4xl font-bold text-primary dark:text-primary mt-1">
-                    {quizResults.earnedPoints} / {quizResults.totalPossiblePoints} Marks
-                  </h3>
-                  <div className={`mt-2 px-3 py-1.5 rounded-full text-xs font-bold ${
-                    scorePct >= 80 ? 'bg-emerald-50 dark:bg-emerald-900 text-emerald-600' :
-                    scorePct >= 50 ? 'bg-amber-50 dark:bg-amber-950 text-amber-600' :
-                    'bg-rose-50 dark:bg-rose-900 text-rose-600'
-                  }`}>
-                    {scorePct >= 80 ? 'Excellent! (Grade A)' : scorePct >= 50 ? 'Good (Grade B)' : 'Failed (Grade F)'}
-                  </div>
-                </div>
-
-                <div className="border-t border-border dark:border-border pt-4 text-left">
-                  <h4 className="text-xs font-bold text-muted-foreground dark:text-muted-foreground uppercase mb-3">Questions & Score Breakdown</h4>
-                  <div className="space-y-3.5 max-h-72 overflow-y-auto pr-1">
-                    {quizResults.questionsBreakdown.map((item: any, qIdx: number) => (
-                      <div key={qIdx} className="p-3.5 bg-card dark:bg-background border border-border dark:border-border rounded-lg flex flex-col space-y-1.5">
-                        <div className="flex items-start justify-between">
-                          <p className="text-xs font-bold text-foreground dark:text-foreground">Q{qIdx + 1}: {item.questionLabel}</p>
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md shrink-0 ml-2 ${
-                            item.isCorrect ? 'bg-emerald-50 dark:bg-emerald-900 text-emerald-600' : 'bg-rose-50 dark:bg-rose-900 text-rose-600'
-                          }`}>
-                            {item.earned} / {item.points} Pts
-                          </span>
-                        </div>
-                        <p className="text-xs font-medium text-muted-foreground dark:text-muted-foreground">
-                          Your Answer: <span className={item.isCorrect ? 'text-emerald-600 font-bold' : 'text-rose-600 font-bold'}>{item.studentAnswer}</span>
-                        </p>
-                        {!item.isCorrect && item.correctAnswer && (
-                          <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                            ✓ Correct Answer: <span className="underline">{item.correctAnswer}</span>
-                          </p>
-                        )}
-                        {item.explanation && (
-                          <p className="text-[11px] text-muted-foreground bg-accent/50 dark:bg-accent/20 p-2 rounded border border-border/50">
-                            💡 <b>Explanation:</b> {item.explanation}
-                          </p>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {form.settings?.anti_cheat_detection && (
-              <p className="text-xs text-muted-foreground dark:text-muted-foreground bg-accent dark:bg-background py-1 px-3 rounded inline-block">
-                Proctoring status: Logged securely in system.
-              </p>
-            )}
-            <Button variant="outline" className="w-full mt-4 text-foreground dark:text-foreground dark:hover:bg-card" onClick={() => router.push('/')}>
-              Home
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  // Customize layout/theme options
-  const primaryColor = form?.theme?.primary_color || '#8B6B55';
-  const backgroundColor = form?.theme?.background_color || '#FAF6EF';
+  /* -------------------------------------------------------------------------- */
+  /* THEME STYLES & FONTS                                                       */
+  /* -------------------------------------------------------------------------- */
+  const primaryColor = form?.theme?.primary_color || '#4F46E5';
+  const backgroundColor = form?.theme?.background_color || '#F8FAFC';
   const rawFontFamily = form?.theme?.font_family || 'Inter';
   const FONT_MAP: Record<string, string> = {
     'Manrope': "'Manrope', sans-serif",
@@ -892,458 +848,1260 @@ export default function PublicFormPage() {
   };
   const resolvedFont = FONT_MAP[rawFontFamily] || `${rawFontFamily}, sans-serif`;
 
+  /* -------------------------------------------------------------------------- */
+  /* LOADING STATE                                                              */
+  /* -------------------------------------------------------------------------- */
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="flex flex-col items-center space-y-4">
+          <div className="w-10 h-10 border-4 border-slate-200 border-t-indigo-600 rounded-full animate-spin"></div>
+          <p className="text-xs font-semibold text-slate-500 tracking-wide uppercase">Opening form...</p>
+        </div>
+      </div>
+    );
+  }
+
+  /* -------------------------------------------------------------------------- */
+  /* ERROR / RESTRICTED ACCESS STATE                                            */
+  /* -------------------------------------------------------------------------- */
+  if (errorMessage || errorStatus) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+        <Card className="w-full max-w-md text-center border-t-4 border-t-rose-500 shadow-xl bg-white rounded-2xl">
+          <CardHeader className="pt-8">
+            <div className="w-14 h-14 bg-rose-50 text-rose-600 rounded-2xl flex items-center justify-center mx-auto mb-3">
+              <AlertTriangle className="w-7 h-7" />
+            </div>
+            <CardTitle className="text-2xl font-bold text-slate-900">Access Restricted</CardTitle>
+            <CardDescription className="text-sm mt-2 text-slate-500">
+              {errorMessage || "You do not have permission to view or fill this form."}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3 pb-8">
+            <Button className="w-full h-11 text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-white rounded-xl" onClick={() => router.push(`/login?redirect=f/${formId}`)}>
+              Sign In to PromptForm
+            </Button>
+            <Button variant="outline" className="w-full h-11 text-xs font-semibold rounded-xl text-slate-700" onClick={() => router.push('/')}>
+              Return to Home Page
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  /* -------------------------------------------------------------------------- */
+  /* INACTIVE / CLOSED FORM STATE                                               */
+  /* -------------------------------------------------------------------------- */
+  if (isInactive) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+        <Card className="w-full max-w-md text-center border-t-4 border-t-amber-500 shadow-xl bg-white rounded-2xl">
+          <CardHeader className="pt-8">
+            <div className="w-14 h-14 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center mx-auto mb-3">
+              <AlertTriangle className="w-7 h-7" />
+            </div>
+            <CardTitle className="text-2xl font-bold text-slate-900">Form Closed</CardTitle>
+            <CardDescription className="text-sm mt-2 text-slate-500">
+              {statusMessage}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pb-8">
+            <Button variant="outline" className="w-full h-11 text-xs font-semibold rounded-xl" onClick={() => router.push('/')}>
+              Go to Home Page
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  /* -------------------------------------------------------------------------- */
+  /* PASSWORD PROTECTED UNLOCK VIEW                                             */
+  /* -------------------------------------------------------------------------- */
+  if (isLocked) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+        <Card className="w-full max-w-md shadow-xl bg-white rounded-2xl border border-slate-200">
+          <CardHeader className="text-center pt-8">
+            <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-3">
+              <Lock className="w-6 h-6" />
+            </div>
+            <CardTitle className="text-xl font-bold text-slate-900">Passcode Required</CardTitle>
+            <CardDescription className="text-xs text-slate-500 mt-1">This questionnaire is protected with a security passcode.</CardDescription>
+          </CardHeader>
+          <CardContent className="pb-8">
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              if (passwordInput === form?.settings?.password) {
+                setIsLocked(false);
+              } else {
+                alert("Incorrect passcode. Access denied.");
+              }
+            }} className="space-y-4">
+              <Input
+                type="password"
+                placeholder="Enter passcode..."
+                value={passwordInput}
+                onChange={(e) => setPasswordInput(e.target.value)}
+                required
+                className="h-11 rounded-xl text-center tracking-widest text-sm"
+              />
+              <Button type="submit" style={{ backgroundColor: primaryColor }} className="w-full h-11 text-white font-semibold rounded-xl">
+                Unlock Questionnaire
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  /* -------------------------------------------------------------------------- */
+  /* EMAIL COLLECTION LOCK VIEW                                                 */
+  /* -------------------------------------------------------------------------- */
+  if (!emailProvided) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+        <Card className="w-full max-w-md shadow-xl bg-white rounded-2xl border border-slate-200">
+          <CardHeader className="text-center pt-8">
+            <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-3">
+              <Mail className="w-6 h-6" />
+            </div>
+            <CardTitle className="text-xl font-bold text-slate-900">Enter Your Email</CardTitle>
+            <CardDescription className="text-xs text-slate-500 mt-1">The form creator requires email verification before proceeding.</CardDescription>
+          </CardHeader>
+          <CardContent className="pb-8">
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              if (collectedEmail.trim() && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(collectedEmail.trim())) {
+                setEmailProvided(true);
+                localStorage.setItem('promptform_user_email', collectedEmail.trim());
+                startTimeRef.current = Date.now();
+              } else {
+                alert("Please enter a valid email address.");
+              }
+            }} className="space-y-4">
+              <Input
+                type="email"
+                placeholder="name@example.com"
+                value={collectedEmail}
+                onChange={(e) => setCollectedEmail(e.target.value)}
+                required
+                className="h-11 rounded-xl text-sm"
+              />
+              <Button type="submit" style={{ backgroundColor: primaryColor }} className="w-full h-11 text-white font-semibold rounded-xl">
+                Continue to Form →
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  /* -------------------------------------------------------------------------- */
+  /* THANK YOU / QUIZ SCORE SUBMITTED SCREEN                                    */
+  /* -------------------------------------------------------------------------- */
+  if (submitted) {
+    const quizResults = calculateQuizResults();
+    const hasQuiz = quizResults.totalPossiblePoints > 0;
+    const scorePct = hasQuiz ? Math.round((quizResults.earnedPoints / quizResults.totalPossiblePoints) * 100) : 0;
+
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+        <Card className="w-full max-w-xl text-center border-t-[8px] shadow-2xl bg-white rounded-3xl p-6 md:p-8" style={{ borderTopColor: primaryColor }}>
+          <div className="w-16 h-16 bg-emerald-50 text-emerald-600 rounded-3xl flex items-center justify-center mx-auto mb-4 ring-8 ring-emerald-50/50">
+            <CheckCircle2 className="w-8 h-8 text-emerald-600" />
+          </div>
+          
+          <h2 className="text-2xl md:text-3xl font-bold text-slate-900">Response Recorded!</h2>
+          <p className="text-sm text-slate-500 mt-2">
+            Thank you for filling out <span className="font-semibold text-slate-800">{form?.title || 'this form'}</span>. Your answers have been securely registered.
+          </p>
+
+          {/* Graded Quiz Score Card */}
+          {hasQuiz && (
+            <div className="mt-6 p-6 bg-slate-50 rounded-2xl border border-slate-200/80 text-left space-y-4">
+              <div className="flex flex-col items-center justify-center text-center pb-2 border-b border-slate-200/80">
+                <span className="text-[11px] font-bold tracking-widest text-slate-400 uppercase">Assessment Score</span>
+                <div className="text-4xl md:text-5xl font-black text-slate-900 mt-1">
+                  {quizResults.earnedPoints} <span className="text-xl font-normal text-slate-400">/ {quizResults.totalPossiblePoints} Marks</span>
+                </div>
+                <div className="mt-3 flex items-center gap-2">
+                  <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                    scorePct >= 80 ? 'bg-emerald-100 text-emerald-700' :
+                    scorePct >= 50 ? 'bg-amber-100 text-amber-700' :
+                    'bg-rose-100 text-rose-700'
+                  }`}>
+                    {scorePct}% Score • {scorePct >= 80 ? 'Grade A (Distinction)' : scorePct >= 50 ? 'Grade B (Pass)' : 'Needs Improvement'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Questions breakdown */}
+              <div>
+                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Answer Breakdown</h4>
+                <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
+                  {quizResults.questionsBreakdown.map((item: any, qIdx: number) => (
+                    <div key={qIdx} className="p-3.5 bg-white border border-slate-200 rounded-xl space-y-1.5 shadow-xs">
+                      <div className="flex items-start justify-between">
+                        <p className="text-xs font-bold text-slate-800">
+                          {qIdx + 1}. {item.questionLabel}
+                        </p>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded shrink-0 ml-2 ${
+                          item.isCorrect ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'
+                        }`}>
+                          {item.earned} / {item.points} Pts
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-600">
+                        Your Answer: <span className={item.isCorrect ? 'text-emerald-700 font-semibold' : 'text-rose-600 font-semibold'}>{item.studentAnswer}</span>
+                      </p>
+                      {!item.isCorrect && item.correctAnswer && (
+                        <p className="text-xs text-emerald-700 font-medium">
+                          ✓ Correct: <span className="font-semibold underline">{item.correctAnswer}</span>
+                        </p>
+                      )}
+                      {item.explanation && (
+                        <p className="text-[11px] text-slate-500 bg-slate-50 p-2 rounded border border-slate-100 mt-1">
+                          💡 <b>Explanation:</b> {item.explanation}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {form?.settings?.anti_cheat_detection && (
+            <p className="text-[11px] text-slate-400 mt-4">
+              🛡️ Proctor session security signature logged successfully.
+            </p>
+          )}
+
+          <div className="mt-8 pt-4 border-t border-slate-100 text-[11px] text-slate-400 flex items-center justify-center gap-1.5">
+            <span>Powered by</span>
+            <span className="font-bold text-slate-700 flex items-center gap-1">
+              <span className="w-3.5 h-3.5 rounded bg-indigo-600 text-white flex items-center justify-center text-[8px] font-black">P</span>
+              PromptForm
+            </span>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  /* -------------------------------------------------------------------------- */
+  /* RENDER QUESTION INPUT CONTROLS                                             */
+  /* -------------------------------------------------------------------------- */
+  const renderQuestionControl = (q: any, isFocused = false) => {
+    const isAlphanumericId = /roll|enrollment|student id|id number|registration|code/i.test(q.label || '');
+    const isStrictNumeric = (q.type === 'amount' || q.type === 'price' || q.type === 'number') && !isAlphanumericId;
+    const inputType = q.type === 'email' ? 'email' : q.type === 'phone' ? 'tel' : q.type === 'website' ? 'url' : isStrictNumeric ? 'number' : 'text';
+
+    // Short text & text variants
+    if (['short_text', 'standard-input', 'text', 'name', 'first_name', 'last_name', 'full_name', 'email', 'email_address', 'phone', 'contact', 'mobile', 'telephone', 'website', 'url', 'amount', 'price', 'number', 'age', 'quantity', 'count'].includes(q.type)) {
+      return (
+        <div className="relative flex items-center w-full">
+          {q.type === 'name' && <User className="absolute left-3.5 w-4 h-4 text-slate-400" />}
+          {q.type === 'email' && <Mail className="absolute left-3.5 w-4 h-4 text-slate-400" />}
+          {q.type === 'phone' && <Phone className="absolute left-3.5 w-4 h-4 text-slate-400" />}
+          {q.type === 'website' && <LinkIcon className="absolute left-3.5 w-4 h-4 text-slate-400" />}
+          {(q.type === 'amount' || isAlphanumericId) && <Hash className="absolute left-3.5 w-4 h-4 text-slate-400" />}
+          {q.type === 'price' && <DollarSign className="absolute left-3.5 w-4 h-4 text-slate-400" />}
+          
+          <input
+            type={inputType}
+            step={q.type === 'price' ? '0.01' : '0.001'}
+            min={isStrictNumeric ? 0 : undefined}
+            onKeyDown={(e) => { if (isStrictNumeric && (e.key === '-' || e.key === 'e')) e.preventDefault(); }}
+            placeholder={
+              isAlphanumericId ? 'e.g. 23SE02CSS1199' :
+              q.type === 'name' ? 'e.g. Jane Doe' :
+              q.type === 'email' ? 'e.g. jane@example.com' :
+              q.type === 'phone' ? 'e.g. +1 (555) 019-2834' :
+              q.type === 'website' ? 'e.g. https://portfolio.com' :
+              q.type === 'price' ? '0.00' :
+              'Your answer'
+            }
+            value={answers[q.id] || ""}
+            onChange={(e) => {
+              let val = e.target.value;
+              if (isStrictNumeric) {
+                val = val.replace(/-/g, '');
+                if (val !== '') {
+                  val = Math.max(0, parseFloat(val) || 0).toString();
+                }
+              }
+              setAnswers({ ...answers, [q.id]: val });
+              if (validationErrors[q.id]) {
+                setValidationErrors(prev => ({ ...prev, [q.id]: "" }));
+              }
+            }}
+            required={q.required}
+            className={`w-full h-12 bg-white border rounded-xl text-sm transition-all focus:outline-none ${
+              validationErrors[q.id] 
+                ? 'border-rose-400 focus:ring-2 focus:ring-rose-200' 
+                : 'border-slate-200 hover:border-slate-300 focus:border-indigo-600 focus:ring-4 focus:ring-indigo-50'
+            } ${['name', 'email', 'phone', 'website', 'amount', 'price'].includes(q.type) || isAlphanumericId ? 'pl-10 pr-4' : 'px-4'}`}
+          />
+        </div>
+      );
+    }
+
+    // Password field
+    if (q.type === 'password') {
+      return (
+        <div className="relative flex items-center w-full">
+          <Lock className="absolute left-3.5 w-4 h-4 text-slate-400" />
+          <input
+            type={showPasswords[q.id] ? "text" : "password"}
+            placeholder="Enter password..."
+            value={answers[q.id] || ""}
+            onChange={(e) => {
+              setAnswers({ ...answers, [q.id]: e.target.value });
+              if (validationErrors[q.id]) setValidationErrors(prev => ({ ...prev, [q.id]: "" }));
+            }}
+            required={q.required}
+            className={`w-full h-12 pl-10 pr-11 bg-white border rounded-xl text-sm transition-all focus:outline-none ${
+              validationErrors[q.id] 
+                ? 'border-rose-400 focus:ring-2 focus:ring-rose-200' 
+                : 'border-slate-200 hover:border-slate-300 focus:border-indigo-600 focus:ring-4 focus:ring-indigo-50'
+            }`}
+          />
+          <button
+            type="button"
+            onClick={() => setShowPasswords({ ...showPasswords, [q.id]: !showPasswords[q.id] })}
+            className="absolute right-3.5 text-slate-400 hover:text-slate-600 border-none bg-transparent cursor-pointer p-0"
+          >
+            {showPasswords[q.id] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+          </button>
+        </div>
+      );
+    }
+
+    // Long text / Paragraph / Feedback / Address
+    if (['long_text', 'feedback', 'address', 'paragraph', 'textarea', 'comments', 'description', 'message'].includes(q.type)) {
+      return (
+        <div className="relative w-full">
+          {q.type === 'address' && <MapPin className="absolute left-3.5 top-3.5 w-4 h-4 text-slate-400" />}
+          <textarea
+            rows={4}
+            placeholder={q.type === 'address' ? 'Street, Apartment, City, State, ZIP...' : 'Type your answer here...'}
+            value={answers[q.id] || ""}
+            onChange={(e) => {
+              setAnswers({ ...answers, [q.id]: e.target.value });
+              if (validationErrors[q.id]) setValidationErrors(prev => ({ ...prev, [q.id]: "" }));
+            }}
+            required={q.required}
+            className={`w-full py-3 bg-white border rounded-xl text-sm transition-all resize-y min-h-[100px] focus:outline-none ${
+              validationErrors[q.id] 
+                ? 'border-rose-400 focus:ring-2 focus:ring-rose-200' 
+                : 'border-slate-200 hover:border-slate-300 focus:border-indigo-600 focus:ring-4 focus:ring-indigo-50'
+            } ${q.type === 'address' ? 'pl-10 pr-4' : 'px-4'}`}
+          />
+        </div>
+      );
+    }
+
+    // Multiple Choice / Radio (Google Forms style cards)
+    if (['mcq', 'one_option', 'gender', 'radio', 'single_choice'].includes(q.type)) {
+      const options = q.options && q.options.length > 0 
+        ? q.options 
+        : (q.type === 'gender' ? ['Female', 'Male', 'Non-binary', 'Prefer not to say'] : ['Option 1', 'Option 2', 'Option 3']);
+
+      return (
+        <div className={q.option_layout === 'horizontal' ? "flex flex-wrap gap-2.5" : "space-y-2.5"}>
+          {options.map((opt: string, oIdx: number) => {
+            const isSelected = answers[q.id] === opt;
+            return (
+              <label 
+                key={oIdx} 
+                className={`flex items-center min-h-[48px] px-4 py-3 rounded-xl border text-sm font-medium transition-all cursor-pointer select-none ${
+                  isSelected 
+                    ? 'bg-indigo-50/70 border-indigo-600 text-indigo-950 shadow-xs' 
+                    : 'bg-white border-slate-200/90 text-slate-700 hover:border-slate-300 hover:bg-slate-50/60'
+                }`}
+                style={isSelected ? { borderColor: primaryColor, backgroundColor: `${primaryColor}10`, color: primaryColor } : undefined}
+              >
+                <div className="relative flex items-center justify-center mr-3.5">
+                  <input
+                    type="radio"
+                    name={`radio_${q.id}`}
+                    checked={isSelected}
+                    onChange={() => {
+                      setAnswers({ ...answers, [q.id]: opt });
+                      if (validationErrors[q.id]) setValidationErrors(prev => ({ ...prev, [q.id]: "" }));
+                    }}
+                    className="sr-only"
+                  />
+                  <div 
+                    className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
+                      isSelected ? 'border-indigo-600' : 'border-slate-300'
+                    }`}
+                    style={isSelected ? { borderColor: primaryColor } : undefined}
+                  >
+                    {isSelected && (
+                      <div className="w-2.5 h-2.5 rounded-full bg-indigo-600" style={{ backgroundColor: primaryColor }} />
+                    )}
+                  </div>
+                </div>
+                <span className="flex-1 leading-snug">{opt}</span>
+              </label>
+            );
+          })}
+        </div>
+      );
+    }
+
+    // Checkboxes / Multi-select
+    if (['checkbox', 'multiple_options', 'multi_choice', 'checkboxes'].includes(q.type)) {
+      const options = q.options && q.options.length > 0 ? q.options : ['Option 1', 'Option 2'];
+
+      return (
+        <div className={q.option_layout === 'horizontal' ? "flex flex-wrap gap-2.5" : "space-y-2.5"}>
+          {options.map((opt: string, oIdx: number) => {
+            const currentVals = Array.isArray(answers[q.id]) 
+              ? answers[q.id] 
+              : (answers[q.id] ? String(answers[q.id]).split(', ') : []);
+            const isChecked = currentVals.includes(opt);
+
+            return (
+              <label 
+                key={oIdx} 
+                className={`flex items-center min-h-[48px] px-4 py-3 rounded-xl border text-sm font-medium transition-all cursor-pointer select-none ${
+                  isChecked 
+                    ? 'bg-indigo-50/70 border-indigo-600 text-indigo-950 shadow-xs' 
+                    : 'bg-white border-slate-200/90 text-slate-700 hover:border-slate-300 hover:bg-slate-50/60'
+                }`}
+                style={isChecked ? { borderColor: primaryColor, backgroundColor: `${primaryColor}10`, color: primaryColor } : undefined}
+              >
+                <div className="relative flex items-center justify-center mr-3.5">
+                  <input
+                    type="checkbox"
+                    checked={isChecked}
+                    onChange={(e) => {
+                      let nextVals;
+                      if (e.target.checked) {
+                        nextVals = [...currentVals, opt];
+                      } else {
+                        nextVals = currentVals.filter((v: string) => v !== opt);
+                      }
+                      setAnswers({ ...answers, [q.id]: nextVals.join(', ') });
+                      if (validationErrors[q.id]) setValidationErrors(prev => ({ ...prev, [q.id]: "" }));
+                    }}
+                    className="sr-only"
+                  />
+                  <div 
+                    className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${
+                      isChecked ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-slate-300 bg-white'
+                    }`}
+                    style={isChecked ? { backgroundColor: primaryColor, borderColor: primaryColor } : undefined}
+                  >
+                    {isChecked && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                  </div>
+                </div>
+                <span className="flex-1 leading-snug">{opt}</span>
+              </label>
+            );
+          })}
+        </div>
+      );
+    }
+
+    // Dropdown / Country
+    if (['dropdown', 'country', 'select'].includes(q.type)) {
+      const options = q.options && q.options.length > 0 
+        ? q.options 
+        : (q.type === 'country' ? ['United States', 'United Kingdom', 'Canada', 'Australia', 'Germany', 'France', 'India', 'Japan', 'Brazil', 'Other'] : ['Option 1', 'Option 2']);
+
+      return (
+        <div className="relative w-full">
+          <select
+            value={answers[q.id] || ""}
+            onChange={(e) => {
+              setAnswers({ ...answers, [q.id]: e.target.value });
+              if (validationErrors[q.id]) setValidationErrors(prev => ({ ...prev, [q.id]: "" }));
+            }}
+            required={q.required}
+            className="w-full h-12 px-4 bg-white border border-slate-200 hover:border-slate-300 rounded-xl text-sm text-slate-800 transition-all focus:outline-none focus:border-indigo-600 focus:ring-4 focus:ring-indigo-50 cursor-pointer appearance-none"
+          >
+            <option value="" disabled>Choose an option...</option>
+            {options.map((opt: string, oIdx: number) => (
+              <option key={oIdx} value={opt}>{opt}</option>
+            ))}
+          </select>
+          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-400">
+            <svg className="w-4 h-4 fill-current" viewBox="0 0 20 20">
+              <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" fillRule="evenodd" />
+            </svg>
+          </div>
+        </div>
+      );
+    }
+
+    // Agreement / Consent
+    if (['agreement', 'consent'].includes(q.type)) {
+      const isAgreed = answers[q.id] === "Agreed & Signed";
+
+      return (
+        <label className={`flex items-start p-4 rounded-xl border transition-all cursor-pointer select-none ${
+          isAgreed ? 'bg-indigo-50/60 border-indigo-600 text-indigo-950' : 'bg-white border-slate-200 hover:border-slate-300'
+        }`}>
+          <div className="mt-0.5 mr-3">
+            <input
+              type="checkbox"
+              checked={isAgreed}
+              onChange={(e) => {
+                setAnswers({ ...answers, [q.id]: e.target.checked ? "Agreed & Signed" : "" });
+                if (validationErrors[q.id]) setValidationErrors(prev => ({ ...prev, [q.id]: "" }));
+              }}
+              required={q.required}
+              className="sr-only"
+            />
+            <div 
+              className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${
+                isAgreed ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-slate-300 bg-white'
+              }`}
+              style={isAgreed ? { backgroundColor: primaryColor, borderColor: primaryColor } : undefined}
+            >
+              {isAgreed && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+            </div>
+          </div>
+          <span className="text-xs text-slate-600 leading-relaxed font-medium">
+            I understand and agree to the terms, conditions, and privacy guidelines mentioned for this questionnaire.
+          </span>
+        </label>
+      );
+    }
+
+    // Emoji Satisfaction Scale
+    if (['emoji-satisfaction-scale', 'emoji', 'satisfaction_emoji', 'mood'].includes(q.type)) {
+      const emojis = q.options && q.options.length > 0 
+        ? q.options 
+        : ["🤩 Very Satisfied", "😋 Satisfied", "😐 Neutral", "🙁 Unsatisfied", "🤮 Very Poor"];
+
+      return (
+        <div className="grid grid-cols-5 gap-2 sm:gap-3 pt-1 w-full">
+          {emojis.map((opt: string, oIdx: number) => {
+            const isSelected = answers[q.id] === opt;
+            const parts = opt.split(' ');
+            const icon = parts[0];
+            const label = parts.slice(1).join(' ');
+
+            return (
+              <button
+                key={oIdx}
+                type="button"
+                onClick={() => {
+                  setAnswers({ ...answers, [q.id]: opt });
+                  if (validationErrors[q.id]) setValidationErrors(prev => ({ ...prev, [q.id]: "" }));
+                }}
+                className={`flex flex-col items-center justify-center py-3 px-1 sm:px-2 rounded-2xl border transition-all cursor-pointer text-center ${
+                  isSelected 
+                    ? 'bg-indigo-50 border-indigo-600 shadow-sm scale-105' 
+                    : 'bg-white border-slate-200/90 text-slate-700 hover:border-slate-300 hover:bg-slate-50'
+                }`}
+                style={isSelected ? { borderColor: primaryColor, backgroundColor: `${primaryColor}15` } : undefined}
+              >
+                <span className="text-2xl sm:text-3xl mb-1">{icon}</span>
+                {label && <span className="text-[10px] sm:text-xs font-semibold truncate w-full text-slate-700">{label}</span>}
+              </button>
+            );
+          })}
+        </div>
+      );
+    }
+
+    // Yes / No Toggle
+    if (['yes_no', 'yes-no', 'boolean', 'toggle'].includes(q.type)) {
+      return (
+        <div className="grid grid-cols-2 gap-3 pt-1">
+          {["👍 Yes", "👎 No"].map((opt: string, oIdx: number) => {
+            const isSelected = answers[q.id] === opt;
+            return (
+              <button
+                key={oIdx}
+                type="button"
+                onClick={() => {
+                  setAnswers({ ...answers, [q.id]: opt });
+                  if (validationErrors[q.id]) setValidationErrors(prev => ({ ...prev, [q.id]: "" }));
+                }}
+                className={`h-13 rounded-2xl border text-sm font-semibold transition-all cursor-pointer flex items-center justify-center gap-2 ${
+                  isSelected 
+                    ? 'bg-indigo-50 border-indigo-600 text-indigo-900 shadow-xs' 
+                    : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50'
+                }`}
+                style={isSelected ? { borderColor: primaryColor, backgroundColor: `${primaryColor}15`, color: primaryColor } : undefined}
+              >
+                <span>{opt}</span>
+              </button>
+            );
+          })}
+        </div>
+      );
+    }
+
+    // Rating / Stars
+    if (['rating', 'star_rating', 'star-rating', 'stars', 'satisfaction'].includes(q.type)) {
+      const currentRating = Number(answers[q.id]) || 0;
+
+      return (
+        <div className="flex flex-col items-center py-2 space-y-2">
+          <div className="flex items-center gap-2 sm:gap-3">
+            {[1, 2, 3, 4, 5].map((starVal) => {
+              const isSelected = currentRating >= starVal;
+              return (
+                <button
+                  key={starVal}
+                  type="button"
+                  onClick={() => {
+                    setAnswers({ ...answers, [q.id]: starVal });
+                    if (validationErrors[q.id]) setValidationErrors(prev => ({ ...prev, [q.id]: "" }));
+                  }}
+                  className="p-1 sm:p-2 transition-transform hover:scale-125 cursor-pointer border-none bg-transparent"
+                  aria-label={`${starVal} stars`}
+                >
+                  <Star 
+                    className={`w-8 h-8 sm:w-10 sm:h-10 transition-colors ${
+                      isSelected ? 'text-amber-400 fill-amber-400 drop-shadow-sm' : 'text-slate-200 hover:text-amber-300'
+                    }`} 
+                  />
+                </button>
+              );
+            })}
+          </div>
+          {currentRating > 0 && (
+            <span className="text-xs font-bold text-slate-500">
+              {currentRating} out of 5 Stars
+            </span>
+          )}
+        </div>
+      );
+    }
+
+    // Signature Pad
+    if (q.type === 'signature') {
+      return (
+        <QuestionSignaturePad
+          value={answers[q.id] || ""}
+          onChange={(val) => {
+            setAnswers({ ...answers, [q.id]: val });
+            if (validationErrors[q.id]) setValidationErrors(prev => ({ ...prev, [q.id]: "" }));
+          }}
+          primaryColor={primaryColor}
+        />
+      );
+    }
+
+    // File Upload / Photo / Resume
+    if (['file_upload', 'photo', 'resume', 'file-uploader', 'document', 'upload', 'file', 'image'].includes(q.type)) {
+      const isPhoto = q.type === 'photo' || q.type === 'image';
+      const isResume = q.type === 'resume';
+
+      return (
+        <div className="space-y-3 w-full">
+          {answers[q.id] ? (
+            <div className="p-4 bg-emerald-50/50 border border-emerald-200 rounded-2xl flex items-center justify-between">
+              <div className="flex items-center space-x-3 overflow-hidden">
+                {isPhoto && typeof answers[q.id] === 'string' && answers[q.id].startsWith('data:image') ? (
+                  <img src={answers[q.id]} alt="Upload preview" className="w-12 h-12 rounded-lg object-cover border border-emerald-200" />
+                ) : (
+                  <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                    <FileUp className="w-5 h-5" />
+                  </div>
+                )}
+                <div className="overflow-hidden">
+                  <p className="text-xs font-bold text-emerald-900 truncate">
+                    {isPhoto ? 'Photograph attached' : answers[q.id]}
+                  </p>
+                  <p className="text-[10px] text-emerald-600">✓ Ready for submission</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAnswers({ ...answers, [q.id]: null })}
+                className="text-xs font-semibold text-rose-600 hover:text-rose-700 hover:underline border-none bg-transparent cursor-pointer p-0 ml-2"
+              >
+                Remove
+              </button>
+            </div>
+          ) : (
+            <label className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-slate-200 hover:border-indigo-400 rounded-2xl bg-slate-50/50 hover:bg-slate-50 transition-all cursor-pointer text-center group">
+              <div className="w-12 h-12 rounded-2xl bg-white shadow-xs border border-slate-200/60 flex items-center justify-center text-slate-400 group-hover:text-indigo-600 transition-colors mb-2">
+                {isPhoto ? <ImageIcon className="w-6 h-6" /> : <FileUp className="w-6 h-6" />}
+              </div>
+              <p className="text-xs font-bold text-slate-800">
+                {isResume ? 'Upload Resume / CV' : isPhoto ? 'Upload Photo / Image' : 'Select a file to attach'}
+              </p>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                {isResume ? 'PDF, DOC, DOCX up to 10MB' : isPhoto ? 'PNG, JPG, WEBP up to 5MB' : 'Max file size 10MB'}
+              </p>
+              <input
+                type="file"
+                accept={isPhoto ? 'image/*' : isResume ? '.pdf,.doc,.docx' : undefined}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    if (isPhoto) {
+                      const reader = new FileReader();
+                      reader.onload = () => setAnswers({ ...answers, [q.id]: reader.result });
+                      reader.readAsDataURL(file);
+                    } else {
+                      setAnswers({ ...answers, [q.id]: file.name });
+                    }
+                    if (validationErrors[q.id]) setValidationErrors(prev => ({ ...prev, [q.id]: "" }));
+                  }
+                }}
+                className="hidden"
+              />
+            </label>
+          )}
+        </div>
+      );
+    }
+
+    // Date & Time
+    if (['date', 'dob', 'birthday', 'date_of_birth', 'birth_date'].includes(q.type)) {
+      return (
+        <div className="relative flex items-center w-full">
+          <Calendar className="absolute left-3.5 w-4 h-4 text-slate-400" />
+          <input
+            type="date"
+            value={answers[q.id] || ""}
+            onChange={(e) => {
+              setAnswers({ ...answers, [q.id]: e.target.value });
+              if (validationErrors[q.id]) setValidationErrors(prev => ({ ...prev, [q.id]: "" }));
+            }}
+            required={q.required}
+            className="w-full h-12 pl-10 pr-4 bg-white border border-slate-200 hover:border-slate-300 rounded-xl text-sm transition-all focus:outline-none focus:border-indigo-600 focus:ring-4 focus:ring-indigo-50"
+          />
+        </div>
+      );
+    }
+
+    if (['time', 'appointment_time'].includes(q.type)) {
+      return (
+        <div className="relative flex items-center w-full">
+          <Clock className="absolute left-3.5 w-4 h-4 text-slate-400" />
+          <input
+            type="time"
+            value={answers[q.id] || ""}
+            onChange={(e) => {
+              setAnswers({ ...answers, [q.id]: e.target.value });
+              if (validationErrors[q.id]) setValidationErrors(prev => ({ ...prev, [q.id]: "" }));
+            }}
+            required={q.required}
+            className="w-full h-12 pl-10 pr-4 bg-white border border-slate-200 hover:border-slate-300 rounded-xl text-sm transition-all focus:outline-none focus:border-indigo-600 focus:ring-4 focus:ring-indigo-50"
+          />
+        </div>
+      );
+    }
+
+    // Color picker
+    if (q.type === 'color') {
+      return (
+        <div className="flex items-center gap-3">
+          <input
+            type="color"
+            value={answers[q.id] || "#6366f1"}
+            onChange={(e) => setAnswers({ ...answers, [q.id]: e.target.value })}
+            className="w-12 h-12 rounded-xl border border-slate-200 cursor-pointer p-0 bg-transparent"
+          />
+          <span className="text-xs font-mono font-bold uppercase text-slate-700">
+            {answers[q.id] || "#6366f1"}
+          </span>
+        </div>
+      );
+    }
+
+    // Location / Map selector
+    if (['location', 'location-selector', 'map'].includes(q.type)) {
+      return (
+        <div className="space-y-3 w-full">
+          <div className="relative flex items-center w-full">
+            <MapPin className="absolute left-3.5 w-4 h-4 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search address or location..."
+              value={answers[q.id] || ""}
+              onChange={(e) => {
+                setAnswers({ ...answers, [q.id]: e.target.value });
+                if (validationErrors[q.id]) setValidationErrors(prev => ({ ...prev, [q.id]: "" }));
+              }}
+              required={q.required}
+              className="w-full h-12 pl-10 pr-4 bg-white border border-slate-200 hover:border-slate-300 rounded-xl text-sm transition-all focus:outline-none focus:border-indigo-600 focus:ring-4 focus:ring-indigo-50"
+            />
+          </div>
+          {answers[q.id] && (
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center gap-2 text-xs font-medium text-slate-600">
+              <MapPin className="w-4 h-4 text-rose-500 shrink-0" />
+              <span className="truncate">Pin selected: {answers[q.id]}</span>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // OTP / Verification Code
+    if (q.type === 'otp') {
+      return (
+        <div className="space-y-2">
+          <div className="flex gap-1.5 sm:gap-2 justify-start max-w-full overflow-x-auto py-1">
+            {[0, 1, 2, 3, 4, 5].map((digitIdx) => {
+              const otpVal = answers[q.id] || "";
+              const val = otpVal[digitIdx] || "";
+              return (
+                <input
+                  key={digitIdx}
+                  id={`otp-${q.id}-${digitIdx}`}
+                  type="text"
+                  maxLength={1}
+                  value={val}
+                  onChange={(e) => {
+                    const enteredChar = e.target.value.replace(/[^0-9]/g, "");
+                    const currentOTP = (answers[q.id] || "").split("");
+                    currentOTP[digitIdx] = enteredChar;
+                    const nextOTPStr = currentOTP.join("").slice(0, 6);
+                    setAnswers({ ...answers, [q.id]: nextOTPStr });
+                    if (validationErrors[q.id]) setValidationErrors(prev => ({ ...prev, [q.id]: "" }));
+                    if (enteredChar && digitIdx < 5) {
+                      const nextInput = document.getElementById(`otp-${q.id}-${digitIdx + 1}`);
+                      if (nextInput) nextInput.focus();
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Backspace" && !val && digitIdx > 0) {
+                      const prevInput = document.getElementById(`otp-${q.id}-${digitIdx - 1}`);
+                      if (prevInput) {
+                        prevInput.focus();
+                        const currentOTP = (answers[q.id] || "").split("");
+                        currentOTP[digitIdx - 1] = "";
+                        setAnswers({ ...answers, [q.id]: currentOTP.join("") });
+                      }
+                    }
+                  }}
+                  className="w-9 sm:w-11 h-12 text-center text-base sm:text-lg font-bold border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-indigo-600 focus:ring-4 focus:ring-indigo-50 flex-1 max-w-[48px]"
+                />
+              );
+            })}
+          </div>
+          <p className="text-[11px] text-slate-400">Enter the 6-digit code</p>
+        </div>
+      );
+    }
+
+    // Payment Simulator
+    if (q.type === 'payment') {
+      return (
+        <div className="border border-slate-200 rounded-2xl p-4 bg-slate-50/60 space-y-3 w-full">
+          <div className="flex items-center justify-between text-xs text-slate-500 font-medium">
+            <span>Card Information</span>
+            <CreditCard className="w-4 h-4 text-indigo-600" />
+          </div>
+          <input
+            type="text"
+            placeholder="Card Number (4242 •••• •••• 4242)"
+            value={answers[q.id]?.cardNumber || ""}
+            onChange={(e) => setAnswers({ 
+              ...answers, 
+              [q.id]: { ...answers[q.id], cardNumber: e.target.value } 
+            })}
+            required={q.required}
+            className="w-full h-11 px-3.5 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-indigo-600"
+          />
+          <div className="grid grid-cols-2 gap-3">
+            <input
+              type="text"
+              placeholder="MM / YY"
+              value={answers[q.id]?.expiry || ""}
+              onChange={(e) => setAnswers({ 
+                ...answers, 
+                [q.id]: { ...answers[q.id], expiry: e.target.value } 
+              })}
+              required={q.required}
+              className="w-full h-11 px-3.5 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-indigo-600"
+            />
+            <input
+              type="text"
+              placeholder="CVC"
+              value={answers[q.id]?.cvc || ""}
+              onChange={(e) => setAnswers({ 
+                ...answers, 
+                [q.id]: { ...answers[q.id], cvc: e.target.value } 
+              })}
+              required={q.required}
+              className="w-full h-11 px-3.5 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-indigo-600"
+            />
+          </div>
+        </div>
+      );
+    }
+
+    // Default fallback input
+    return (
+      <input
+        type="text"
+        placeholder="Your answer"
+        value={answers[q.id] || ""}
+        onChange={(e) => {
+          setAnswers({ ...answers, [q.id]: e.target.value });
+          if (validationErrors[q.id]) setValidationErrors(prev => ({ ...prev, [q.id]: "" }));
+        }}
+        required={q.required}
+        className="w-full h-12 px-4 bg-white border border-slate-200 hover:border-slate-300 rounded-xl text-sm transition-all focus:outline-none focus:border-indigo-600 focus:ring-4 focus:ring-indigo-50"
+      />
+    );
+  };
+
+  /* -------------------------------------------------------------------------- */
+  /* FORM INTRO SCREEN (Before user starts)                                     */
+  /* -------------------------------------------------------------------------- */
+  if (!hasStarted && Object.keys(answers).length === 0) {
+    const estimatedMinutes = Math.max(1, Math.ceil(questions.length * 0.5));
+
+    return (
+      <div 
+        dir={form?.theme?.rtl ? "rtl" : "ltr"}
+        className="min-h-screen pb-16 text-slate-800"
+        style={{ backgroundColor, fontFamily: resolvedFont }}
+      >
+        {/* Top Preview Banner if in preview mode */}
+        {isPreview && (
+          <div className="bg-indigo-600 text-white py-2 px-4 text-center text-xs font-bold flex items-center justify-center gap-2 shadow-xs">
+            <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
+            <span>Preview Mode: Live test responder view. Submissions are mock only.</span>
+          </div>
+        )}
+
+        {/* Minimal Header */}
+        <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200/80 px-4 sm:px-8 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <span className="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-black text-xs shadow-xs" style={{ backgroundColor: primaryColor }}>
+              P
+            </span>
+            <span className="font-bold text-slate-900 text-sm tracking-tight">PromptForm</span>
+          </div>
+          <span className="text-[11px] font-semibold text-slate-400">Public Responder</span>
+        </header>
+
+        {/* Intro Card Container */}
+        <main className="max-w-2xl mx-auto px-4 mt-8 sm:mt-12 space-y-6">
+          <Card className="border-t-[8px] bg-white rounded-3xl shadow-xl overflow-hidden border-slate-200/90" style={{ borderTopColor: primaryColor }}>
+            {form?.theme?.banner_url && (
+              <div className="w-full h-44 overflow-hidden relative border-b border-slate-100">
+                <img src={form.theme.banner_url} alt="Banner" className="w-full h-full object-cover" />
+              </div>
+            )}
+            
+            <CardHeader className="p-6 sm:p-8 space-y-3">
+              {form?.theme?.logo_url && (
+                <img src={form.theme.logo_url} alt="Logo" className="max-h-12 w-auto mb-2 object-contain" />
+              )}
+              <CardTitle className="text-2xl sm:text-3xl font-extrabold text-slate-900 leading-tight">
+                {form?.title || "Untitled Form"}
+              </CardTitle>
+              {form?.description && (
+                <CardDescription className="text-sm text-slate-600 leading-relaxed font-normal whitespace-pre-line">
+                  {form.description}
+                </CardDescription>
+              )}
+            </CardHeader>
+
+            <CardContent className="px-6 sm:px-8 pb-8 space-y-6">
+              {/* Form Metadata Badges */}
+              <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100">
+                <span className="px-3 py-1.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 flex items-center gap-1.5">
+                  <Layers className="w-3.5 h-3.5 text-slate-500" />
+                  {questions.length} Questions
+                </span>
+                <span className="px-3 py-1.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-slate-500" />
+                  ~{estimatedMinutes} min to complete
+                </span>
+                {form?.settings?.timer_limit > 0 && (
+                  <span className="px-3 py-1.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200 flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-rose-500" />
+                    Timed Exam ({form.settings.timer_limit} mins)
+                  </span>
+                )}
+                {form?.settings?.anti_cheat_detection && (
+                  <span className="px-3 py-1.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 flex items-center gap-1.5">
+                    <Shield className="w-3.5 h-3.5 text-indigo-500" />
+                    Proctored Session
+                  </span>
+                )}
+                {form?.settings?.shuffle_questions && (
+                  <span className="px-3 py-1.5 rounded-full text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200 flex items-center gap-1.5">
+                    <RotateCcw className="w-3.5 h-3.5 text-purple-500" />
+                    Randomized Order
+                  </span>
+                )}
+                <span className="px-3 py-1.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 flex items-center gap-1.5">
+                  {layoutMode === 'one-by-one' ? '⚡ One-by-One Form' : layoutMode === 'conversational' ? '💬 AI Chat Form' : '📋 Standard Form'}
+                </span>
+              </div>
+
+              {/* Email note */}
+              {form?.settings?.collect_emails && (
+                <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80 flex items-center justify-between text-xs text-slate-600">
+                  <div className="flex items-center gap-2">
+                    <UserCheck className="w-4 h-4 text-indigo-600" />
+                    <span>Submitting response as: <b>{collectedEmail}</b></span>
+                  </div>
+                </div>
+              )}
+
+              {/* Start Button */}
+              <div className="pt-2">
+                <Button
+                  onClick={() => setHasStarted(true)}
+                  style={{ backgroundColor: primaryColor }}
+                  className="w-full h-13 text-sm font-bold text-white rounded-2xl shadow-lg hover:opacity-95 active:scale-[0.99] transition-all flex items-center justify-center gap-2"
+                >
+                  <span>Start Form</span>
+                  <ArrowRight className="w-4 h-4" />
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Footer Branding */}
+          <footer className="text-center space-y-1">
+            <p className="text-[11px] text-slate-400">Never submit passwords or sensitive information through untrusted forms.</p>
+            <p className="text-xs text-slate-500 font-medium flex items-center justify-center gap-1">
+              Powered by <span className="font-bold text-slate-700">PromptForm</span>
+            </p>
+          </footer>
+        </main>
+      </div>
+    );
+  }
+
+  /* -------------------------------------------------------------------------- */
+  /* MAIN RESPONDER INTERFACE                                                   */
+  /* -------------------------------------------------------------------------- */
   return (
     <div 
       dir={form?.theme?.rtl ? "rtl" : "ltr"}
-      className={`min-h-screen pb-20 text-foreground dark:text-foreground transition-colors duration-200 ${form?.theme?.rtl ? "text-right" : "text-left"}`}
-      style={{ 
-        backgroundColor: backgroundColor.startsWith('#') ? backgroundColor : undefined, 
-        fontFamily: resolvedFont 
-      }}
+      className="min-h-screen pb-28 text-slate-800 transition-colors"
+      style={{ backgroundColor, fontFamily: resolvedFont }}
     >
+      {/* Top Preview Banner */}
       {isPreview && (
-        <div className="bg-primary text-white py-2.5 px-6 text-center text-xs font-bold select-none flex items-center justify-center space-x-2 animate-fadeIn shadow-md relative z-50">
-          <Sparkles className="w-4 h-4 animate-pulse text-amber-200" />
-          <span>Preview Mode: Changes are shown live. Submissions here are mock only and will not be saved.</span>
+        <div className="bg-indigo-600 text-white py-2 px-4 text-center text-xs font-bold flex items-center justify-center gap-2 shadow-xs sticky top-0 z-50">
+          <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
+          <span>Preview Mode: Live test responder view. Submissions are mock only.</span>
         </div>
       )}
 
-      {/* FLOATING HEADER PROCTORING WIDGET */}
-      <header className="sticky top-0 z-40 bg-white/95 border-b border-border/80 px-6 py-3 shadow-xs flex items-center justify-between">
-        <span className="font-extrabold tracking-tight text-foreground flex items-center gap-2 text-sm">
-          <span className="w-6 h-6 rounded-lg bg-primary/10 text-primary flex items-center justify-center font-bold text-xs">P</span>
-          <span>PromptForm Forms Responder</span>
-        </span>
-
-        <div className="flex items-center space-x-6">
-          {/* Layout Mode Toggle */}
-          <div className="flex bg-secondary dark:bg-card rounded-lg p-0.5 border border-border dark:border-border">
-            <button
-              type="button"
-              onClick={() => setLayoutMode('one-by-one')}
-              className={`px-3 py-1 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
-                layoutMode === 'one-by-one'
-                  ? 'bg-card dark:bg-background text-foreground dark:text-foreground shadow-sm'
-                  : 'text-muted-foreground dark:text-muted-foreground hover:text-foreground dark:hover:text-foreground'
-              }`}
-            >
-              One-by-One View
-            </button>
-            <button
-              type="button"
-              onClick={() => setLayoutMode('standard')}
-              className={`px-3 py-1 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
-                layoutMode === 'standard'
-                  ? 'bg-card dark:bg-background text-foreground dark:text-foreground shadow-sm'
-                  : 'text-muted-foreground dark:text-muted-foreground hover:text-foreground dark:hover:text-foreground'
-              }`}
-            >
-              All Questions
-            </button>
-            <button
-              type="button"
-              onClick={() => setLayoutMode('conversational')}
-              className={`px-3 py-1 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
-                layoutMode === 'conversational'
-                  ? 'bg-card dark:bg-background text-foreground dark:text-foreground shadow-sm'
-                  : 'text-muted-foreground dark:text-muted-foreground hover:text-foreground dark:hover:text-foreground'
-              }`}
-            >
-              AI Chatbot
-            </button>
+      {/* Timer Bar if form has a timer limit */}
+      {timeLeft !== null && (
+        <div className="bg-slate-900 text-white py-2.5 px-4 text-center text-xs font-bold flex items-center justify-between shadow-sm sticky top-0 z-40 border-b border-slate-800">
+          <div className="flex items-center space-x-2">
+            <Clock className="w-4 h-4 text-rose-400 animate-pulse" />
+            <span>Form Time Limit Active:</span>
           </div>
-
-          {timeLeft !== null && (
-            <div className="flex items-center space-x-2 text-destructive dark:text-destructive font-mono font-bold text-sm bg-red-50 dark:bg-red-950/30 px-3 py-1.5 rounded-lg border border-red-200/50">
-              <Clock className="w-4 h-4 animate-pulse" />
-              <span>Time Left: {formatTime(timeLeft)}</span>
-            </div>
-          )}
-          
-          {form.settings?.anti_cheat_detection && (
-            <div className="flex items-center space-x-1.5 text-xs font-semibold text-muted-foreground bg-accent dark:bg-card px-2.5 py-1.5 rounded-lg border border-border dark:border-border">
-              <Shield className="w-4 h-4 text-primary dark:text-primary" />
-              <span>Proctored (Switches: {tabSwitchCount})</span>
-            </div>
-          )}
+          <div className="font-mono text-sm tracking-wider px-3 py-1 rounded-lg bg-rose-500/20 text-rose-300 border border-rose-500/40">
+            ⏱️ {formatTime(timeLeft)}
+          </div>
         </div>
-      </header>
+      )}
 
-      {/* QUESTIONNAIRE CONTAINER */}
-      <div className="max-w-2xl mx-auto px-4 mt-8 space-y-6">
-        {/* Banner Title */}
-        <Card className="border-t-8 dark:bg-background dark:border-border overflow-hidden" style={{ borderTopColor: primaryColor }}>
-          {form?.theme?.banner_url && (
-            <div className="w-full h-36 overflow-hidden relative border-b border-border dark:border-border">
-              <img 
-                src={form.theme.banner_url} 
-                alt="Form Banner" 
-                className="w-full h-full object-cover"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/25 to-transparent" />
-            </div>
-          )}
-          <CardHeader>
-            {form?.theme?.logo_url && (
-              <img src={form.theme.logo_url} alt="Logo" className="max-h-12 w-auto mb-4 object-contain" />
-            )}
-            <CardTitle className="text-2xl text-foreground dark:text-foreground">{form.title}</CardTitle>
-            <CardDescription className="text-sm mt-1 text-muted-foreground dark:text-muted-foreground">{form.description}</CardDescription>
-          </CardHeader>
-          {form.settings?.collect_emails && (
-            <CardContent className="pt-0 text-xs text-muted-foreground dark:text-muted-foreground flex items-center space-x-1.5">
-              <UserCheck className="w-4 h-4 text-primary" />
-              <span>Submitting response as:</span>
-              <span className="font-semibold text-foreground dark:text-foreground">{collectedEmail}</span>
-            </CardContent>
-          )}
-        </Card>
-
-        {isFlagged && (
-          <div className="p-4 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/30 rounded-lg flex items-start space-x-3 text-destructive dark:text-destructive text-xs">
-            <AlertTriangle className="w-5 h-5 flex-shrink-0" />
-            <div>
-              <p className="font-bold">Proctor Warning Flagged!</p>
-              <p className="mt-0.5">Too many focus/tab switches detected. Your activity is logged.</p>
-            </div>
-          </div>
-        )}
-        {layoutMode === 'one-by-one' ? (
-          /* ONE BY ONE QUESTION WIZARD */
-          <div className="space-y-6">
-            {/* Step Progress Bar */}
-            <div className="bg-card dark:bg-background border border-border dark:border-border rounded-xl p-4 shadow-sm space-y-2">
-              <div className="flex justify-between items-center text-xs font-bold">
-                <span className="text-primary font-mono">Question {currentQuestionIndex + 1} of {questions.length}</span>
-                <span className="text-muted-foreground">{Math.round(((currentQuestionIndex + 1) / questions.length) * 100)}% Completed</span>
+      {/* RESPONDER BODY BASED ON LAYOUT MODE */}
+      <main className="w-full max-w-2xl mx-auto px-3 sm:px-4 mt-6 sm:mt-12 overflow-x-hidden">
+        {/* ========================================================================= */}
+        {/* MODE 1: ALL QUESTIONS VIEW (Google Forms Inspired)                        */}
+        {/* ========================================================================= */}
+        {layoutMode === 'standard' && (
+          <form onSubmit={handleSubmitForm} className="space-y-4">
+            {/* Header Card */}
+            <Card className="border-t-[8px] bg-white rounded-3xl shadow-sm border-slate-200 overflow-hidden" style={{ borderTopColor: primaryColor }}>
+              {form?.theme?.banner_url && (
+                <div className="w-full h-36 overflow-hidden relative border-b border-slate-100">
+                  <img src={form.theme.banner_url} alt="Banner" className="w-full h-full object-cover" />
+                </div>
+              )}
+              <CardHeader className="p-6 sm:p-7 space-y-2">
+                {form?.theme?.logo_url && (
+                  <img src={form.theme.logo_url} alt="Logo" className="max-h-12 w-auto mb-2 object-contain" />
+                )}
+                <CardTitle className="text-2xl sm:text-3xl font-bold text-slate-900">
+                  {form?.title || "Form"}
+                </CardTitle>
+                {form?.description && (
+                  <CardDescription className="text-sm text-slate-600 leading-relaxed font-normal whitespace-pre-line">
+                    {form.description}
+                  </CardDescription>
+                )}
+              </CardHeader>
+              
+              <div className="px-6 sm:px-7 pb-5 pt-0 border-t border-slate-100 flex flex-wrap items-center justify-between text-xs text-slate-500 gap-2">
+                {form?.settings?.collect_emails ? (
+                  <div className="flex items-center gap-1.5 text-slate-600">
+                    <UserCheck className="w-4 h-4 text-indigo-600" />
+                    <span>Submitting as: <b>{collectedEmail}</b></span>
+                  </div>
+                ) : (
+                  <span>PromptForm Responder</span>
+                )}
+                <span className="text-rose-500 font-semibold">* Indicates required question</span>
               </div>
-              <div className="w-full h-2.5 bg-secondary dark:bg-card rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-primary transition-all duration-300 ease-out rounded-full" 
-                  style={{ width: `${((currentQuestionIndex + 1) / questions.length) * 100}%` }} 
-                />
-              </div>
-            </div>
+            </Card>
 
-            {/* Single Focused Question Card */}
-            {questions[currentQuestionIndex] && (() => {
-              const q = questions[currentQuestionIndex];
-              const isAlphanumericId = /roll|enrollment|student id|id number|registration|code/i.test(q.label || '');
-              const isStrictNumeric = (q.type === 'amount' || q.type === 'price' || q.type === 'number') && !isAlphanumericId;
-              const inputType = q.type === 'email' ? 'email' : q.type === 'phone' ? 'tel' : q.type === 'website' ? 'url' : isStrictNumeric ? 'number' : 'text';
+            {/* Questions Vertical Stack */}
+            {visibleQuestions.map((q, idx) => {
+              const hasError = Boolean(validationErrors[q.id]);
+              const isActive = activeQuestionId === q.id;
 
               return (
-                <Card className="dark:bg-background dark:border-border border-2 border-primary/20 shadow-xl animate-fadeIn">
-                  <CardHeader className="pb-3 border-b border-border/50">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-extrabold text-primary uppercase tracking-wider bg-primary/10 px-2.5 py-1 rounded-md">
-                        Question {currentQuestionIndex + 1} {q.required && <span className="text-destructive font-bold">*</span>}
-                      </span>
-                      <span className="text-[10px] font-bold text-muted-foreground uppercase">{q.type}</span>
+                <Card 
+                  key={q.id}
+                  id={`question-card-${q.id}`}
+                  onClick={() => setActiveQuestionId(q.id)}
+                  className={`bg-white rounded-2xl transition-all duration-200 border ${
+                    hasError 
+                      ? 'border-rose-400 ring-2 ring-rose-100 shadow-md' 
+                      : isActive 
+                        ? 'border-indigo-400 shadow-md ring-1 ring-indigo-100' 
+                        : 'border-slate-200 shadow-xs hover:border-slate-300'
+                  }`}
+                >
+                  <CardContent className="p-5 sm:p-6 space-y-3.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-sm sm:text-base font-semibold text-slate-900 leading-snug">
+                        {idx + 1}. {q.label} {q.required && <span className="text-rose-500 font-bold">*</span>}
+                      </p>
                     </div>
-                    <CardTitle className="text-base font-bold text-foreground mt-3 leading-snug">
+
+                    {/* Question Input Control */}
+                    <div className="pt-1">
+                      {renderQuestionControl(q, isActive)}
+                    </div>
+
+                    {/* Inline Validation Error Message */}
+                    {hasError && (
+                      <p className="text-xs font-semibold text-rose-600 flex items-center gap-1 animate-fadeIn">
+                        <AlertTriangle className="w-3.5 h-3.5" />
+                        <span>{validationErrors[q.id]}</span>
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
+
+            {/* Bottom Form Actions */}
+            <div className="pt-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <Button
+                type="submit"
+                disabled={isSubmitting}
+                style={{ backgroundColor: primaryColor }}
+                className="w-full sm:w-auto h-12 px-8 text-sm font-bold text-white rounded-xl shadow-md hover:opacity-95 active:scale-[0.99] transition-all flex items-center justify-center gap-2"
+              >
+                <Send className="w-4 h-4" />
+                <span>{isSubmitting ? 'Submitting...' : 'Submit Answers'}</span>
+              </Button>
+
+              <button
+                type="button"
+                onClick={clearDraft}
+                className="text-xs font-semibold text-slate-500 hover:text-slate-800 transition-colors p-2"
+              >
+                Clear form
+              </button>
+            </div>
+          </form>
+        )}
+
+        {/* ========================================================================= */}
+        {/* MODE 2: ONE-BY-ONE WIZARD VIEW                                            */}
+        {/* ========================================================================= */}
+        {layoutMode === 'one-by-one' && (
+          <div className="space-y-6">
+            {/* Step Progress Pill */}
+            <div className="flex items-center justify-between px-1 text-xs font-bold text-slate-600">
+              <span className="text-indigo-600 font-mono" style={{ color: primaryColor }}>
+                Question {currentQuestionIndex + 1} of {visibleQuestions.length}
+              </span>
+              <span>{completionPercentage}% Answered</span>
+            </div>
+
+            {/* Active Focused Question Card */}
+            {visibleQuestions[currentQuestionIndex] && (() => {
+              const q = visibleQuestions[currentQuestionIndex];
+              const hasError = Boolean(validationErrors[q.id]);
+
+              return (
+                <Card className={`bg-white rounded-3xl p-6 sm:p-8 shadow-xl border-2 transition-all ${
+                  hasError ? 'border-rose-400 ring-4 ring-rose-100' : 'border-slate-200'
+                }`}>
+                  <CardHeader className="p-0 pb-4 border-b border-slate-100">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-extrabold text-indigo-600 uppercase tracking-wider bg-indigo-50 px-2.5 py-1 rounded-md" style={{ color: primaryColor, backgroundColor: `${primaryColor}15` }}>
+                        Question {currentQuestionIndex + 1}
+                      </span>
+                      {q.required && <span className="text-xs font-bold text-rose-500">* Required</span>}
+                    </div>
+                    <CardTitle className="text-lg sm:text-xl font-bold text-slate-900 mt-3 leading-snug">
                       {q.label}
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="pt-5 space-y-4">
-                    {/* SHORT TEXT, NAME, EMAIL, PHONE, WEBSITE, AMOUNT, PRICE */}
-                    {(['short_text', 'standard-input', 'text', 'name', 'first_name', 'last_name', 'full_name', 'email', 'email_address', 'phone', 'contact', 'mobile', 'telephone', 'website', 'url', 'amount', 'price', 'number', 'age', 'quantity', 'count'].includes(q.type)) && (
-                      <div className="relative flex items-center w-full">
-                        {q.type === 'name' && <User className="absolute left-3 w-4 h-4 text-muted-foreground" />}
-                        {q.type === 'email' && <Mail className="absolute left-3 w-4 h-4 text-muted-foreground" />}
-                        {q.type === 'phone' && <Phone className="absolute left-3 w-4 h-4 text-muted-foreground" />}
-                        {q.type === 'website' && <Link className="absolute left-3 w-4 h-4 text-muted-foreground" />}
-                        {(q.type === 'amount' || isAlphanumericId) && <Hash className="absolute left-3 w-4 h-4 text-muted-foreground" />}
-                        {q.type === 'price' && <DollarSign className="absolute left-3 w-4 h-4 text-muted-foreground" />}
-                        <Input
-                          type={inputType}
-                          step={q.type === 'price' ? '0.01' : '0.001'}
-                          min={isStrictNumeric ? 0 : undefined}
-                          onKeyDown={(e) => { if (isStrictNumeric && (e.key === '-' || e.key === 'e')) e.preventDefault(); }}
-                          placeholder={
-                            isAlphanumericId ? 'e.g. 23SE02CSS1199' :
-                            q.type === 'name' ? 'e.g. John Doe' :
-                            q.type === 'email' ? 'e.g. john@example.com' :
-                            q.type === 'phone' ? 'e.g. +1 (555) 000-0000' :
-                            'Write your answer...'
-                          }
-                          value={answers[q.id] || ""}
-                          onChange={(e) => {
-                            let val = e.target.value;
-                            if (isStrictNumeric) {
-                              val = val.replace(/-/g, '');
-                              if (val !== '') {
-                                val = Math.max(0, parseFloat(val) || 0).toString();
-                              }
-                            }
-                            setAnswers({ ...answers, [q.id]: val });
-                          }}
-                          required={q.required}
-                          autoFocus
-                          className={`rounded-lg border-border dark:border-border bg-card dark:bg-background text-foreground dark:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring w-full ${
-                            ['name', 'email', 'phone', 'website', 'amount', 'price'].includes(q.type) || isAlphanumericId ? 'pl-9' : ''
-                          }`}
-                        />
-                      </div>
-                    )}
 
-                    {/* LONG TEXT, FEEDBACK, ADDRESS */}
-                    {(['long_text', 'feedback', 'address', 'paragraph', 'textarea', 'comments', 'description', 'message'].includes(q.type)) && (
-                      <textarea
-                        placeholder="Write detailed response..."
-                        value={answers[q.id] || ""}
-                        onChange={(e) => setAnswers({ ...answers, [q.id]: e.target.value })}
-                        required={q.required}
-                        autoFocus
-                        className="w-full p-3 border border-border dark:border-border bg-card dark:bg-background text-foreground dark:text-foreground rounded-lg text-sm h-28 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      />
-                    )}
+                  <CardContent className="p-0 pt-6 space-y-4">
+                    {renderQuestionControl(q, true)}
 
-                    {/* MCQ, ONE_OPTION, GENDER */}
-                    {(['mcq', 'one_option', 'gender', 'radio', 'single_choice'].includes(q.type)) && (
-                      <div className={q.option_layout === 'horizontal' ? "flex flex-wrap gap-2.5 items-center pt-1" : "space-y-2.5"}>
-                        {(q.options && q.options.length > 0 ? q.options : ['Option 1', 'Option 2', 'Option 3', 'Option 4']).map((opt: string, oIdx: number) => {
-                          const isSelected = answers[q.id] === opt;
-                          return (
-                            <label key={oIdx} className={`flex items-center space-x-2.5 px-3.5 py-2.5 rounded-xl border transition-all cursor-pointer ${
-                              isSelected 
-                                ? 'bg-primary/10 border-primary text-primary font-bold shadow-sm' 
-                                : 'bg-card dark:bg-background border-border/80 text-foreground hover:border-primary/50'
-                            }`}>
-                              <input
-                                type="radio"
-                                name={q.id}
-                                checked={isSelected}
-                                onChange={() => setAnswers({ ...answers, [q.id]: opt })}
-                                required={q.required && !answers[q.id]}
-                                className="text-primary accent-primary focus-visible:ring-ring w-4 h-4 dark:bg-background dark:border-border"
-                              />
-                              <span className="text-xs font-semibold">{opt}</span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    )}
-
-                    {/* CHECKBOX, MULTIPLE_OPTIONS */}
-                    {(['checkbox', 'multiple_options', 'multi_choice', 'checkboxes'].includes(q.type)) && (
-                      <div className={q.option_layout === 'horizontal' ? "flex flex-wrap gap-2.5 items-center pt-1" : "space-y-2.5"}>
-                        {(q.options || ['Option 1', 'Option 2']).map((opt: string, oIdx: number) => {
-                          const currentVals = Array.isArray(answers[q.id]) ? answers[q.id] : (answers[q.id] ? String(answers[q.id]).split(', ') : []);
-                          const isChecked = currentVals.includes(opt);
-                          return (
-                            <label key={oIdx} className={`flex items-center space-x-2.5 px-3.5 py-2.5 rounded-xl border transition-all cursor-pointer ${
-                              isChecked 
-                                ? 'bg-primary/10 border-primary text-primary font-bold shadow-sm' 
-                                : 'bg-card dark:bg-background border-border/80 text-foreground hover:border-primary/50'
-                            }`}>
-                              <input
-                                type="checkbox"
-                                checked={isChecked}
-                                onChange={(e) => {
-                                  let nextVals;
-                                  if (e.target.checked) {
-                                    nextVals = [...currentVals, opt];
-                                  } else {
-                                    nextVals = currentVals.filter((v: string) => v !== opt);
-                                  }
-                                  setAnswers({ ...answers, [q.id]: nextVals.join(', ') });
-                                }}
-                                className="rounded text-primary accent-primary focus-visible:ring-ring w-4 h-4 dark:bg-background dark:border-border"
-                              />
-                              <span className="text-xs font-semibold">{opt}</span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    )}
-
-                    {/* EMOJI SATISFACTION SCALE */}
-                    {(['emoji-satisfaction-scale', 'emoji', 'satisfaction_emoji', 'mood'].includes(q.type)) && (
-                      <div className="grid grid-cols-5 gap-2 items-center pt-2 w-full">
-                        {(q.options && q.options.length > 0 ? q.options : ["🤩 Very Satisfied", "😋 Satisfied", "😐 Neutral", "🙁 Unsatisfied", "🤮 Very Poor"]).map((opt: string, oIdx: number) => {
-                          const isSelected = answers[q.id] === opt;
-                          const parts = opt.split(' ');
-                          const icon = parts[0];
-                          const text = parts.slice(1).join(' ');
-                          return (
-                            <button
-                              key={oIdx}
-                              type="button"
-                              onClick={() => setAnswers({ ...answers, [q.id]: opt })}
-                              className={`flex flex-col items-center justify-center p-3 rounded-2xl border transition-all cursor-pointer text-center ${
-                                isSelected 
-                                  ? 'bg-primary/10 border-primary text-primary font-bold shadow-md scale-105' 
-                                  : 'bg-card dark:bg-background border-border/80 text-foreground hover:border-primary/50'
-                              }`}
-                            >
-                              <span className="text-2xl md:text-3xl mb-1">{icon}</span>
-                              {text && <span className="text-[10px] font-bold truncate w-full">{text}</span>}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-
-                    {/* YES / NO */}
-                    {(['yes_no', 'yes-no', 'boolean', 'toggle'].includes(q.type)) && (
-                      <div className="flex items-center space-x-4 pt-2">
-                        {["👍 Yes", "👎 No"].map((opt: string, oIdx: number) => {
-                          const isSelected = answers[q.id] === opt;
-                          return (
-                            <button
-                              key={oIdx}
-                              type="button"
-                              onClick={() => setAnswers({ ...answers, [q.id]: opt })}
-                              className={`flex-1 py-3 px-4 rounded-2xl border text-sm font-bold transition-all cursor-pointer flex items-center justify-center space-x-2 ${
-                                isSelected 
-                                  ? 'bg-primary/10 border-primary text-primary shadow-md' 
-                                  : 'bg-card dark:bg-background border-border/80 text-foreground hover:border-primary/50'
-                              }`}
-                            >
-                              <span>{opt}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-
-                    {/* RATINGS / STARS */}
-                    {(['rating', 'star_rating', 'star-rating', 'stars', 'satisfaction'].includes(q.type)) && (
-                      <div className="flex items-center justify-center space-x-2 py-3">
-                        {[1, 2, 3, 4, 5].map((starVal) => {
-                          const isSelected = Number(answers[q.id]) >= starVal;
-                          return (
-                            <button
-                              key={starVal}
-                              type="button"
-                              onClick={() => setAnswers({ ...answers, [q.id]: starVal })}
-                              className="p-1.5 transition-all transform hover:scale-110 cursor-pointer"
-                            >
-                              <Star className={`w-8 h-8 ${isSelected ? 'text-amber-400 fill-amber-400 drop-shadow-md' : 'text-muted-foreground/40'}`} />
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-
-                    {/* SIGNATURE PAD */}
-                    {q.type === 'signature' && (
-                      <div className="pt-2">
-                        <QuestionSignaturePad
-                          value={answers[q.id] || ""}
-                          onChange={(val) => setAnswers({ ...answers, [q.id]: val })}
-                        />
-                      </div>
-                    )}
-
-                    {/* FILE UPLOAD, PHOTO, RESUME */}
-                    {(['file_upload', 'photo', 'resume', 'file-uploader', 'document', 'upload', 'file', 'image'].includes(q.type)) && (
-                      <div className="space-y-3 w-full pt-1">
-                        <input
-                          type="file"
-                          accept={q.type === 'photo' ? 'image/*' : q.type === 'resume' ? '.pdf,.doc,.docx' : undefined}
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              if (q.type === 'photo') {
-                                const reader = new FileReader();
-                                reader.onload = () => setAnswers({ ...answers, [q.id]: reader.result });
-                                reader.readAsDataURL(file);
-                              } else {
-                                setAnswers({ ...answers, [q.id]: file.name });
-                              }
-                            }
-                          }}
-                          className="text-xs text-muted-foreground file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer w-full"
-                        />
-                        {answers[q.id] && (
-                          <p className="text-xs text-emerald-600 dark:text-emerald-400 font-bold flex items-center space-x-1.5 bg-emerald-500/10 p-2.5 rounded-xl border border-emerald-500/20">
-                            <span>✓ Attached:</span>
-                            <span className="truncate">{typeof answers[q.id] === 'string' && answers[q.id].startsWith('data:image') ? 'Uploaded Photograph Image' : answers[q.id]}</span>
-                          </p>
-                        )}
-                      </div>
-                    )}
-
-                    {/* DATE, TIME, COLOR */}
-                    {(['date', 'dob', 'birthday', 'date_of_birth', 'birth_date'].includes(q.type)) && (
-                      <Input
-                        type="date"
-                        value={answers[q.id] || ""}
-                        onChange={(e) => setAnswers({ ...answers, [q.id]: e.target.value })}
-                        required={q.required}
-                        className="w-full rounded-xl text-sm"
-                      />
-                    )}
-                    {(['time', 'appointment_time'].includes(q.type)) && (
-                      <Input
-                        type="time"
-                        value={answers[q.id] || ""}
-                        onChange={(e) => setAnswers({ ...answers, [q.id]: e.target.value })}
-                        required={q.required}
-                        className="w-full rounded-xl text-sm"
-                      />
-                    )}
-                    {q.type === 'color' && (
-                      <div className="flex items-center space-x-3">
-                        <input
-                          type="color"
-                          value={answers[q.id] || "#6366f1"}
-                          onChange={(e) => setAnswers({ ...answers, [q.id]: e.target.value })}
-                          className="w-12 h-12 rounded-xl cursor-pointer border border-border"
-                        />
-                        <span className="text-xs font-mono font-bold uppercase">{answers[q.id] || "#6366f1"}</span>
-                      </div>
+                    {hasError && (
+                      <p className="text-xs font-semibold text-rose-600 flex items-center gap-1 animate-fadeIn">
+                        <AlertTriangle className="w-3.5 h-3.5" />
+                        <span>{validationErrors[q.id]}</span>
+                      </p>
                     )}
                   </CardContent>
                 </Card>
               );
             })()}
 
-            {/* Bottom Nav Bar */}
+            {/* Navigation Actions (Desktop and Mobile) */}
             <div className="flex items-center justify-between pt-2">
               <Button
                 type="button"
                 variant="outline"
                 disabled={currentQuestionIndex === 0}
                 onClick={() => {
-                  let prevIdx = currentQuestionIndex - 1;
-                  while (prevIdx >= 0 && !isQuestionVisible(questions[prevIdx], answers)) {
-                    prevIdx--;
-                  }
-                  if (prevIdx >= 0) {
-                    setCurrentQuestionIndex(prevIdx);
+                  if (currentQuestionIndex > 0) {
+                    setCurrentQuestionIndex(currentQuestionIndex - 1);
                   }
                 }}
-                className="px-5 py-2.5 text-xs font-bold flex items-center space-x-2 cursor-pointer"
+                className="h-11 px-5 rounded-xl text-xs font-bold flex items-center gap-1.5"
               >
-                <span>← Previous</span>
+                <ChevronLeft className="w-4 h-4" />
+                <span>Previous</span>
               </Button>
 
-              {currentQuestionIndex < questions.length - 1 ? (
+              {currentQuestionIndex < visibleQuestions.length - 1 ? (
                 <Button
                   type="button"
                   style={{ backgroundColor: primaryColor }}
                   onClick={() => {
-                    const currentQ = questions[currentQuestionIndex];
-                    if (currentQ && currentQ.required && (answers[currentQ.id] === undefined || answers[currentQ.id] === null || String(answers[currentQ.id]).trim() === "" || (Array.isArray(answers[currentQ.id]) && answers[currentQ.id].length === 0))) {
-                      alert(`Please answer "${currentQ.label}" before proceeding.`);
-                      return;
+                    const currentQ = visibleQuestions[currentQuestionIndex];
+                    if (currentQ && currentQ.required) {
+                      const ans = answers[currentQ.id];
+                      if (ans === undefined || ans === null || String(ans).trim() === '' || (Array.isArray(ans) && ans.length === 0)) {
+                        setValidationErrors({ [currentQ.id]: "Please answer this question before continuing" });
+                        return;
+                      }
                     }
-                    let nextIdx = currentQuestionIndex + 1;
-                    while (nextIdx < questions.length && !isQuestionVisible(questions[nextIdx], answers)) {
-                      nextIdx++;
-                    }
-                    if (nextIdx < questions.length) {
-                      setCurrentQuestionIndex(nextIdx);
-                    } else {
-                      setCurrentQuestionIndex(questions.length - 1);
-                    }
+                    setValidationErrors({});
+                    setCurrentQuestionIndex(currentQuestionIndex + 1);
                   }}
-                  className="px-6 py-2.5 text-xs font-bold text-white flex items-center space-x-2 hover:opacity-90 cursor-pointer"
+                  className="h-11 px-6 rounded-xl text-xs font-bold text-white shadow-md flex items-center gap-1.5 hover:opacity-95"
                 >
-                  <span>Next Question →</span>
+                  <span>Next Question</span>
+                  <ChevronRight className="w-4 h-4" />
                 </Button>
               ) : (
                 <Button
@@ -1351,52 +2109,53 @@ export default function PublicFormPage() {
                   onClick={handleSubmitForm}
                   disabled={isSubmitting}
                   style={{ backgroundColor: primaryColor }}
-                  className="px-8 py-2.5 text-xs font-bold text-white flex items-center space-x-2 hover:opacity-90 shadow-md cursor-pointer"
+                  className="h-11 px-8 rounded-xl text-xs font-bold text-white shadow-lg flex items-center gap-2 hover:opacity-95"
                 >
                   <Send className="w-4 h-4" />
-                  <span>{isSubmitting ? 'Submitting Answers...' : 'Submit Final Answers 🚀'}</span>
+                  <span>{isSubmitting ? 'Submitting...' : 'Submit Final Answers'}</span>
                 </Button>
               )}
             </div>
           </div>
-        ) : layoutMode === 'conversational' ? (
-          /* CONVERSATIONAL CHATBOT RESPONDER */
-          <div className="rounded-[24px] border border-border dark:border-border bg-card dark:bg-background shadow-lg overflow-hidden flex flex-col h-[560px]">
+        )}
+
+        {/* ========================================================================= */}
+        {/* MODE 3: AI CONVERSATIONAL CHATBOT VIEW                                   */}
+        {/* ========================================================================= */}
+        {layoutMode === 'conversational' && (
+          <div className="bg-white border border-slate-200 rounded-3xl shadow-xl overflow-hidden flex flex-col h-[580px]">
             {/* Chat header */}
-            <div className="px-5 py-4 border-b border-border dark:border-border bg-muted dark:bg-background flex items-center justify-between">
-              <div className="flex items-center space-x-2.5">
-                <span className="w-8 h-8 rounded-full bg-primary/5 dark:bg-indigo-950/40 text-primary flex items-center justify-center border border-primary/20 dark:border-indigo-900">
+            <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/70 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <span className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold">
                   <Bot className="w-4 h-4" />
                 </span>
                 <div>
-                  <p className="text-xs font-bold text-foreground dark:text-foreground">AI Assistant</p>
-                  <p className="text-[10px] font-bold text-emerald-600">Online • Ready to collect responses</p>
+                  <p className="text-xs font-bold text-slate-900">PromptForm AI Assistant</p>
+                  <p className="text-[10px] text-emerald-600 font-semibold">Active • Collecting responses</p>
                 </div>
               </div>
-              
-              {/* Progress indicator */}
-              <div className="text-right">
-                <p className="text-[10px] font-bold text-muted-foreground dark:text-muted-foreground">Progress</p>
-                <p className="text-xs font-bold text-primary dark:text-primary">
-                  {currentQuestionIndex} / {questions.length} Fields
-                </p>
-              </div>
+              <span className="text-xs font-mono font-bold text-slate-500">
+                {currentQuestionIndex} / {visibleQuestions.length}
+              </span>
             </div>
 
-            {/* Messages timeline */}
-            <div className="flex-1 overflow-y-auto p-5 space-y-4 bg-muted/50 dark:bg-background/20">
+            {/* Chat Message Timeline */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-4 bg-slate-50/40">
               {chatLog.map((msg, mIdx) => {
                 const isBot = msg.sender === 'bot';
                 return (
-                  <div key={mIdx} className={`flex items-start space-x-3.5 ${isBot ? '' : 'flex-row-reverse space-x-reverse'}`}>
-                    <div className={`p-2 rounded-lg flex items-center justify-center flex-shrink-0 ${isBot ? 'bg-primary/5 dark:bg-indigo-950/40 text-indigo-505' : 'bg-accent dark:bg-card text-muted-foreground'}`}>
-                      {isBot ? <Bot className="w-4 h-4" /> : <User className="w-4 h-4" />}
-                    </div>
-                    <div className={`rounded-lg px-4 py-3 text-xs leading-relaxed max-w-[80%] ${
-                      isBot 
-                        ? 'bg-card dark:bg-background border border-border/60 dark:border-border text-foreground dark:text-foreground shadow-sm' 
-                        : 'bg-primary text-white font-medium shadow-sm'
+                  <div key={mIdx} className={`flex items-start gap-3 ${isBot ? '' : 'flex-row-reverse'}`}>
+                    <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-xs ${
+                      isBot ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-200 text-slate-700'
                     }`}>
+                      {isBot ? <Bot className="w-3.5 h-3.5" /> : <User className="w-3.5 h-3.5" />}
+                    </div>
+                    <div className={`rounded-2xl px-4 py-3 text-xs leading-relaxed max-w-[82%] shadow-xs ${
+                      isBot 
+                        ? 'bg-white border border-slate-200/80 text-slate-800' 
+                        : 'bg-indigo-600 text-white font-medium'
+                    }`} style={!isBot ? { backgroundColor: primaryColor } : undefined}>
                       <p className="whitespace-pre-wrap">{msg.text}</p>
                     </div>
                   </div>
@@ -1405,838 +2164,117 @@ export default function PublicFormPage() {
               <div ref={chatEndRef} />
             </div>
 
-            {/* Interactive input area */}
-            <div className="p-4 border-t border-border dark:border-border bg-card dark:bg-background">
-              {currentQuestionIndex < questions.length ? (
+            {/* Input Action Area */}
+            <div className="p-4 border-t border-slate-100 bg-white">
+              {currentQuestionIndex < visibleQuestions.length ? (
                 (() => {
-                  const currentQ = questions[currentQuestionIndex];
-                  return (
-                    <div className="space-y-3.5">
-                      {/* TEXT INPUTS */}
-                      {(['short_text', 'standard-input', 'text', 'name', 'first_name', 'last_name', 'full_name', 'email', 'email_address', 'phone', 'contact', 'mobile', 'telephone', 'website', 'url', 'amount', 'price', 'password', 'number', 'age', 'quantity', 'count'].includes(currentQ.type)) && (
-                        <form onSubmit={(e) => {
-                          e.preventDefault();
-                          const val = (e.currentTarget.elements.namedItem('ans') as HTMLInputElement).value;
-                          handleAnswerSubmit(val);
-                          e.currentTarget.reset();
-                        }} className="flex items-center space-x-2">
-                          <Input
-                            name="ans"
-                            type={currentQ.type === 'email' ? 'email' : currentQ.type === 'phone' ? 'tel' : currentQ.type === 'website' ? 'url' : (currentQ.type === 'amount' || currentQ.type === 'price') ? 'number' : currentQ.type === 'password' ? 'password' : 'text'}
-                            placeholder={currentQ.type === 'password' ? 'Enter secret passcode...' : 'Type your answer...'}
-                            required={currentQ.required}
-                            autoFocus
-                            className="flex-1 rounded-lg text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                          />
-                          <button type="submit" className="p-2.5 rounded-lg bg-primary hover:opacity-90 text-primary-foreground flex items-center justify-center border-none cursor-pointer">
-                            <Send className="w-4 h-4" />
-                          </button>
-                        </form>
-                      )}
+                  const currentQ = visibleQuestions[currentQuestionIndex];
 
-                      {/* LONG TEXT / FEEDBACK / ADDRESS */}
-                      {(['long_text', 'feedback', 'address', 'paragraph', 'textarea', 'comments', 'description', 'message'].includes(currentQ.type)) && (
-                        <form onSubmit={(e) => {
-                          e.preventDefault();
-                          const val = (e.currentTarget.elements.namedItem('ans') as HTMLTextAreaElement).value;
-                          handleAnswerSubmit(val);
-                          e.currentTarget.reset();
-                        }} className="flex flex-col space-y-2">
-                          <textarea
-                            name="ans"
-                            placeholder={currentQ.type === 'address' ? 'Enter full address block...' : 'Type your response...'}
-                            required={currentQ.required}
-                            autoFocus
-                            className="w-full p-3 text-xs border border-border dark:border-border rounded-lg bg-card dark:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring h-20 resize-none"
-                          />
-                          <button type="submit" className="self-end px-4 py-2 bg-primary hover:opacity-90 text-primary-foreground text-[10px] font-bold rounded-lg flex items-center space-x-1.5 border-none cursor-pointer">
-                            <span>Confirm</span>
-                            <Send className="w-3.5 h-3.5" />
-                          </button>
-                        </form>
-                      )}
+                  // If option-based question, display click pills
+                  if (['mcq', 'one_option', 'gender', 'dropdown', 'country', 'radio', 'single_choice', 'select'].includes(currentQ.type)) {
+                    const options = currentQ.options && currentQ.options.length > 0 
+                      ? currentQ.options 
+                      : (currentQ.type === 'gender' ? ['Male', 'Female', 'Other', 'Prefer not to say'] : ['Option 1', 'Option 2']);
 
-                      {/* MCQ, ONE_OPTION, GENDER, DROPDOWN, COUNTRY */}
-                      {(['mcq', 'one_option', 'gender', 'dropdown', 'country', 'radio', 'single_choice', 'select'].includes(currentQ.type)) && (
-                        <div className="flex flex-wrap gap-2 justify-center max-h-40 overflow-y-auto py-1">
-                          {(currentQ.options && currentQ.options.length > 0 
-                            ? currentQ.options 
-                            : (currentQ.type === 'gender' ? ['Male', 'Female', 'Other', 'Prefer not to say'] : (currentQ.type === 'country' ? ['United States', 'India', 'Canada', 'United Kingdom'] : ['Option 1', 'Option 2']))
-                          ).map((opt: string, optIdx: number) => (
+                    return (
+                      <div className="space-y-2">
+                        <p className="text-[11px] font-bold text-slate-400">Select an answer:</p>
+                        <div className="flex flex-wrap gap-2 max-h-36 overflow-y-auto">
+                          {options.map((opt: string, oIdx: number) => (
                             <button
-                              key={optIdx}
+                              key={oIdx}
                               type="button"
-                              onClick={() => handleAnswerSubmit(opt)}
-                              className="px-3.5 py-2 bg-muted/5 hover:bg-primary/5 dark:bg-background dark:hover:bg-primary/10 text-xs font-semibold rounded-lg text-foreground dark:text-foreground border border-border dark:border-border hover:border-primary/50 dark:hover:border-primary/50 transition-all cursor-pointer"
+                              onClick={() => handleChatAnswerSubmit(opt)}
+                              className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-xs font-semibold text-slate-700 border border-slate-200 transition-all cursor-pointer"
                             >
                               {opt}
                             </button>
                           ))}
                         </div>
-                      )}
+                      </div>
+                    );
+                  }
 
-                      {/* CHECKBOX, MULTIPLE_OPTIONS */}
-                      {(['checkbox', 'multiple_options', 'multi_choice', 'checkboxes'].includes(currentQ.type)) && (
-                        <form onSubmit={(e) => {
-                          e.preventDefault();
-                          const checkedOptions: string[] = [];
-                          const formElements = e.currentTarget.elements;
-                          (currentQ.options || ['Option 1', 'Option 2']).forEach((opt: string, oIdx: number) => {
-                            const checkbox = formElements.namedItem('chk_' + oIdx) as HTMLInputElement;
-                            if (checkbox && checkbox.checked) {
-                              checkedOptions.push(opt);
-                            }
-                          });
-                          if (currentQ.required && checkedOptions.length === 0) {
-                            alert("Please select at least one option.");
-                            return;
-                          }
-                          handleAnswerSubmit(checkedOptions.join(', '));
-                        }} className="space-y-3">
-                          <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto">
-                            {(currentQ.options || ['Option 1', 'Option 2']).map((opt: string, oIdx: number) => (
-                              <label key={oIdx} className="flex items-center space-x-2.5 p-2 border border-border dark:border-border rounded-lg hover:bg-muted dark:hover:bg-background cursor-pointer text-left">
-                                <input type="checkbox" name={'chk_' + oIdx} className="rounded text-primary focus-visible:ring-ring w-4 h-4 dark:bg-background dark:border-border" />
-                                <span className="text-xs text-foreground dark:text-foreground font-semibold">{opt}</span>
-                              </label>
-                            ))}
-                          </div>
-                          <button type="submit" className="w-full py-2 bg-primary hover:opacity-90 text-primary-foreground text-[10px] font-bold rounded-lg border-none cursor-pointer">
-                            Confirm Selection
-                          </button>
-                        </form>
-                      )}
-
-                      {/* AGREEMENT */}
-                      {(['agreement', 'consent'].includes(currentQ.type)) && (
-                        <div className="flex flex-col items-center space-y-3">
-                          <button
-                            type="button"
-                            onClick={() => handleAnswerSubmit("Agreed & Signed")}
-                            className="w-full py-3 bg-primary hover:opacity-90 text-primary-foreground text-xs font-bold rounded-lg shadow-sm cursor-pointer border-none"
-                          >
-                            I Agree to Terms & Conditions
-                          </button>
-                        </div>
-                      )}
-
-                      {/* RATINGS / STARS */}
-                      {(['rating', 'star-rating', 'star_rating', 'stars', 'satisfaction'].includes(currentQ.type)) && (
-                        <div className="flex justify-center items-center space-x-1.5 py-2">
-                          {[1, 2, 3, 4, 5].map((starVal) => (
-                            <button
-                              key={starVal}
-                              type="button"
-                              onClick={() => handleAnswerSubmit(starVal + ' Stars')}
-                              className="p-1 text-zinc-300 hover:text-amber-405 transition-colors cursor-pointer"
-                            >
-                              <Star className="w-7 h-7 fill-current" />
-                            </button>
-                          ))}
-                        </div>
-                      )}
-
-                      {/* SIGNATURE PAD */}
-                      {currentQ.type === 'signature' && (
-                        <div className="space-y-3">
-                          <QuestionSignaturePad
-                            value={answers[currentQ.id] || ""}
-                            onChange={(val) => setAnswers({ ...answers, [currentQ.id]: val })}
-                          />
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (!answers[currentQ.id] && currentQ.required) {
-                                alert("Please sign pad before confirming.");
-                                return;
-                              }
-                              handleAnswerSubmit(answers[currentQ.id] || "Signed");
-                            }}
-                            className="w-full py-2 bg-primary hover:opacity-90 text-primary-foreground text-[10px] font-bold rounded-lg border-none cursor-pointer"
-                          >
-                            Confirm Signature
-                          </button>
-                        </div>
-                      )}
-
-                      {/* DATE, TIME, COLOR */}
-                      {(['date', 'dob', 'birthday', 'date_of_birth', 'birth_date', 'time', 'appointment_time', 'color'].includes(currentQ.type)) && (
-                        <form onSubmit={(e) => {
-                          e.preventDefault();
-                          const val = (e.currentTarget.elements.namedItem('ans') as HTMLInputElement).value;
-                          handleAnswerSubmit(val);
-                        }} className="flex items-center space-x-2">
-                          <Input
-                            name="ans"
-                            type={['date', 'dob', 'birthday', 'date_of_birth', 'birth_date'].includes(currentQ.type) ? 'date' : ['time', 'appointment_time'].includes(currentQ.type) ? 'time' : 'color'}
-                            required={currentQ.required}
-                            autoFocus
-                            className="flex-1 rounded-lg text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                          />
-                          <button type="submit" className="px-4 py-2 bg-primary hover:opacity-90 text-primary-foreground text-[10px] font-bold rounded-lg border-none cursor-pointer">
-                            Confirm
-                          </button>
-                        </form>
-                      )}
-
-                      {/* FILE UPLOAD, PHOTO, RESUME */}
-                      {(['file_upload', 'resume', 'photo', 'file-uploader', 'document', 'upload', 'file', 'image'].includes(currentQ.type)) && (
-                        <div className="flex flex-col items-center p-5 border border-dashed border-border dark:border-border rounded-lg space-y-3 bg-muted/50 dark:bg-background/20">
-                          <FileUp className="w-8 h-8 text-muted-foreground" />
-                          <div className="text-center">
-                            <p className="text-xs font-bold text-foreground dark:text-foreground">
-                              Upload your {currentQ.type === 'resume' ? 'CV Document' : currentQ.type === 'photo' ? 'Image/Avatar' : 'file'}
-                            </p>
-                            <p className="text-[10px] text-muted-foreground mt-0.5">Click trigger to choose local folder</p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              handleAnswerSubmit('Uploaded_' + currentQ.type + '_file.ext');
-                            }}
-                            className="px-4 py-1.5 bg-foreground hover:bg-black dark:bg-card dark:hover:bg-zinc-700 text-white rounded-lg text-[10px] font-bold border-none cursor-pointer"
-                          >
-                            Trigger Local Uploader
-                          </button>
-                        </div>
-                      )}
-
-                      {/* LOCATION */}
-                      {(['location', 'location-selector', 'map'].includes(currentQ.type)) && (
-                        <div className="flex flex-col items-center space-y-3 p-4 border border-border dark:border-border rounded-lg">
-                          <MapPin className="w-6 h-6 text-indigo-505 animate-bounce" />
-                          <button
-                            type="button"
-                            onClick={() => handleAnswerSubmit("New York, USA (GPS)")}
-                            className="w-full py-2 bg-primary hover:opacity-90 text-primary-foreground text-[10px] font-bold rounded-lg border-none cursor-pointer"
-                          >
-                            Share Current GPS Location
-                          </button>
-                        </div>
-                      )}
-
-                      {/* PAYMENT SIMULATOR */}
-                      {currentQ.type === 'payment' && (
-                        <div className="flex flex-col space-y-3">
-                          <button
-                            type="button"
-                            onClick={() => handleAnswerSubmit("Paid $10.00 via Credit Card")}
-                            className="w-full py-3 bg-primary hover:opacity-90 text-primary-foreground text-xs font-bold rounded-lg shadow-sm border-none cursor-pointer"
-                          >
-                            Proceed to Payment ($10.00)
-                          </button>
-                        </div>
-                      )}
-
-                      {/* OTP */}
-                      {currentQ.type === 'otp' && (
-                        <form onSubmit={(e) => {
-                          e.preventDefault();
-                          const val = (e.currentTarget.elements.namedItem('ans') as HTMLInputElement).value;
-                          handleAnswerSubmit(val);
-                        }} className="flex items-center space-x-2">
-                          <Input
-                            name="ans"
-                            type="text"
-                            maxLength={6}
-                            placeholder="Enter 6-digit OTP code..."
-                            required={currentQ.required}
-                            autoFocus
-                            className="flex-1 rounded-lg text-center text-xs tracking-widest font-mono font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                          />
-                          <button type="submit" className="px-4 py-2 bg-primary hover:opacity-90 text-primary-foreground text-[10px] font-bold rounded-lg border-none cursor-pointer">
-                            Verify
-                          </button>
-                        </form>
-                      )}
-                    </div>
+                  // Default text input form
+                  return (
+                    <form onSubmit={(e) => {
+                      e.preventDefault();
+                      const val = (e.currentTarget.elements.namedItem('chatAns') as HTMLInputElement).value;
+                      handleChatAnswerSubmit(val);
+                      e.currentTarget.reset();
+                    }} className="flex items-center gap-2">
+                      <input
+                        name="chatAns"
+                        type={currentQ.type === 'email' ? 'email' : currentQ.type === 'phone' ? 'tel' : 'text'}
+                        placeholder="Type your response..."
+                        autoFocus
+                        required={currentQ.required}
+                        className="flex-1 h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-indigo-600"
+                      />
+                      <button
+                        type="submit"
+                        style={{ backgroundColor: primaryColor }}
+                        className="w-11 h-11 rounded-xl text-white flex items-center justify-center border-none cursor-pointer hover:opacity-90"
+                      >
+                        <Send className="w-4 h-4" />
+                      </button>
+                    </form>
                   );
                 })()
               ) : (
-                /* SUBMIT FORM BUTTON IN CHAT */
-                <div className="text-center py-2">
-                  <Button 
-                    onClick={() => handleSubmitForm()}
-                    disabled={isSubmitting}
-                    className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow-lg shadow-emerald-500/10"
-                  >
-                    {isSubmitting ? "Submitting response..." : "Lock & Submit Answers"}
-                  </Button>
-                </div>
+                <Button
+                  onClick={handleSubmitForm}
+                  disabled={isSubmitting}
+                  style={{ backgroundColor: primaryColor }}
+                  className="w-full h-12 text-xs font-bold text-white rounded-xl shadow-md"
+                >
+                  {isSubmitting ? 'Submitting response...' : 'Submit Answers Now 🚀'}
+                </Button>
               )}
             </div>
           </div>
-        ) : (
-          /* TRADITIONAL FORM RESPONDER */
-          <form onSubmit={handleSubmitForm} className="space-y-6">
-            {questions.map((q, idx) => {
-              if (!isQuestionVisible(q)) return null;
-
-              return (
-                <Card key={q.id} className="dark:bg-background dark:border-border">
-                  <CardContent className="pt-6 space-y-3.5">
-                    <p className="text-sm font-bold text-foreground dark:text-foreground">
-                      {idx + 1}. {q.label} {q.required && <span className="text-destructive font-bold">*</span>}
-                    </p>
-                    {/* SHORT TEXT, STANDARD INPUT, NAME, EMAIL, PHONE, WEBSITE, AMOUNT, PRICE */}
-                    {(['short_text', 'standard-input', 'text', 'name', 'first_name', 'last_name', 'full_name', 'email', 'email_address', 'phone', 'contact', 'mobile', 'telephone', 'website', 'url', 'amount', 'price', 'number', 'age', 'quantity', 'count'].includes(q.type)) && (() => {
-                      const isAlphanumericId = /roll|enrollment|student id|id number|registration|code/i.test(q.label || '');
-                      const isStrictNumeric = (q.type === 'amount' || q.type === 'price' || q.type === 'number') && !isAlphanumericId;
-                      const inputType = q.type === 'email' ? 'email' : q.type === 'phone' ? 'tel' : q.type === 'website' ? 'url' : isStrictNumeric ? 'number' : 'text';
-
-                      return (
-                        <div className="relative flex items-center w-full">
-                          {q.type === 'name' && <User className="absolute left-3 w-4 h-4 text-muted-foreground" />}
-                          {q.type === 'email' && <Mail className="absolute left-3 w-4 h-4 text-muted-foreground" />}
-                          {q.type === 'phone' && <Phone className="absolute left-3 w-4 h-4 text-muted-foreground" />}
-                          {q.type === 'website' && <Link className="absolute left-3 w-4 h-4 text-muted-foreground" />}
-                          {(q.type === 'amount' || isAlphanumericId) && <Hash className="absolute left-3 w-4 h-4 text-muted-foreground" />}
-                          {q.type === 'price' && <DollarSign className="absolute left-3 w-4 h-4 text-muted-foreground" />}
-                          <Input
-                            type={inputType}
-                            step={q.type === 'price' ? '0.01' : '0.001'}
-                            min={isStrictNumeric ? 0 : undefined}
-                            onKeyDown={(e) => { if (isStrictNumeric && (e.key === '-' || e.key === 'e')) e.preventDefault(); }}
-                            placeholder={
-                              isAlphanumericId ? 'e.g. 23SE02CSS1199' :
-                              q.type === 'name' ? 'e.g. John Doe' :
-                              q.type === 'email' ? 'e.g. john@example.com' :
-                              q.type === 'phone' ? 'e.g. +1 (555) 000-0000' :
-                              q.type === 'website' ? 'e.g. https://portfolio.com' :
-                              q.type === 'amount' ? 'Enter amount number...' :
-                              q.type === 'price' ? '0.00' :
-                              'Write your answer...'
-                            }
-                            value={answers[q.id] || ""}
-                            onChange={(e) => {
-                              let val = e.target.value;
-                              if (isStrictNumeric) {
-                                val = val.replace(/-/g, '');
-                                if (val !== '') {
-                                  val = Math.max(0, parseFloat(val) || 0).toString();
-                                }
-                              }
-                              setAnswers({ ...answers, [q.id]: val });
-                            }}
-                            required={q.required}
-                            className={`rounded-lg border-border dark:border-border bg-card dark:bg-background text-foreground dark:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring w-full ${
-                              ['name', 'email', 'phone', 'website', 'amount', 'price'].includes(q.type) || isAlphanumericId ? 'pl-9' : ''
-                            }`}
-                          />
-                        </div>
-                      );
-                    })()}
-
-                    {/* PASSWORD FIELD */}
-                    {q.type === 'password' && (
-                      <div className="relative flex items-center w-full">
-                        <Lock className="absolute left-3 w-4 h-4 text-muted-foreground" />
-                        <Input
-                          type={showPasswords[q.id] ? "text" : "password"}
-                          placeholder="Enter password..."
-                          value={answers[q.id] || ""}
-                          onChange={(e) => setAnswers({ ...answers, [q.id]: e.target.value })}
-                          required={q.required}
-                          className="pl-9 pr-10 rounded-lg border-border dark:border-border bg-card dark:bg-background text-foreground dark:text-foreground w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowPasswords({ ...showPasswords, [q.id]: !showPasswords[q.id] })}
-                          className="absolute right-3 text-muted-foreground hover:text-muted-foreground border-none bg-transparent cursor-pointer"
-                        >
-                          {showPasswords[q.id] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        </button>
-                      </div>
-                    )}
-
-                    {/* LONG TEXT, FEEDBACK, ADDRESS */}
-                    {(['long_text', 'feedback', 'address', 'paragraph', 'textarea', 'comments', 'description', 'message'].includes(q.type)) && (
-                      <div className="relative w-full">
-                        {q.type === 'address' && <MapPin className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />}
-                        <textarea
-                          placeholder={
-                            q.type === 'address' ? 'Street Address, Apt, Suite, City, State, ZIP...' :
-                            'Write response details...'
-                          }
-                          value={answers[q.id] || ""}
-                          onChange={(e) => setAnswers({ ...answers, [q.id]: e.target.value })}
-                          required={q.required}
-                          className={`w-full py-2 px-3 border border-border dark:border-border bg-card dark:bg-background text-foreground dark:text-foreground rounded-lg text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring h-24 transition-all ${
-                            q.type === 'address' ? 'pl-9' : 'px-3'
-                          }`}
-                        />
-                      </div>
-                    )}
-
-                    {/* MCQ, ONE_OPTION, GENDER */}
-                    {(['mcq', 'one_option', 'gender', 'radio', 'single_choice'].includes(q.type)) && (
-                      <div className={q.option_layout === 'horizontal' ? "flex flex-wrap gap-2.5 items-center pt-1" : "space-y-2"}>
-                        {(q.options && q.options.length > 0 ? q.options : (q.type === 'gender' ? ['Male', 'Female', 'Other', 'Prefer not to say'] : ['Option 1', 'Option 2'])).map((opt: string, oIdx: number) => {
-                          const isSelected = answers[q.id] === opt;
-                          return (
-                            <label key={oIdx} className={`flex items-center space-x-2.5 px-3.5 py-2 rounded-xl border transition-all cursor-pointer ${
-                              isSelected 
-                                ? 'bg-primary/10 border-primary text-primary font-bold shadow-sm' 
-                                : 'bg-card dark:bg-background border-border/80 text-foreground hover:border-primary/50'
-                            }`}>
-                              <input
-                                type="radio"
-                                name={q.id}
-                                checked={isSelected}
-                                onChange={() => setAnswers({ ...answers, [q.id]: opt })}
-                                required={q.required && !answers[q.id]}
-                                className="text-primary accent-primary focus-visible:ring-ring w-4 h-4 dark:bg-background dark:border-border"
-                              />
-                              <span className="text-xs font-semibold">{opt}</span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    )}
-
-                    {/* CHECKBOX, MULTIPLE_OPTIONS */}
-                    {(['checkbox', 'multiple_options', 'multi_choice', 'checkboxes'].includes(q.type)) && (
-                      <div className={q.option_layout === 'horizontal' ? "flex flex-wrap gap-2.5 items-center pt-1" : "space-y-2"}>
-                        {(q.options || ['Option 1', 'Option 2']).map((opt: string, oIdx: number) => {
-                          const currentVals = Array.isArray(answers[q.id]) ? answers[q.id] : (answers[q.id] ? String(answers[q.id]).split(', ') : []);
-                          const isChecked = currentVals.includes(opt);
-                          return (
-                            <label key={oIdx} className={`flex items-center space-x-2.5 px-3.5 py-2 rounded-xl border transition-all cursor-pointer ${
-                              isChecked 
-                                ? 'bg-primary/10 border-primary text-primary font-bold shadow-sm' 
-                                : 'bg-card dark:bg-background border-border/80 text-foreground hover:border-primary/50'
-                            }`}>
-                              <input
-                                type="checkbox"
-                                checked={isChecked}
-                                onChange={(e) => {
-                                  let nextVals;
-                                  if (e.target.checked) {
-                                    nextVals = [...currentVals, opt];
-                                  } else {
-                                    nextVals = currentVals.filter((v: string) => v !== opt);
-                                  }
-                                  setAnswers({ ...answers, [q.id]: nextVals.join(', ') });
-                                }}
-                                className="rounded text-primary accent-primary focus-visible:ring-ring w-4 h-4 dark:bg-background dark:border-border"
-                              />
-                              <span className="text-xs font-semibold">{opt}</span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    )}
-
-                    {/* DROPDOWN, COUNTRY */}
-                    {(['dropdown', 'country', 'select'].includes(q.type)) && (
-                      <select
-                        value={answers[q.id] || ""}
-                        onChange={(e) => setAnswers({ ...answers, [q.id]: e.target.value })}
-                        required={q.required}
-                        className="w-full px-3 py-2 border bg-card dark:bg-background border-border dark:border-border rounded-lg text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring text-foreground dark:text-foreground"
-                      >
-                        <option value="" disabled>Select option...</option>
-                        {(q.options && q.options.length > 0 ? q.options : (q.type === 'country' ? ['United States', 'India', 'Canada', 'United Kingdom'] : ['Option 1', 'Option 2'])).map((opt: string, oIdx: number) => (
-                          <option key={oIdx} value={opt}>{opt}</option>
-                        ))}
-                      </select>
-                    )}
-
-                    {/* AGREEMENT */}
-                    {(['agreement', 'consent'].includes(q.type)) && (
-                      <label className="flex items-start space-x-3 p-3 rounded-lg border border-border dark:border-border hover:bg-muted dark:hover:bg-card cursor-pointer transition-colors">
-                        <input
-                          type="checkbox"
-                          checked={answers[q.id] === "Agreed & Signed"}
-                          onChange={(e) => setAnswers({ ...answers, [q.id]: e.target.checked ? "Agreed & Signed" : "" })}
-                          required={q.required}
-                          className="rounded text-primary focus-visible:ring-ring w-4 h-4 mt-0.5 dark:bg-background dark:border-border"
-                        />
-                        <span className="text-xs text-muted-foreground dark:text-muted-foreground leading-normal font-semibold">
-                          I agree to the terms of service, privacy policy and consent guidelines.
-                        </span>
-                      </label>
-                    )}
-
-                    {/* EMOJI SATISFACTION SCALE */}
-                    {(['emoji-satisfaction-scale', 'emoji', 'satisfaction_emoji', 'mood'].includes(q.type)) && (
-                      <div className="grid grid-cols-5 gap-2 items-center pt-1.5 w-full">
-                        {(q.options && q.options.length > 0 ? q.options : ["🤩 Very Satisfied", "😋 Satisfied", "😐 Neutral", "🙁 Unsatisfied", "🤮 Very Poor"]).map((opt: string, oIdx: number) => {
-                          const isSelected = answers[q.id] === opt;
-                          const parts = opt.split(' ');
-                          const icon = parts[0];
-                          const text = parts.slice(1).join(' ');
-                          return (
-                            <button
-                              key={oIdx}
-                              type="button"
-                              onClick={() => setAnswers({ ...answers, [q.id]: opt })}
-                              className={`flex flex-col items-center justify-center p-2.5 rounded-2xl border transition-all cursor-pointer text-center ${
-                                isSelected 
-                                  ? 'bg-primary/10 border-primary text-primary font-bold shadow-md scale-105' 
-                                  : 'bg-card dark:bg-background border-border/80 text-foreground hover:border-primary/50'
-                              }`}
-                            >
-                              <span className="text-2xl mb-1">{icon}</span>
-                              {text && <span className="text-[10px] font-bold truncate w-full">{text}</span>}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-
-                    {/* YES / NO */}
-                    {(['yes_no', 'yes-no', 'boolean', 'toggle'].includes(q.type)) && (
-                      <div className="flex items-center space-x-3 pt-1.5">
-                        {["👍 Yes", "👎 No"].map((opt: string, oIdx: number) => {
-                          const isSelected = answers[q.id] === opt;
-                          return (
-                            <button
-                              key={oIdx}
-                              type="button"
-                              onClick={() => setAnswers({ ...answers, [q.id]: opt })}
-                              className={`flex-1 py-2.5 px-4 rounded-xl border text-xs font-bold transition-all cursor-pointer flex items-center justify-center space-x-2 ${
-                                isSelected 
-                                  ? 'bg-primary/10 border-primary text-primary shadow-sm' 
-                                  : 'bg-card dark:bg-background border-border/80 text-foreground hover:border-primary/50'
-                              }`}
-                            >
-                              <span>{opt}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-
-                  {/* RATINGS */}
-                  {(['rating', 'star-rating', 'star_rating', 'stars', 'satisfaction'].includes(q.type)) && (
-                    <div className="flex flex-wrap gap-2.5 justify-center py-2">
-                      {[1, 2, 3, 4, 5].map((star) => (
-                        <button
-                          key={star}
-                          type="button"
-                          onClick={() => setAnswers({ ...answers, [q.id]: star })}
-                          style={{
-                            backgroundColor: answers[q.id] === star ? primaryColor : undefined
-                          }}
-                          className={`w-10 h-10 rounded-full font-bold text-sm transition-all ${
-                            answers[q.id] === star 
-                              ? "text-white shadow-md scale-105" 
-                              : "bg-accent hover:bg-card dark:bg-card dark:hover:bg-card text-foreground dark:text-foreground"
-                          }`}
-                        >
-                          {star}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* SIGNATURE PAD */}
-                  {q.type === 'signature' && (
-                    <QuestionSignaturePad
-                      value={answers[q.id] || ""}
-                      onChange={(val) => setAnswers({ ...answers, [q.id]: val })}
-                    />
-                  )}
-
-                  {/* FILE UPLOAD, RESUME */}
-                  {(['file_upload', 'file-uploader', 'resume', 'document', 'upload', 'file'].includes(q.type)) && (
-                    <div className="space-y-2 w-full">
-                      <input
-                        type="file"
-                        accept={q.type === 'resume' ? '.pdf,.doc,.docx' : undefined}
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            if (q.type === 'resume') {
-                              setAnswers({ ...answers, [q.id]: file.name });
-                            } else {
-                              handleFileUpload(q.id, file);
-                            }
-                          }
-                        }}
-                        className="text-xs text-muted-foreground dark:text-muted-foreground file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-primary/5 file:text-indigo-700 dark:file:bg-indigo-950/30 dark:file:text-indigo-405 hover:file:bg-indigo-100 cursor-pointer w-full"
-                      />
-                      {q.type === 'resume' && <p className="text-[10px] text-muted-foreground">Accepted formats: PDF, DOC, DOCX up to 10MB</p>}
-                      {answers[q.id] && (
-                        <p className="text-xs text-emerald-650 dark:text-emerald-500 font-semibold flex items-center space-x-1">
-                          <span>✓ Attached:</span>
-                          <span className="underline truncate max-w-xs">{answers[q.id]}</span>
-                        </p>
-                      )}
-                    </div>
-                  )}
-
-                  {/* PHOTO UPLOAD */}
-                  {(['photo', 'image'].includes(q.type)) && (
-                    <div className="flex flex-col items-center justify-center border border-dashed border-zinc-300 dark:border-border rounded-lg p-5 bg-muted/50 dark:bg-background/30 text-center relative overflow-hidden w-full">
-                      {answers[q.id] ? (
-                        <div className="space-y-3">
-                          <div className="w-32 h-32 border border-zinc-300 bg-accent dark:bg-card flex items-center justify-center mx-auto overflow-hidden rounded-lg shadow-sm">
-                            <img src={answers[q.id]} alt="Upload Preview" className="w-full h-full object-cover" />
-                          </div>
-                          <p className="text-xs text-emerald-600 dark:text-emerald-450 font-semibold">Photo Attached</p>
-                          <button
-                            type="button"
-                            onClick={() => setAnswers({ ...answers, [q.id]: null })}
-                            className="text-xs text-destructive hover:underline border-none bg-transparent cursor-pointer font-bold"
-                          >
-                            Remove Photo
-                          </button>
-                        </div>
-                      ) : (
-                        <label className="cursor-pointer space-y-2 flex flex-col items-center">
-                          <Image className="w-10 h-10 text-muted-foreground animate-pulse" />
-                          <p className="text-xs font-bold text-foreground dark:text-foreground">Upload Image File</p>
-                          <p className="text-[10px] text-muted-foreground">JPEG, PNG, GIF up to 5MB</p>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (file) {
-                                const reader = new FileReader();
-                                reader.onload = () => {
-                                  setAnswers({ ...answers, [q.id]: reader.result });
-                                };
-                                reader.readAsDataURL(file);
-                              }
-                            }}
-                            className="hidden"
-                          />
-                        </label>
-                      )}
-                    </div>
-                  )}
-
-                  {/* DATE PICKER */}
-                  {(['date', 'dob', 'birthday', 'date_of_birth', 'birth_date'].includes(q.type)) && (
-                    <div className="relative flex items-center w-full">
-                      <Calendar className="absolute left-3 w-4 h-4 text-muted-foreground" />
-                      <Input
-                        type="date"
-                        value={answers[q.id] || ""}
-                        onChange={(e) => setAnswers({ ...answers, [q.id]: e.target.value })}
-                        required={q.required}
-                        className="pl-9 rounded-lg border-border dark:border-border bg-card dark:bg-background text-foreground dark:text-foreground w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      />
-                    </div>
-                  )}
-
-                  {/* TIME PICKER */}
-                  {(['time', 'appointment_time'].includes(q.type)) && (
-                    <div className="relative flex items-center w-full">
-                      <Clock className="absolute left-3 w-4 h-4 text-muted-foreground" />
-                      <Input
-                        type="time"
-                        value={answers[q.id] || ""}
-                        onChange={(e) => setAnswers({ ...answers, [q.id]: e.target.value })}
-                        required={q.required}
-                        className="pl-9 rounded-lg border-border dark:border-border bg-card dark:bg-background text-foreground dark:text-foreground w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      />
-                    </div>
-                  )}
-
-                  {/* COLOR PICKER */}
-                  {q.type === 'color' && (
-                    <div className="flex items-center space-x-3.5">
-                      <input
-                        type="color"
-                        value={answers[q.id] || "#6366f1"}
-                        onChange={(e) => setAnswers({ ...answers, [q.id]: e.target.value })}
-                        className="w-10 h-10 rounded-lg cursor-pointer border border-border dark:border-border bg-transparent"
-                      />
-                      <span className="text-xs font-mono font-bold uppercase tracking-wider text-foreground dark:text-foreground">
-                        Selected Hex: {answers[q.id] || "#6366f1"}
-                      </span>
-                    </div>
-                  )}
-
-                  {/* MAP PICKER / LOCATION */}
-                  {(['location', 'location-selector', 'map'].includes(q.type)) && (
-                    <div className="space-y-3.5 w-full">
-                      <div className="relative flex items-center w-full">
-                        <MapPin className="absolute left-3 w-4 h-4 text-muted-foreground" />
-                        <Input
-                          type="text"
-                          placeholder="Search address location..."
-                          value={answers[q.id] || ""}
-                          onChange={(e) => setAnswers({ ...answers, [q.id]: e.target.value })}
-                          required={q.required}
-                          className="pl-9 rounded-lg border-border dark:border-border bg-card dark:bg-background text-foreground dark:text-foreground w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                        />
-                      </div>
-                      {answers[q.id] && (
-                        <div className="w-full h-32 rounded-lg bg-accent dark:bg-card flex flex-col items-center justify-center text-xs font-bold text-muted-foreground border border-border dark:border-border relative overflow-hidden animate-fadeIn select-none">
-                          <div className="absolute inset-0 bg-sky-200/20 dark:bg-sky-900/10 flex items-center justify-center">
-                            <MapPin className="w-8 h-8 text-destructive animate-bounce" />
-                          </div>
-                          <div className="bg-white/90 dark:bg-slate-900/90 py-1.5 px-3 rounded shadow-sm relative z-10 text-center font-mono max-w-[80%] truncate text-foreground dark:text-foreground">
-                            Lat: 40.7128, Lng: -74.0060 (Mock Map Pin)
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* OTP FIELD */}
-                  {q.type === 'otp' && (
-                    <div className="space-y-2">
-                      <div className="flex space-x-2 justify-start">
-                        {[0, 1, 2, 3, 4, 5].map((digitIdx) => {
-                          const otpVal = answers[q.id] || "";
-                          const val = otpVal[digitIdx] || "";
-                          return (
-                            <input
-                              key={digitIdx}
-                              id={`otp-${q.id}-${digitIdx}`}
-                              type="text"
-                              maxLength={1}
-                              value={val}
-                              onChange={(e) => {
-                                const enteredChar = e.target.value.replace(/[^0-9]/g, "");
-                                const currentOTP = (answers[q.id] || "").split("");
-                                currentOTP[digitIdx] = enteredChar;
-                                const nextOTPStr = currentOTP.join("").slice(0, 6);
-                                setAnswers({ ...answers, [q.id]: nextOTPStr });
-                                if (enteredChar && digitIdx < 5) {
-                                  const nextInput = document.getElementById(`otp-${q.id}-${digitIdx + 1}`);
-                                  if (nextInput) nextInput.focus();
-                                }
-                              }}
-                              onKeyDown={(e) => {
-                                if (e.key === "Backspace" && !val && digitIdx > 0) {
-                                  const prevInput = document.getElementById(`otp-${q.id}-${digitIdx - 1}`);
-                                  if (prevInput) {
-                                    prevInput.focus();
-                                    const currentOTP = (answers[q.id] || "").split("");
-                                    currentOTP[digitIdx - 1] = "";
-                                    setAnswers({ ...answers, [q.id]: currentOTP.join("") });
-                                  }
-                                }
-                              }}
-                              className="w-10 h-12 text-center text-lg font-bold border border-border dark:border-border rounded-lg bg-muted dark:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring text-foreground dark:text-foreground"
-                            />
-                          );
-                        })}
-                      </div>
-                      <p className="text-[10px] text-muted-foreground leading-none">Enter the 6-digit verification code sent to your device.</p>
-                    </div>
-                  )}
-
-                  {/* PAYMENT BLOCK */}
-                  {q.type === 'payment' && (
-                    <div className="border border-border dark:border-border rounded-lg p-4 bg-muted dark:bg-background space-y-3 w-full">
-                      <div className="flex items-center justify-between text-xs text-muted-foreground dark:text-muted-foreground">
-                        <span>Card Information</span>
-                        <CreditCard className="w-4 h-4 text-primary" />
-                      </div>
-                      <input
-                        type="text"
-                        placeholder="Card Number (4242 4242 4242 4242)"
-                        value={answers[q.id]?.cardNumber || ""}
-                        onChange={(e) => setAnswers({ 
-                          ...answers, 
-                          [q.id]: { ...answers[q.id], cardNumber: e.target.value } 
-                        })}
-                        required={q.required}
-                        className="w-full px-3 py-2 bg-card dark:bg-background border border-border dark:border-border rounded-lg text-xs text-foreground dark:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      />
-                      <div className="grid grid-cols-2 gap-3">
-                        <input
-                          type="text"
-                          placeholder="MM/YY"
-                          value={answers[q.id]?.expiry || ""}
-                          onChange={(e) => setAnswers({ 
-                            ...answers, 
-                            [q.id]: { ...answers[q.id], expiry: e.target.value } 
-                          })}
-                          required={q.required}
-                          className="w-full px-3 py-2 bg-card dark:bg-background border border-border dark:border-border rounded-lg text-xs text-foreground dark:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                        />
-                        <input
-                          type="text"
-                          placeholder="CVC"
-                          value={answers[q.id]?.cvc || ""}
-                          onChange={(e) => setAnswers({ 
-                            ...answers, 
-                            [q.id]: { ...answers[q.id], cvc: e.target.value } 
-                          })}
-                          required={q.required}
-                          className="w-full px-3 py-2 bg-card dark:bg-background border border-border dark:border-border rounded-lg text-xs text-foreground dark:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                        />
-                      </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            );
-          })}
-
-          <Card className="dark:bg-background dark:border-border">
-            <CardContent className="pt-6 space-y-4">
-              <div className="flex items-center space-x-2 text-foreground dark:text-foreground font-bold">
-                <PenTool className="w-5 h-5 text-primary" />
-                <span>Verification Signature Pad</span>
-              </div>
-              <p className="text-xs text-muted-foreground dark:text-muted-foreground">Sign in the box below to authorize your response lock.</p>
-              
-              <div className="border border-border dark:border-border rounded-lg overflow-hidden bg-background dark:bg-background">
-                <canvas
-                  ref={canvasRef}
-                  width={600}
-                  height={150}
-                  onMouseDown={startDrawing}
-                  onMouseMove={draw}
-                  onMouseUp={stopDrawing}
-                  onMouseLeave={stopDrawing}
-                  onTouchStart={startDrawingTouch}
-                  onTouchMove={drawTouch}
-                  onTouchEnd={stopDrawing}
-                  className="w-full h-[150px] cursor-crosshair bg-card dark:bg-background"
-                />
-              </div>
-
-              <div className="flex justify-end">
-                <Button type="button" variant="outline" size="sm" onClick={clearSignature} className="text-foreground dark:text-foreground dark:hover:bg-card">
-                  Clear Signature
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Button
-            type="submit"
-            disabled={isSubmitting}
-            style={{ backgroundColor: primaryColor }}
-            className="w-full py-3 text-base space-x-2 text-white hover:opacity-90 active:scale-[0.98] transition-all duration-200"
-          >
-            <Send className="w-5 h-5" />
-            <span>{isSubmitting ? 'Locking submission...' : 'Submit Answers'}</span>
-          </Button>
-         </form>
         )}
-      </div>
 
-      {/* Proctoring Warning Overlay Modal */}
+        {/* Global Footer */}
+        <footer className="mt-12 text-center space-y-1">
+          <p className="text-[11px] text-slate-400">Never submit passwords through PromptForm. Report abuse.</p>
+          <p className="text-xs text-slate-500 font-medium flex items-center justify-center gap-1">
+            Powered by <span className="font-bold text-slate-700">PromptForm</span>
+          </p>
+        </footer>
+      </main>
+
+      {/* Proctor Warning Modal */}
       {proctorWarningOpen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <Card className="max-w-md w-full border-destructive animate-in fade-in zoom-in-95 duration-200">
-            <CardHeader className="text-destructive flex items-center space-x-2 pb-2">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <Card className="max-w-md w-full bg-white rounded-2xl shadow-2xl border-rose-300 animate-in fade-in zoom-in-95">
+            <CardHeader className="flex flex-row items-center gap-2 pb-2 text-rose-600">
               <AlertTriangle className="w-6 h-6 animate-bounce" />
-              <CardTitle className="text-lg font-bold">Proctoring Alert</CardTitle>
+              <CardTitle className="text-base font-bold">Proctor Alert Warning</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <p className="text-sm text-foreground leading-relaxed font-semibold">
+              <p className="text-xs font-semibold text-slate-700 leading-relaxed">
                 {proctorWarningMsg}
               </p>
               <div className="flex justify-end pt-2">
-                <Button 
-                  variant="danger" 
-                  onClick={() => setProctorWarningOpen(false)}
-                >
-                  I Understand & Resume Exam
-                </Button>
+                {tabSwitchCount >= 3 ? (
+                  <Button 
+                    onClick={() => {
+                      setProctorWarningOpen(false);
+                      setSubmitted(true);
+                    }}
+                    className="h-10 px-4 text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white rounded-xl"
+                  >
+                    Close Session
+                  </Button>
+                ) : (
+                  <Button 
+                    onClick={() => setProctorWarningOpen(false)}
+                    className="h-10 px-4 text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white rounded-xl"
+                  >
+                    I Understand & Resume
+                  </Button>
+                )}
               </div>
             </CardContent>
           </Card>
