@@ -6,7 +6,7 @@ import crypto from 'crypto';
 import { db } from '../lib/db';
 import { logger } from '../lib/logger';
 import { authMiddleware, AuthenticatedRequest } from '../middlewares/auth';
-import { registerSchema, loginSchema } from '@promptform/shared';
+import { registerSchema, loginSchema } from '../lib/validations';
 
 const router = Router();
 
