@@ -670,8 +670,8 @@ function DashboardContent() {
                         <Card key={form.id} className="premium-shadow-card flex flex-col justify-between">
                           <CardHeader className="pb-3">
                             <div className="flex justify-between items-start space-x-2">
-                              <CardTitle className="text-sm font-semibold truncate max-w-[170px]">{form.title}</CardTitle>
-                              <span className={`px-2 py-0.5 rounded text-xs font-semibold uppercase ${
+                              <CardTitle className="text-sm font-semibold truncate flex-1 min-w-0">{form.title}</CardTitle>
+                              <span className={`px-2 py-0.5 rounded text-xs font-semibold uppercase shrink-0 ${
                                 form.status === 'PUBLISHED' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300' :
                                 form.status === 'CLOSED' ? 'bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-300' :
                                 'bg-yellow-100 text-yellow-800 dark:bg-yellow-950/40 dark:text-yellow-350'
@@ -694,18 +694,18 @@ function DashboardContent() {
                           </CardContent>
 
                           <CardContent className="pt-3 border-t border-border dark:border-border/80 flex items-center justify-between gap-1 pb-3">
-                            <div className="flex gap-1.5">
-                              <Button variant="outline" size="sm" className="h-7 px-2.5 text-xs" onClick={() => router.push(`/builder/${form.id}`)}>
+                            <div className="flex gap-1.5 flex-wrap">
+                              <Button variant="outline" size="sm" className="h-8 sm:h-7 px-2.5 text-xs" onClick={() => router.push(`/builder/${form.id}`)}>
                                 Edit
                               </Button>
-                              <Button variant="outline" size="sm" className="h-7 px-2.5 text-xs" onClick={() => router.push(`/responses/${form.id}`)}>
+                              <Button variant="outline" size="sm" className="h-8 sm:h-7 px-2.5 text-xs" onClick={() => router.push(`/responses/${form.id}`)}>
                                 Data
                               </Button>
-                              <Button variant="outline" size="sm" className="h-7 px-2.5 text-xs" onClick={() => router.push(`/analytics/${form.id}`)}>
+                              <Button variant="outline" size="sm" className="h-8 sm:h-7 px-2.5 text-xs" onClick={() => router.push(`/analytics/${form.id}`)}>
                                 Charts
                               </Button>
                             </div>
-                            <Button variant="ghost" size="sm" className="p-2 h-7 text-destructive hover:bg-destructive/10 dark:hover:bg-destructive/10" onClick={() => handleDeleteForm(form.id)}>
+                            <Button variant="ghost" size="sm" className="p-2 h-8 sm:h-7 text-destructive hover:bg-destructive/10 dark:hover:bg-destructive/10" onClick={() => handleDeleteForm(form.id)}>
                               <Trash2 className="w-4 h-4" />
                             </Button>
                           </CardContent>
@@ -1112,7 +1112,7 @@ function DashboardContent() {
                         { actor: "admin@promptform.ai", action: "joined marketing workspace team", target: "Marketing Team", time: "2h ago" },
                         { actor: "editor@promptform.ai", action: "created new rating question", target: "Product Feedback quiz", time: "1d ago" }
                       ].map((log, idx) => (
-                        <div key={idx} className="flex justify-between items-center border-b border-border dark:border-border pb-3 text-xs last:border-none">
+                        <div key={idx} className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-2 border-b border-border dark:border-border pb-3 text-xs last:border-none">
                           <div>
                             <span className="font-bold text-foreground dark:text-foreground">{log.actor}</span>
                             <span className="text-muted-foreground mx-1">{log.action} on</span>
@@ -1543,7 +1543,7 @@ function DashboardContent() {
                             <Button 
                               onClick={async () => {
                                 try {
-                                  await api.put('/auth/profile', { subscriptionPlan: 'pro' });
+                                  await api.post('/auth/upgrade', { plan: 'pro' });
                                   alert("Upgraded to Enterprise PRO tier successfully!");
                                   loadDashboardData();
                                 } catch(e) {}
@@ -1568,7 +1568,7 @@ function DashboardContent() {
                       {/* Theme Select */}
                       <div className="space-y-3">
                         <label className="text-sm font-bold text-foreground">Theme Mode</label>
-                        <div className="grid grid-cols-3 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                           {[
                             { id: "light", label: "Light Mode", icon: Sun },
                             { id: "dark", label: "Dark Mode", icon: Moon },

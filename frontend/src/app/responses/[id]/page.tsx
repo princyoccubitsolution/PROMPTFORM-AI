@@ -226,20 +226,20 @@ export default function ResponsesPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background dark:bg-background text-foreground dark:text-slate-100 p-6 md:p-10">
+    <div className="min-h-screen bg-background dark:bg-background text-foreground dark:text-slate-100 p-3 sm:p-6 md:p-10">
       <div className="max-w-6xl mx-auto space-y-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <Button variant="ghost" className="p-2" onClick={() => router.push('/dashboard')}>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center space-x-3 min-w-0">
+            <Button variant="ghost" className="p-2 h-9 w-9 sm:h-10 sm:w-10 shrink-0" onClick={() => router.push('/dashboard')}>
               <ArrowLeft className="w-5 h-5" />
             </Button>
-            <div>
-              <h1 className="text-2xl font-extrabold tracking-tight">{form.title}</h1>
+            <div className="min-w-0 flex-1">
+              <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight truncate">{form.title}</h1>
               <p className="text-xs text-muted-foreground mt-0.5">Response Sheet Logs</p>
             </div>
           </div>
 
-          <div className="flex items-center space-x-3">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             <Button 
               onClick={() => window.open(`/responses/${formId}/print`, '_blank')} 
               className="space-x-1.5"
@@ -422,9 +422,9 @@ export default function ResponsesPage() {
           <div className="relative bg-card dark:bg-zinc-900 border border-border dark:border-border rounded-3xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden shadow-xl z-10 animate-scaleIn">
             
             {/* Modal Header */}
-            <div className="p-5 border-b border-border dark:border-border flex justify-between items-center bg-muted/50 dark:bg-zinc-950/20">
-              <div>
-                <h3 className="text-sm font-bold text-foreground dark:text-foreground truncate max-w-[400px]">
+            <div className="p-4 sm:p-5 border-b border-border dark:border-border flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-muted/50 dark:bg-zinc-950/20">
+              <div className="min-w-0 flex-1">
+                <h3 className="text-sm font-bold text-foreground dark:text-foreground truncate max-w-[240px] sm:max-w-[400px]">
                   {isQuiz ? getStudentName(selectedResponse) : (selectedResponse?.answers?.responder_email || "Anonymous Responder")}
                 </h3>
                 <div className="flex items-center space-x-2 mt-0.5">
@@ -457,7 +457,7 @@ export default function ResponsesPage() {
                 })()}
                 <button 
                   onClick={() => setSelectedResponse(null)}
-                  className="p-1.5 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-lg text-zinc-450 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors cursor-pointer"
+                  className="p-2.5 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-lg text-zinc-450 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors cursor-pointer"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -468,7 +468,7 @@ export default function ResponsesPage() {
             <div className="p-6 overflow-y-auto space-y-6 scrollbar-thin">
               
               {/* Submission Metadata Cards */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="bg-muted/60 dark:bg-zinc-900/40 p-3 rounded-lg border border-border/50 dark:border-border/80">
                   <span className="text-xs font-extrabold text-zinc-455 uppercase tracking-wide">Submitted At</span>
                   <p className="text-xs font-bold text-foreground dark:text-foreground mt-0.5">

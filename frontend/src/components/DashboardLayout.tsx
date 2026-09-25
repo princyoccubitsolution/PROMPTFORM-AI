@@ -133,7 +133,7 @@ export function DashboardLayout({ children, activeTab }: DashboardLayoutProps) {
       <header className="h-16 md:h-18 border-b border-border/70 dark:border-white/10 bg-white/70 dark:bg-black/60 backdrop-blur-2xl px-5 md:px-8 flex items-center justify-between flex-shrink-0 z-30 transition-all duration-300 shadow-xs">
         
         {/* Left: Logo */}
-        <div className="flex items-center justify-start min-w-[170px]">
+        <div className="flex items-center justify-start min-w-0">
           <BrandedLogo size="md" showTagline={false} />
         </div>
 
@@ -174,12 +174,12 @@ export function DashboardLayout({ children, activeTab }: DashboardLayoutProps) {
         </nav>
 
         {/* Right: Actions & Profile */}
-        <div className="flex items-center justify-end space-x-2 min-w-[150px]">
+        <div className="flex items-center justify-end space-x-2 min-w-0">
           
           {/* Search Action Icon */}
           <button 
             onClick={() => setSearchModalOpen(true)}
-            className="w-8 h-8 rounded-xl border border-border/80 dark:border-zinc-800 bg-card/60 dark:bg-zinc-900/60 hover:bg-muted dark:hover:bg-zinc-800 text-muted-foreground transition-all flex items-center justify-center cursor-pointer shadow-2xs relative group"
+            className="w-9 h-9 sm:w-8 sm:h-8 rounded-xl border border-border/80 dark:border-zinc-800 bg-card/60 dark:bg-zinc-900/60 hover:bg-muted dark:hover:bg-zinc-800 text-muted-foreground transition-all flex items-center justify-center cursor-pointer shadow-2xs relative group"
             title="Search... (Ctrl+K)"
           >
             <Search className="w-4 h-4 group-hover:text-primary transition-colors" />
@@ -187,7 +187,7 @@ export function DashboardLayout({ children, activeTab }: DashboardLayoutProps) {
 
           <button 
             onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-            className="w-8 h-8 rounded-xl border border-border/80 dark:border-zinc-800 bg-card/60 dark:bg-zinc-900/60 hover:bg-muted dark:hover:bg-zinc-800 text-muted-foreground dark:text-muted-foreground transition-all flex items-center justify-center cursor-pointer shadow-2xs"
+            className="w-9 h-9 sm:w-8 sm:h-8 rounded-xl border border-border/80 dark:border-zinc-800 bg-card/60 dark:bg-zinc-900/60 hover:bg-muted dark:hover:bg-zinc-800 text-muted-foreground dark:text-muted-foreground transition-all flex items-center justify-center cursor-pointer shadow-2xs"
             aria-label="Toggle theme mode"
           >
             {mounted && theme === 'dark' ? <Sun className="w-4 h-4 text-amber-500" /> : <Moon className="w-4 h-4 text-foreground/80" />}
@@ -196,7 +196,7 @@ export function DashboardLayout({ children, activeTab }: DashboardLayoutProps) {
           <div className="relative" ref={notificationsRef}>
             <button 
               onClick={() => setNotificationsOpen(!notificationsOpen)}
-              className="w-8 h-8 rounded-xl border border-border/80 dark:border-zinc-800 bg-card/60 dark:bg-zinc-900/60 hover:bg-muted dark:hover:bg-zinc-800 text-muted-foreground transition-all flex items-center justify-center relative cursor-pointer shadow-2xs"
+              className="w-9 h-9 sm:w-8 sm:h-8 rounded-xl border border-border/80 dark:border-zinc-800 bg-card/60 dark:bg-zinc-900/60 hover:bg-muted dark:hover:bg-zinc-800 text-muted-foreground transition-all flex items-center justify-center relative cursor-pointer shadow-2xs"
             >
               <Bell className="w-4 h-4 text-foreground/80" />
               <span className="w-2 h-2 rounded-full bg-primary absolute right-1.5 top-1.5 ring-2 ring-background" />
@@ -208,7 +208,7 @@ export function DashboardLayout({ children, activeTab }: DashboardLayoutProps) {
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: 10 }}
-                  className="absolute right-0 mt-2 w-80 bg-card dark:bg-card rounded-2xl border border-border dark:border-border shadow-xl z-50 p-4"
+                  className="absolute right-0 mt-2 w-[calc(100vw-2rem)] max-w-80 sm:w-80 bg-card dark:bg-card rounded-2xl border border-border dark:border-border shadow-xl z-50 p-4"
                 >
                   <div className="flex justify-between items-center mb-3">
                     <span className="font-bold text-sm text-foreground dark:text-foreground">Recent Alerts</span>
@@ -240,7 +240,7 @@ export function DashboardLayout({ children, activeTab }: DashboardLayoutProps) {
           <div className="relative ml-1" ref={userPopoverRef}>
             <button 
               onClick={() => setUserPopoverOpen(!userPopoverOpen)}
-              className="w-8 h-8 rounded-xl bg-primary flex items-center justify-center font-bold text-xs text-primary-foreground shadow-sm cursor-pointer hover:scale-105 active:scale-95 transition-all duration-200 select-none border border-border/80 dark:border-zinc-800"
+              className="w-9 h-9 sm:w-8 sm:h-8 rounded-xl bg-primary flex items-center justify-center font-bold text-xs text-primary-foreground shadow-sm cursor-pointer hover:scale-105 active:scale-95 transition-all duration-200 select-none border border-border/80 dark:border-zinc-800"
             >
               {user?.name ? user.name[0].toUpperCase() : user?.email ? user.email[0].toUpperCase() : "U"}
             </button>
@@ -296,7 +296,7 @@ export function DashboardLayout({ children, activeTab }: DashboardLayoutProps) {
 
           <button 
             onClick={() => setMobileSidebarOpen(!mobileSidebarOpen)}
-            className="md:hidden w-8 h-8 rounded-xl border border-border/80 dark:border-zinc-800 bg-card/60 dark:bg-zinc-900/60 hover:bg-muted text-muted-foreground transition-all flex items-center justify-center ml-1"
+            className="md:hidden w-9 h-9 sm:w-8 sm:h-8 rounded-xl border border-border/80 dark:border-zinc-800 bg-card/60 dark:bg-zinc-900/60 hover:bg-muted text-muted-foreground transition-all flex items-center justify-center ml-1"
           >
             {mobileSidebarOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
           </button>
@@ -310,7 +310,7 @@ export function DashboardLayout({ children, activeTab }: DashboardLayoutProps) {
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            className="md:hidden border-b border-border/80 bg-card overflow-hidden flex-shrink-0 z-10"
+            className="md:hidden border-b border-border/80 bg-card max-h-[calc(100vh-4.5rem)] overflow-y-auto flex-shrink-0 z-10"
           >
             <div className="p-3 space-y-1">
               {[

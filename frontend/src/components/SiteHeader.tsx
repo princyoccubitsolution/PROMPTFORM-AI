@@ -64,11 +64,11 @@ export const SiteHeader = ({
           {/* Left: Brand / Back / Custom Action */}
           <div className="flex items-center gap-3">
             {leftAction ? (
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 min-w-0 flex-1">
                 {leftAction}
                 {title && (
-                  <div className="flex flex-col">
-                    <span className="font-bold text-base text-foreground leading-tight">
+                  <div className="flex flex-col min-w-0">
+                    <span className="font-bold text-base text-foreground leading-tight truncate">
                       {title}
                     </span>
                     {subtitle && (
@@ -124,7 +124,7 @@ export const SiteHeader = ({
             {/* Theme Toggle */}
             <button
               onClick={toggleTheme}
-              className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl border border-border bg-card hover:bg-secondary text-foreground transition-all flex items-center justify-center cursor-pointer shadow-2xs hover:border-primary/40"
+              className="w-10 h-10 rounded-xl border border-border bg-card hover:bg-secondary text-foreground transition-all flex items-center justify-center cursor-pointer shadow-2xs hover:border-primary/40"
               aria-label="Toggle theme mode"
             >
               {mounted && theme === "dark" ? (
@@ -169,7 +169,7 @@ export const SiteHeader = ({
             {/* Mobile Hamburger Menu Toggle */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="md:hidden w-9 h-9 rounded-xl border border-border bg-card hover:bg-secondary text-foreground flex items-center justify-center transition-all cursor-pointer"
+              className="md:hidden w-10 h-10 rounded-xl border border-border bg-card hover:bg-secondary text-foreground flex items-center justify-center transition-all cursor-pointer"
               aria-label="Open mobile menu"
             >
               {mobileMenuOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
@@ -179,7 +179,7 @@ export const SiteHeader = ({
 
         {/* Mobile Dropdown Menu */}
         {mobileMenuOpen && (
-          <div className="md:hidden border-t border-border bg-card px-4 py-4 space-y-3 shadow-lg animate-in slide-in-from-top-2 duration-150">
+          <div className="md:hidden border-t border-border bg-card px-4 py-4 space-y-3 shadow-lg animate-in slide-in-from-top-2 duration-150 max-h-[calc(100vh-4rem)] overflow-y-auto">
             {showNav && (
               <div className="space-y-1 pb-2 border-b border-border">
                 {navLinks.map((link) => (

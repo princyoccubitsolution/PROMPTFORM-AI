@@ -1,12 +1,13 @@
 export function getBaseUrl(): string {
-  if (process.env.NEXT_PUBLIC_API_URL) {
-    return process.env.NEXT_PUBLIC_API_URL;
-  }
-  if (typeof window !== 'undefined') {
+  let url = process.env.NEXT_PUBLIC_API_URL;
+  if (!url && typeof window !== 'undefined') {
     const host = window.location.hostname || '127.0.0.1';
-    return `http://${host}:5050/api`;
+    url = `http://${host}:5050/api`;
   }
-  return 'http://127.0.0.1:5050/api';
+  if (!url) {
+    url = 'http://127.0.0.1:5050/api';
+  }
+  return url.replace(/\/+$/, '');
 }
 
 export const BASE_URL = getBaseUrl();

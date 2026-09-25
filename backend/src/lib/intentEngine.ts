@@ -160,10 +160,19 @@ function extractTopic(normalized: string): string {
     }
   }
 
-  // Clean fallback from prompt
-  const cleanedPrompt = normalized.replace(/\b(create|make|generate|build|form|survey|quiz|test|exam|created|built|please|for|a|an|the)\b/gi, "").trim();
-  if (cleanedPrompt.length > 2) {
-    return cleanedPrompt.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+  // Clean fallback from prompt: remove instructions and cut off at conjunctions
+  let cleanedPrompt = normalized
+    .replace(/\b(create|make|generate|build|please\s+create|please\s+build|please\s+generate|form|survey|quiz|test|exam|created|built|please|for|a|an|the|modern)\b/gi, "")
+    .trim();
+
+  // Cut off at conjunctions (with, using, containing, use, include, etc.)
+  cleanedPrompt = cleanedPrompt.split(/\b(with|using|use|containing|include|including|having|after|where|for|and|by|based\s+on)\b/i)[0].trim();
+  cleanedPrompt = cleanedPrompt.replace(/\b(smart\s+field\s+types|required\s+validation|conditional\s+questions|clean\s+responsive\s+layout|booking\s+confirmation|after\s+submission|net\s+promoter\s+score|nps|rating\s+scales|anti[\s\-]?cheat|timer\s+limit|mcq|mcqs|general|structured)\b/gi, '').trim();
+
+  let words = cleanedPrompt.split(/\s+/).filter(w => w.length > 1 && !["this", "id", "remove", "field", "form", "option"].includes(w.toLowerCase()));
+  if (words.length > 0) {
+    if (words.length > 4) words = words.slice(0, 4);
+    return words.map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
   }
 
   return "General Subject";

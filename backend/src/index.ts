@@ -38,20 +38,30 @@ app.use(helmet({
   crossOriginResourcePolicy: false // Allows files to be fetched from public folders by frontend
 }));
 
-// CORS Configuration with strict environment-aware whitelists
-const allowedOrigins = process.env.NODE_ENV === 'production'
-  ? [process.env.FRONTEND_URL].filter(Boolean) as string[]
-  : ['http://localhost:4500', 'http://127.0.0.1:4500', 'http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:5050', 'http://127.0.0.1:5050'];
+const sanitizeOrigin = (url?: string) => url ? url.replace(/\/+$/, '') : '';
+const envFrontendUrl = sanitizeOrigin(process.env.FRONTEND_URL);
+
+const allowedOrigins = [
+  envFrontendUrl,
+  'https://promptform-ai-frontend.vercel.app',
+  'http://localhost:4500',
+  'http://127.0.0.1:4500',
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+  'http://localhost:5050',
+  'http://127.0.0.1:5050'
+].filter(Boolean);
 
 const isLocalOrigin = (origin: string): boolean => {
+  const cleanOrigin = sanitizeOrigin(origin);
   if (process.env.NODE_ENV === 'production') {
-    return allowedOrigins.includes(origin);
+    return allowedOrigins.includes(cleanOrigin) || cleanOrigin.endsWith('.vercel.app');
   }
   return (
-    !origin ||
-    origin.includes('localhost') ||
-    origin.includes('127.0.0.1') ||
-    allowedOrigins.includes(origin)
+    !cleanOrigin ||
+    cleanOrigin.includes('localhost') ||
+    cleanOrigin.includes('127.0.0.1') ||
+    allowedOrigins.includes(cleanOrigin)
   );
 };
 

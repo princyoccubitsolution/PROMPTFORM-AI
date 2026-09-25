@@ -290,7 +290,7 @@ export default function AIPage() {
                     className="flex flex-col items-center justify-center p-2 rounded-xl border border-border bg-card hover:bg-primary/10 hover:border-primary/40 transition-all cursor-pointer shadow-xs text-center group/emoji overflow-hidden"
                   >
                     <span className="text-lg md:text-xl group-hover/emoji:scale-110 transition-transform">{icon}</span>
-                    {text && <span className="text-[10px] font-bold text-muted-foreground truncate w-full mt-0.5">{text}</span>}
+                    {text && <span className="text-[10px] font-bold text-muted-foreground truncate w-full mt-0.5 hidden sm:inline-block">{text}</span>}
                   </button>
                 );
               })}
@@ -598,7 +598,7 @@ export default function AIPage() {
 
   return (
     <DashboardLayout activeTab="ai_generator">
-      <div className="flex-1 overflow-y-auto p-6 md:p-8 scrollbar-thin">
+      <div className="flex-1 overflow-y-auto p-3 sm:p-6 md:p-8 scrollbar-thin">
         <div className="max-w-7xl mx-auto space-y-8">
           
           {/* Header Title Banner */}
@@ -617,7 +617,7 @@ export default function AIPage() {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
             
             {/* LEFT COLUMN: Generator Controls (6 cols on LG) */}
-            <div className="lg:col-span-6 flex flex-col bg-card border border-border rounded-2xl p-6 shadow-card space-y-6">
+            <div className="lg:col-span-6 flex flex-col bg-card border border-border rounded-2xl p-4 sm:p-6 shadow-card space-y-6">
               
               {/* Mode Switcher Tabs */}
               <div className="flex items-center justify-between min-h-[44px] border-b border-border pb-4">

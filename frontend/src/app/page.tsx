@@ -184,7 +184,7 @@ export default function LandingPage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2, duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-            className="mt-6 text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight text-foreground leading-[1.05] max-w-5xl mx-auto"
+            className="mt-6 text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight text-foreground leading-[1.05] max-w-5xl mx-auto"
           >
             Build any form, quiz, or survey <br className="hidden sm:inline" />
             <span className="text-primary">
@@ -261,7 +261,7 @@ export default function LandingPage() {
               </div>
 
               {/* Browser Content */}
-              <div className="p-8 md:p-12 space-y-6 bg-card">
+              <div className="p-4 sm:p-8 md:p-12 space-y-6 bg-card">
                 
                 {/* AI Prompt Input Bar with dynamic Typing Carousel */}
                 <div className="border border-border bg-muted/30 rounded-2xl p-5 flex items-start space-x-4">
@@ -546,7 +546,7 @@ export default function LandingPage() {
                 {activeAITab === 'smart_scan' && (
                   <div className="space-y-6 animate-fadeIn">
                     <div className="text-xs font-bold text-primary uppercase tracking-wider">Smart Scan Fields Map</div>
-                    <div className="grid grid-cols-2 gap-4 text-xs font-sans">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-xs font-sans">
                       <div className="border border-border p-3 rounded-xl space-y-1 bg-card">
                         <div className="text-[10px] text-muted-foreground">Respondent uploads ID</div>
                         <div className="w-full h-12 bg-muted rounded-lg flex items-center justify-center font-bold text-muted-foreground select-none">LICENSE.JPG</div>
@@ -644,8 +644,8 @@ export default function LandingPage() {
 
           {/* Marquee with large cinematic cards */}
           <div className="relative w-full">
-            <div className="absolute left-0 top-0 bottom-0 w-32 bg-gradient-to-r from-zinc-950 to-transparent z-10 pointer-events-none" />
-            <div className="absolute right-0 top-0 bottom-0 w-32 bg-gradient-to-l from-zinc-950 to-transparent z-10 pointer-events-none" />
+            <div className="absolute left-0 top-0 bottom-0 w-8 sm:w-16 md:w-32 bg-gradient-to-r from-zinc-950 to-transparent z-10 pointer-events-none" />
+            <div className="absolute right-0 top-0 bottom-0 w-8 sm:w-16 md:w-32 bg-gradient-to-l from-zinc-950 to-transparent z-10 pointer-events-none" />
 
             <div className="flex w-max animate-marquee">
               {[
@@ -667,8 +667,8 @@ export default function LandingPage() {
                 { title: 'Wedding RSVP', img: '/templates/wedding.jpg' },
                 { title: 'Quiz Assessment', img: '/templates/quiz.jpg' },
               ]).map((t, i) => (
-                <div key={`tpl-${i}`} className="shrink-0 w-[420px] mx-3 group cursor-pointer">
-                  <div className="relative h-[280px] rounded-2xl overflow-hidden shadow-2xl shadow-black/40 hover:shadow-black/60 hover:scale-[1.02] transition-all duration-300">
+                <div key={`tpl-${i}`} className="shrink-0 w-[280px] sm:w-[340px] md:w-[420px] mx-3 group cursor-pointer">
+                  <div className="relative h-[190px] sm:h-[230px] md:h-[280px] rounded-2xl overflow-hidden shadow-2xl shadow-black/40 hover:shadow-black/60 hover:scale-[1.02] transition-all duration-300">
                     {/* Full-cover template preview image */}
                     <img 
                       src={t.img} 
@@ -1028,7 +1028,7 @@ export default function LandingPage() {
           <div className="relative w-full max-w-md bg-card border border-border rounded-2xl p-6 shadow-2xl animate-scaleIn">
             <button
               onClick={resetPlanFinder}
-              className="absolute top-4 right-4 p-1.5 rounded-full hover:bg-accent text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
+              className="absolute top-4 right-4 p-2.5 rounded-full hover:bg-accent text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
             >
               <X className="w-4 h-4" />
             </button>

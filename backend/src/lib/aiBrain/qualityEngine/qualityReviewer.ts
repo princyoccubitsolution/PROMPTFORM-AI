@@ -12,12 +12,22 @@ import { AutoImprover } from './autoImprover';
 import { QualityScoreEngine } from './qualityScore';
 import { EnterpriseReviewer } from './enterpriseReviewer';
 
+import { sanitizeFormTitle } from '../../titleSanitizer';
+
 export class EnterpriseQualityReviewer {
   static reviewAndImprove(formConfig: any): any {
     let questions = Array.isArray(formConfig.questions) ? [...formConfig.questions] : [];
     let config = { ...formConfig, questions };
 
     const autoFixesApplied: string[] = [];
+
+    // Ensure form title is clean, concise, smart and topic-related (2-4 words max)
+    if (config.title) {
+      const sanitized = sanitizeFormTitle(config.title, undefined, config.understandingSummary?.topic);
+      if (sanitized) {
+        config.title = sanitized;
+      }
+    }
 
     // 1. Audit logic loops
     const logicCycles = LogicChecker.checkCircularLogic(config.questions);

@@ -1,5 +1,6 @@
 import { IFieldPlan } from '../fieldIntelligence/interfaces';
 import { IFormLayout } from './interfaces';
+import { sanitizeFormTitle } from '../../titleSanitizer';
 
 export class JsonAssembler {
   static assemble(plan: IFieldPlan, layout: IFormLayout, flatQuestions: any[]): any {
@@ -39,6 +40,8 @@ export class JsonAssembler {
         formTitle = "Patient Intake & Medical Form";
       } else if (text.includes("event") || text.includes("rsvp") || text.includes("conference")) {
         formTitle = "Event Registration & RSVP";
+      } else if (text.includes("travel") || text.includes("booking")) {
+        formTitle = "Travel Booking Request Form";
       } else {
         let topicClean = (plan.normalizedPrompt || "")
           .replace(/\b(\d+[\s\-]question|\d+|\d+\-question|create|make|generate|build|form|survey|quiz|test|exam|created|built|please|for|a|an|the|around|questions|form type|feedback|intake|application|rsvp|medical|with|net promoter score|net|promoter|score|rating|ratings|scale|scales|and|or|set|minutes|timer|anti[\s\-]?cheat|add|marks|options|exact|correct|answers|this|id|number|field|remove)\b/gi, "")
@@ -46,10 +49,15 @@ export class JsonAssembler {
           .replace(/[\-\_\.]+/g, " ")
           .replace(/\s+/g, " ")
           .trim();
+
+        // Cut off instructions after conjunctions
+        topicClean = topicClean.split(/\b(with|using|use|containing|include|including|having|after|where|for|by|based\s+on)\b/i)[0].trim();
+
         let topicName = "";
         if (topicClean.length > 1) {
-          const words = topicClean.split(/\s+/).filter(w => w.length > 1 && !["this", "id", "remove", "field"].includes(w.toLowerCase()));
-          if (words.length > 0 && words.length <= 4) {
+          let words = topicClean.split(/\s+/).filter(w => w.length > 1 && !["this", "id", "remove", "field"].includes(w.toLowerCase()));
+          if (words.length > 0) {
+            if (words.length > 4) words = words.slice(0, 4);
             topicName = words.map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
           }
         }
@@ -61,6 +69,7 @@ export class JsonAssembler {
                       text.includes("node") ? "Node.js" :
                       text.includes("coffee") ? "Coffee Shop" :
                       text.includes("dentist") || text.includes("dental") ? "Dentistry" :
+                      text.includes("travel") || text.includes("booking") ? "Travel Booking" :
                       text.includes("food") || text.includes("restaurant") ? "Food & Dining" : "Topic";
         }
 
@@ -79,6 +88,9 @@ export class JsonAssembler {
         }
       }
     }
+
+    // Always sanitize formTitle to guarantee smart, sleek 2-4 word human title
+    formTitle = sanitizeFormTitle(formTitle, plan.normalizedPrompt);
 
     // Determine Topic-Specific Niche Theme (Matching HSL / Brand niche rules)
     let themeName = "royal-blue-education";

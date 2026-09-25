@@ -193,9 +193,11 @@ export default function RegisterPage() {
                 <Lock className="absolute left-3.5 top-3.5 w-4 h-4 text-muted-foreground" />
                 <input
                   type={showPassword ? 'text' : 'password'}
-                  placeholder="Password"
+                  placeholder="Password (6-8 chars)"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  minLength={6}
+                  maxLength={8}
                   required
                   className={inputCls}
                   style={autofillStyle}
@@ -211,6 +213,8 @@ export default function RegisterPage() {
                   placeholder="Confirm"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
+                  minLength={6}
+                  maxLength={8}
                   required
                   className={inputCls}
                   style={autofillStyle}

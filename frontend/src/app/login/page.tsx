@@ -154,6 +154,8 @@ function LoginContent() {
                 placeholder="Password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                minLength={6}
+                maxLength={8}
                 required
                 className="w-full pl-10 pr-10 h-11 text-sm font-medium rounded-xl bg-card dark:bg-card/70 border border-border text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all shadow-2xs"
                 style={{
