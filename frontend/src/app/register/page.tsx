@@ -111,11 +111,7 @@ export default function RegisterPage() {
 
   if (!mounted) return null;
 
-  const inputCls = "w-full pl-10 pr-4 h-11 text-sm font-medium rounded-xl bg-card dark:bg-card/70 border border-border text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all shadow-2xs";
-  const autofillStyle = {
-    WebkitTextFillColor: theme === 'dark' ? '#f8fafc' : '#0f172a',
-    transition: 'background-color 5000s ease-in-out 0s'
-  };
+  const inputCls = "w-full pl-10 pr-4 h-11 text-sm font-medium rounded-xl bg-card dark:bg-card/90 border border-border text-foreground dark:text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary transition-all shadow-2xs";
 
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 relative overflow-hidden transition-colors duration-200">
@@ -137,7 +133,7 @@ export default function RegisterPage() {
 
         {/* Error */}
         {error && (
-          <div className="p-3 bg-destructive/10 border border-destructive/20 text-destructive text-xs rounded-xl font-medium">
+          <div className="p-3.5 bg-destructive/15 border border-destructive/30 text-destructive dark:text-red-400 text-xs rounded-xl font-semibold leading-relaxed shadow-2xs">
             {error}
           </div>
         )}
@@ -182,7 +178,6 @@ export default function RegisterPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 className={inputCls}
-                style={autofillStyle}
               />
             </div>
           </div>
@@ -193,14 +188,13 @@ export default function RegisterPage() {
                 <Lock className="absolute left-3.5 top-3.5 w-4 h-4 text-muted-foreground" />
                 <input
                   type={showPassword ? 'text' : 'password'}
-                  placeholder="Password (6-8 chars)"
+                  placeholder="Password (min 6 chars)"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   minLength={6}
-                  maxLength={8}
+                  maxLength={100}
                   required
                   className={inputCls}
-                  style={autofillStyle}
                 />
               </div>
             </div>
@@ -210,14 +204,13 @@ export default function RegisterPage() {
                 <Lock className="absolute left-3.5 top-3.5 w-4 h-4 text-muted-foreground" />
                 <input
                   type={showPassword ? 'text' : 'password'}
-                  placeholder="Confirm"
+                  placeholder="Confirm password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   minLength={6}
-                  maxLength={8}
+                  maxLength={100}
                   required
                   className={inputCls}
-                  style={autofillStyle}
                 />
               </div>
             </div>
@@ -231,15 +224,15 @@ export default function RegisterPage() {
                 checked={acceptTerms}
                 onChange={() => setAcceptTerms(!acceptTerms)}
                 required
-                className="rounded border-border bg-card text-primary focus:ring-primary/20 w-4 h-4"
+                className="rounded border-border bg-card text-primary focus:ring-primary/20 w-4 h-4 cursor-pointer"
               />
-              <span>I accept Terms & Privacy</span>
+              <span className="font-medium">I accept Terms & Privacy</span>
             </label>
             
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
-              className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1 font-medium"
+              className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1 font-semibold cursor-pointer"
             >
               {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
               <span>{showPassword ? "Hide" : "Show"}</span>
@@ -249,7 +242,7 @@ export default function RegisterPage() {
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full h-11 rounded-xl font-semibold text-sm bg-primary hover:opacity-90 text-primary-foreground shadow-sm transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-50 active:scale-[0.98]"
+            className="w-full h-11 rounded-xl font-bold text-sm bg-primary hover:opacity-90 text-primary-foreground shadow-md shadow-primary/20 transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-50 active:scale-[0.98] cursor-pointer"
           >
             <span>{isLoading ? 'Creating account...' : 'Create Account'}</span>
             {!isLoading && <ArrowRight className="w-4 h-4" />}

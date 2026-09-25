@@ -16,7 +16,7 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
         )}
         <select
           ref={ref}
-          className={`w-full h-10 px-3.5 pr-10 text-sm border rounded-xl bg-card dark:bg-card/70 text-foreground transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary cursor-pointer shadow-2xs ${
+          className={`w-full h-10 px-3.5 pr-10 text-sm border rounded-xl bg-card dark:bg-card/90 text-foreground dark:text-foreground transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary cursor-pointer shadow-2xs ${
             error ? "border-destructive focus:ring-destructive/20 focus:border-destructive" : "border-border hover:border-primary/40"
           } ${className}`}
           {...props}

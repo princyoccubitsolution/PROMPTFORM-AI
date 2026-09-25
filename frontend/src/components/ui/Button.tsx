@@ -11,11 +11,11 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     const base = "inline-flex items-center justify-center font-semibold transition-all duration-200 outline-none focus:outline-none focus-visible:outline-none focus:ring-2 focus:ring-primary/20 focus-visible:ring-2 focus-visible:ring-primary/20 disabled:opacity-50 disabled:pointer-events-none active:scale-[0.98] cursor-pointer select-none";
     
     const variants: Record<string, string> = {
-      primary: "bg-primary text-primary-foreground shadow-sm hover:opacity-90 active:opacity-100",
-      secondary: "bg-secondary text-secondary-foreground border border-border hover:bg-muted active:bg-muted/80",
-      outline: "border border-border bg-card/60 dark:bg-card/40 text-foreground hover:bg-muted hover:border-primary/40",
-      ghost: "text-muted-foreground hover:bg-muted hover:text-foreground",
-      danger: "bg-destructive text-destructive-foreground shadow-sm hover:opacity-90",
+      primary: "bg-primary text-primary-foreground font-bold shadow-sm hover:opacity-90 active:opacity-100",
+      secondary: "bg-secondary text-secondary-foreground border border-border hover:bg-muted active:bg-muted/80 font-semibold",
+      outline: "border border-border bg-card/60 dark:bg-card/80 text-foreground hover:bg-muted hover:border-primary/40 font-semibold",
+      ghost: "text-muted-foreground hover:bg-muted hover:text-foreground font-medium",
+      danger: "bg-destructive text-destructive-foreground font-bold shadow-sm hover:opacity-90",
     };
 
     const sizes: Record<string, string> = {

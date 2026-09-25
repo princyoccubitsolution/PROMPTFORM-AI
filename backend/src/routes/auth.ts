@@ -69,7 +69,8 @@ router.post('/register', async (req: Request, res: Response) => {
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return res.status(400).json({ error: 'Validation failed', details: error.errors });
+      const firstMsg = error.errors[0]?.message || 'Validation failed';
+      return res.status(400).json({ error: firstMsg, details: error.errors });
     }
     return res.status(500).json({ error: 'Internal server error' });
   }

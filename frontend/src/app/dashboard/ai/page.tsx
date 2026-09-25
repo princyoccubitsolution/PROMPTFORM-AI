@@ -29,6 +29,7 @@ export default function AIPage() {
   const [optionLayout, setOptionLayout] = useState<'vertical' | 'horizontal'>('horizontal');
   const [displayMode, setDisplayMode] = useState<'full' | 'wizard' | 'chat'>('full');
   const [previewStepIndex, setPreviewStepIndex] = useState<number>(0);
+  const chatContainerRef = React.useRef<HTMLDivElement>(null);
 
   const updateSavedDisplayMode = async (newMode: 'full' | 'wizard' | 'chat') => {
     setDisplayMode(newMode);
@@ -46,6 +47,21 @@ export default function AIPage() {
   const [generatedForm, setGeneratedForm] = useState<any>(null);
   const [shareModalOpen, setShareModalOpen] = useState(false);
 
+  // Demo preview form when explicitly requested to view sample demo
+  const [showSampleDemo, setShowSampleDemo] = useState(false);
+
+  // Auto-reset preview step index when form or mode changes
+  useEffect(() => {
+    setPreviewStepIndex(0);
+  }, [generatedForm?.id, showSampleDemo, displayMode]);
+
+  // Auto-scroll chat container to bottom when step advances
+  useEffect(() => {
+    if (displayMode === 'chat' && chatContainerRef.current) {
+      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+    }
+  }, [previewStepIndex, displayMode, generatedForm, showSampleDemo]);
+
   useEffect(() => {
     setMounted(true);
     const initialPrompt = typeof window !== 'undefined' ? localStorage.getItem('promptform_initial_ai_prompt') : null;
@@ -61,9 +77,6 @@ export default function AIPage() {
     { title: "NPS Customer Survey", text: "Create a customer feedback survey with net promoter score and rating scales" },
     { title: "Tech Event RSVP", text: "Create an event registration form for a tech launch with T-shirt size selector" }
   ];
-
-  // Demo preview form when explicitly requested to view sample demo
-  const [showSampleDemo, setShowSampleDemo] = useState(false);
 
   const defaultPreviewForm = {
     id: "demo-form-123",
@@ -397,10 +410,13 @@ export default function AIPage() {
           await api.patch(`/forms/${targetId}`, { settings: { display_mode: displayMode } }).catch(() => {});
         }
         const sanitizeTitle = (rawTitle: string, userPromptText: string) => {
-          if (rawTitle && typeof rawTitle === 'string' && rawTitle.trim().length > 0 && rawTitle.trim().length < 50) {
-            const lower = rawTitle.toLowerCase();
-            const isBad = ["create a", "set 10", "anti-cheat", "anti cheat", "score marks", "options with", "field remove", "form id", "questions", "timer"].some(bad => lower.includes(bad));
-            if (!isBad) return rawTitle.trim();
+          if (rawTitle && typeof rawTitle === 'string') {
+            const trimmed = rawTitle.trim();
+            if (trimmed.length > 0 && trimmed.length < 80) {
+              const lower = trimmed.toLowerCase();
+              const isBad = ["create a form with id", "system prompt", "json format", "options with field remove"].some(bad => lower.includes(bad));
+              if (!isBad) return trimmed;
+            }
           }
           const lowerPrompt = (userPromptText || "").toLowerCase();
           if (lowerPrompt.includes("gta v") || lowerPrompt.includes("gta 5") || lowerPrompt.includes("grand theft auto") || lowerPrompt.includes("gta")) {
@@ -409,7 +425,7 @@ export default function AIPage() {
           if (lowerPrompt.includes("minecraft")) return "Minecraft Gaming Quiz";
           if (lowerPrompt.includes("valorant")) return "Valorant Esports Quiz";
           if (lowerPrompt.includes("cricket")) return "Cricket World Cup Quiz";
-          if (lowerPrompt.includes("patient") || lowerPrompt.includes("medical")) return "Patient Intake Form";
+          if (lowerPrompt.includes("patient") || lowerPrompt.includes("medical") || lowerPrompt.includes("dentist")) return "Dentistry Patient Intake Form";
           if (lowerPrompt.includes("nps") || lowerPrompt.includes("net promoter")) return "Net Promoter Score Survey";
           if (lowerPrompt.includes("feedback") || lowerPrompt.includes("survey")) return "Customer Feedback Survey";
           return "AI Generated Form";
@@ -443,18 +459,19 @@ export default function AIPage() {
   };
 
   const handleOpenBuilder = async () => {
-    if (generatedForm && generatedForm.id) {
-      if (generatedForm.id.startsWith('gen-')) {
+    const targetFormToOpen = generatedForm || (showSampleDemo ? defaultPreviewForm : null);
+    if (targetFormToOpen && targetFormToOpen.id) {
+      if (targetFormToOpen.id.startsWith('gen-') || targetFormToOpen.id.startsWith('demo-')) {
         setIsGenerating(true);
         try {
           const savedForm = await api.post('/forms', {
-            title: generatedForm.title || "AI Generated Form",
-            description: generatedForm.description || "Created with PromptForm AI",
-            settings: generatedForm.settings || { display_mode: displayMode },
-            theme: generatedForm.theme || { primary_color: "#8B6B55", background_color: "#FAF6EF" }
+            title: targetFormToOpen.title || "AI Generated Form",
+            description: targetFormToOpen.description || "Created with PromptForm AI",
+            settings: targetFormToOpen.settings || { display_mode: displayMode },
+            theme: targetFormToOpen.theme || { primary_color: "#8B6B55", background_color: "#FAF6EF" }
           });
-          if (generatedForm.questions?.length > 0) {
-            await api.put(`/forms/${savedForm.id}/questions`, generatedForm.questions);
+          if (targetFormToOpen.questions?.length > 0) {
+            await api.put(`/forms/${savedForm.id}/questions`, targetFormToOpen.questions);
           }
           setGeneratedForm(savedForm);
           router.push(`/builder/${savedForm.id}`);
@@ -465,8 +482,8 @@ export default function AIPage() {
         }
         return;
       }
-      await api.patch(`/forms/${generatedForm.id}`, { settings: { display_mode: displayMode } }).catch(() => {});
-      router.push(`/builder/${generatedForm.id}`);
+      await api.patch(`/forms/${targetFormToOpen.id}`, { settings: { display_mode: displayMode } }).catch(() => {});
+      router.push(`/builder/${targetFormToOpen.id}`);
       return;
     }
 
@@ -519,18 +536,19 @@ export default function AIPage() {
   };
 
   const handleSharePublic = async () => {
-    if (generatedForm && generatedForm.id) {
-      if (generatedForm.id.startsWith('gen-')) {
+    const targetFormToShare = generatedForm || (showSampleDemo ? defaultPreviewForm : null);
+    if (targetFormToShare && targetFormToShare.id) {
+      if (targetFormToShare.id.startsWith('gen-') || targetFormToShare.id.startsWith('demo-')) {
         setIsGenerating(true);
         try {
           const savedForm = await api.post('/forms', {
-            title: generatedForm.title || "AI Generated Form",
-            description: generatedForm.description || "Created with PromptForm AI",
-            settings: generatedForm.settings || { display_mode: displayMode },
-            theme: generatedForm.theme || { primary_color: "#8B6B55", background_color: "#FAF6EF" }
+            title: targetFormToShare.title || "AI Generated Form",
+            description: targetFormToShare.description || "Created with PromptForm AI",
+            settings: targetFormToShare.settings || { display_mode: displayMode },
+            theme: targetFormToShare.theme || { primary_color: "#8B6B55", background_color: "#FAF6EF" }
           });
-          if (generatedForm.questions?.length > 0) {
-            await api.put(`/forms/${savedForm.id}/questions`, generatedForm.questions);
+          if (targetFormToShare.questions?.length > 0) {
+            await api.put(`/forms/${savedForm.id}/questions`, targetFormToShare.questions);
           }
           setGeneratedForm(savedForm);
           setShareModalOpen(true);
@@ -541,7 +559,7 @@ export default function AIPage() {
         }
         return;
       }
-      await api.patch(`/forms/${generatedForm.id}`, { settings: { display_mode: displayMode } }).catch(() => {});
+      await api.patch(`/forms/${targetFormToShare.id}`, { settings: { display_mode: displayMode } }).catch(() => {});
       setShareModalOpen(true);
       return;
     }
@@ -979,86 +997,94 @@ export default function AIPage() {
                       </div>
                     )}
 
-                    {displayMode === 'wizard' && (
-                      <div className="space-y-4 max-h-[440px] md:max-h-[500px] overflow-y-auto pr-1.5 scrollbar-thin flex-1 flex flex-col justify-between">
-                        <div className="space-y-1.5">
-                          <div className="flex justify-between items-center text-xs font-bold text-muted-foreground">
-                            <span>Question {previewStepIndex + 1} of {activeForm.questions.length}</span>
-                            <span>{Math.round(((previewStepIndex + 1) / activeForm.questions.length) * 100)}% Completed</span>
-                          </div>
-                          <div className="w-full bg-secondary h-2 rounded-full overflow-hidden">
-                            <div 
-                              className="bg-primary h-full transition-all duration-300"
-                              style={{ width: `${((previewStepIndex + 1) / activeForm.questions.length) * 100}%` }}
-                            />
-                          </div>
-                        </div>
-
-                        {activeForm.questions[previewStepIndex] && renderAIQuestionCard(activeForm.questions[previewStepIndex], previewStepIndex)}
-
-                        <div className="flex items-center justify-between pt-3 border-t border-border/60">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            disabled={previewStepIndex === 0}
-                            onClick={() => setPreviewStepIndex(prev => Math.max(0, prev - 1))}
-                            className="text-xs font-bold px-3 py-1.5 rounded-lg cursor-pointer disabled:opacity-40"
-                          >
-                            ← Back
-                          </Button>
-                          <Button
-                            type="button"
-                            onClick={() => setPreviewStepIndex(prev => Math.min(activeForm.questions.length - 1, prev + 1))}
-                            disabled={previewStepIndex >= activeForm.questions.length - 1}
-                            className="text-xs font-bold px-4 py-1.5 rounded-lg bg-primary text-white cursor-pointer disabled:opacity-40"
-                          >
-                            Next Question →
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-
-                    {displayMode === 'chat' && (
-                      <div className="space-y-4 max-h-[440px] md:max-h-[500px] overflow-y-auto pr-1.5 scrollbar-thin flex-1 flex flex-col justify-between">
-                        <div className="space-y-3">
-                          <div className="flex items-start space-x-2">
-                            <div className="w-7 h-7 rounded-full bg-primary text-white flex items-center justify-center font-bold text-xs shrink-0">
-                              🤖
+                    {displayMode === 'wizard' && (() => {
+                      const totalQs = activeForm.questions.length || 1;
+                      const safeIndex = Math.min(previewStepIndex, Math.max(0, totalQs - 1));
+                      return (
+                        <div className="space-y-4 max-h-[440px] md:max-h-[500px] overflow-y-auto pr-1.5 scrollbar-thin flex-1 flex flex-col justify-between">
+                          <div className="space-y-1.5">
+                            <div className="flex justify-between items-center text-xs font-bold text-muted-foreground">
+                              <span>Question {safeIndex + 1} of {totalQs}</span>
+                              <span>{Math.round(((safeIndex + 1) / totalQs) * 100)}% Completed</span>
                             </div>
-                            <div className="bg-secondary p-3 rounded-2xl rounded-tl-xs text-xs space-y-1 max-w-[90%]">
-                              <p className="font-bold text-foreground">Welcome to {activeForm.title}!</p>
-                              <p className="text-muted-foreground">This form is set to Conversational AI Chat Mode. Questions are presented step-by-step.</p>
+                            <div className="w-full bg-secondary h-2 rounded-full overflow-hidden">
+                              <div 
+                                className="bg-primary h-full transition-all duration-300"
+                                style={{ width: `${((safeIndex + 1) / totalQs) * 100}%` }}
+                              />
                             </div>
                           </div>
 
-                          {activeForm.questions.slice(0, previewStepIndex + 1).map((q: any, idx: number) => (
-                            <div key={q.id || idx} className="space-y-2">
-                              <div className="flex items-start space-x-2">
-                                <div className="w-7 h-7 rounded-full bg-primary text-white flex items-center justify-center font-bold text-xs shrink-0">
-                                  🤖
-                                </div>
-                                <div className="bg-secondary/80 p-3 rounded-2xl rounded-tl-xs text-xs space-y-2 max-w-[90%] border border-border/50 w-full">
-                                  <span className="font-extrabold text-[11px] text-primary block">Step {idx + 1}: {q.label}</span>
-                                  {renderAIQuestionCard(q, idx)}
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
+                          {activeForm.questions[safeIndex] && renderAIQuestionCard(activeForm.questions[safeIndex], safeIndex)}
 
-                        {previewStepIndex < activeForm.questions.length - 1 && (
-                          <div className="flex justify-end pt-2 border-t border-border/60">
+                          <div className="flex items-center justify-between pt-3 border-t border-border/60">
                             <Button
                               type="button"
-                              onClick={() => setPreviewStepIndex(prev => prev + 1)}
-                              className="text-xs font-bold px-3 py-1.5 rounded-xl bg-primary text-white shadow-xs cursor-pointer"
+                              variant="outline"
+                              disabled={safeIndex === 0}
+                              onClick={() => setPreviewStepIndex(prev => Math.max(0, prev - 1))}
+                              className="text-xs font-bold px-3 py-1.5 rounded-lg cursor-pointer disabled:opacity-40"
                             >
-                              Continue to Step {previewStepIndex + 2} ↓
+                              ← Back
+                            </Button>
+                            <Button
+                              type="button"
+                              onClick={() => setPreviewStepIndex(prev => Math.min(totalQs - 1, safeIndex + 1))}
+                              disabled={safeIndex >= totalQs - 1}
+                              className="text-xs font-bold px-4 py-1.5 rounded-lg bg-primary text-white cursor-pointer disabled:opacity-40"
+                            >
+                              Next Question →
                             </Button>
                           </div>
-                        )}
-                      </div>
-                    )}
+                        </div>
+                      );
+                    })()}
+
+                    {displayMode === 'chat' && (() => {
+                      const totalQs = activeForm.questions.length || 1;
+                      const safeIndex = Math.min(previewStepIndex, Math.max(0, totalQs - 1));
+                      return (
+                        <div ref={chatContainerRef} className="space-y-4 max-h-[440px] md:max-h-[500px] overflow-y-auto pr-1.5 scrollbar-thin flex-1 flex flex-col justify-between">
+                          <div className="space-y-3">
+                            <div className="flex items-start space-x-2">
+                              <div className="w-7 h-7 rounded-full bg-primary text-white flex items-center justify-center font-bold text-xs shrink-0">
+                                🤖
+                              </div>
+                              <div className="bg-secondary p-3 rounded-2xl rounded-tl-xs text-xs space-y-1 max-w-[90%]">
+                                <p className="font-bold text-foreground">Welcome to {activeForm.title}!</p>
+                                <p className="text-muted-foreground">This form is set to Conversational AI Chat Mode. Questions are presented step-by-step.</p>
+                              </div>
+                            </div>
+
+                            {activeForm.questions.slice(0, safeIndex + 1).map((q: any, idx: number) => (
+                              <div key={q.id || idx} className="space-y-2">
+                                <div className="flex items-start space-x-2">
+                                  <div className="w-7 h-7 rounded-full bg-primary text-white flex items-center justify-center font-bold text-xs shrink-0">
+                                    🤖
+                                  </div>
+                                  <div className="bg-secondary/80 p-3 rounded-2xl rounded-tl-xs text-xs space-y-2 max-w-[90%] border border-border/50 w-full">
+                                    <span className="font-extrabold text-[11px] text-primary block">Step {idx + 1}: {q.label}</span>
+                                    {renderAIQuestionCard(q, idx)}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+
+                          {safeIndex < totalQs - 1 && (
+                            <div className="flex justify-end pt-2 border-t border-border/60">
+                              <Button
+                                type="button"
+                                onClick={() => setPreviewStepIndex(prev => prev + 1)}
+                                className="text-xs font-bold px-3 py-1.5 rounded-xl bg-primary text-white shadow-xs cursor-pointer"
+                              >
+                                Continue to Step {safeIndex + 2} ↓
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </>
                 )}
 
@@ -1069,16 +1095,16 @@ export default function AIPage() {
                   <Button
                     type="button"
                     onClick={handleSharePublic}
-                    disabled={isGenerating || !generatedForm}
+                    disabled={isGenerating || !activeForm}
                     variant="outline"
                     className={`w-full text-xs font-bold py-2.5 rounded-xl border-border bg-card hover:bg-secondary/70 text-foreground flex items-center justify-center space-x-1.5 hover:border-primary/50 transition-all ${
-                      !generatedForm ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer shadow-xs'
+                      !activeForm ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer shadow-xs'
                     }`}
                   >
                     {isGenerating ? (
                       <>
                         <Loader2 className="w-4 h-4 animate-spin" />
-                        <span>Sharing...</span>
+                        <span>Saving & Sharing...</span>
                       </>
                     ) : (
                       <>
@@ -1092,9 +1118,9 @@ export default function AIPage() {
                   <Button
                     type="button"
                     onClick={handleOpenBuilder}
-                    disabled={isGenerating || !generatedForm}
+                    disabled={isGenerating || !activeForm}
                     className={`w-full bg-primary hover:opacity-90 text-primary-foreground font-bold text-xs py-2.5 rounded-xl shadow-sm flex items-center justify-center space-x-1.5 transition-all ${
-                      !generatedForm ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:shadow-md'
+                      !activeForm ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:shadow-md'
                     }`}
                   >
                     {isGenerating ? (

@@ -137,11 +137,7 @@ function LoginContent() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="w-full pl-10 pr-4 h-11 text-sm font-medium rounded-xl bg-card dark:bg-card/70 border border-border text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all shadow-2xs"
-                style={{
-                  WebkitTextFillColor: theme === 'dark' ? '#f8fafc' : '#0f172a',
-                  transition: 'background-color 5000s ease-in-out 0s'
-                }}
+                className="w-full pl-10 pr-4 h-11 text-sm font-medium rounded-xl bg-card dark:bg-card/90 border border-border text-foreground dark:text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary transition-all shadow-2xs"
               />
             </div>
           </div>
@@ -155,13 +151,9 @@ function LoginContent() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 minLength={6}
-                maxLength={8}
+                maxLength={100}
                 required
-                className="w-full pl-10 pr-10 h-11 text-sm font-medium rounded-xl bg-card dark:bg-card/70 border border-border text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all shadow-2xs"
-                style={{
-                  WebkitTextFillColor: theme === 'dark' ? '#f8fafc' : '#0f172a',
-                  transition: 'background-color 5000s ease-in-out 0s'
-                }}
+                className="w-full pl-10 pr-10 h-11 text-sm font-medium rounded-xl bg-card dark:bg-card/90 border border-border text-foreground dark:text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary transition-all shadow-2xs"
               />
               <button
                 type="button"
