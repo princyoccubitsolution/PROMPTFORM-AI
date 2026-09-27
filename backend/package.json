@@ -8,6 +8,7 @@
     "build": "node -e \"const fs=require('fs');try{fs.rmSync('./dist',{recursive:true,force:true})}catch(e){}\" && tsc",
     "start": "node dist/index.js",
     "test": "ts-node src/scripts/runTests.ts",
+    "test:cloud": "node src/scripts/testLiveCloud.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "ts-node prisma/seed.ts"

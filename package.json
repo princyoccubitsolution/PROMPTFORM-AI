@@ -19,7 +19,8 @@
     "prisma:generate": "npm run prisma:generate --workspace=backend",
     "prisma:migrate": "npm run prisma:migrate --workspace=backend",
     "prisma:seed": "npm run prisma:seed --workspace=backend",
-    "test:backend": "npm run test --workspace=backend"
+    "test:backend": "npm run test --workspace=backend",
+    "test:cloud": "npm run test:cloud --workspace=backend"
   },
   "dependencies": {
     "typescript": "^5.4.5",
