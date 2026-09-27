@@ -2374,133 +2374,210 @@ export default function PublicFormPage() {
         {/* ========================================================================= */}
         {/* MODE 2: ONE-BY-ONE WIZARD VIEW                                            */}
         {/* ========================================================================= */}
-        {layoutMode === 'one-by-one' && (
-          <div className="space-y-6">
-            {/* Step Progress Pill */}
-            <div className="flex items-center justify-between px-1 text-xs font-bold text-slate-600">
-              <span className="text-indigo-600 font-mono" style={{ color: primaryColor }}>
-                Question {currentQuestionIndex + 1} of {visibleQuestions.length}
-              </span>
-              <span>{completionPercentage}% Answered</span>
-            </div>
+        {/* ========================================================================= */}
+        {/* MODE 2: ONE-BY-ONE WIZARD VIEW                                            */}
+        {/* ========================================================================= */}
+        {layoutMode === 'one-by-one' && (() => {
+          const identityQuestions = visibleQuestions.filter(q => isStudentIdentityField(q));
+          const gradedQuestions = visibleQuestions.filter(q => !isStudentIdentityField(q));
+          const actualQuestions = gradedQuestions.length > 0 ? gradedQuestions : visibleQuestions;
 
-            {/* Active Focused Question Card */}
-            {visibleQuestions[currentQuestionIndex] && (() => {
-              const q = visibleQuestions[currentQuestionIndex];
-              const hasError = Boolean(validationErrors[q.id]);
-
-              return (
-                <Card className={`bg-white rounded-3xl p-6 sm:p-8 shadow-xl border-2 transition-all ${
-                  hasError ? 'border-rose-400 ring-4 ring-rose-100' : 'border-slate-200'
-                }`}>
-                  <CardHeader className="p-0 pb-4 border-b border-slate-100">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-extrabold text-indigo-600 uppercase tracking-wider bg-indigo-50 px-2.5 py-1 rounded-md" style={{ color: primaryColor, backgroundColor: `${primaryColor}15` }}>
-                        Question {currentQuestionIndex + 1}
-                      </span>
-                      {q.required && <span className="text-xs font-bold text-rose-500">* Required</span>}
+          return (
+            <div className="space-y-6">
+              {/* Student Candidate Credentials Card (Non-Graded Header) */}
+              {identityQuestions.length > 0 && (
+                <Card className="bg-slate-50/90 border border-slate-200/90 rounded-2xl p-5 sm:p-6 space-y-4 shadow-xs">
+                  <div className="flex items-center justify-between border-b border-slate-200/80 pb-3">
+                    <div className="flex items-center gap-2">
+                      <User className="w-4 h-4 text-indigo-600" />
+                      <h3 className="text-sm font-bold text-slate-900">Student & Candidate Information</h3>
                     </div>
-                    <CardTitle className="text-lg sm:text-xl font-bold text-slate-900 mt-3 leading-snug">
-                      {q.label}
-                    </CardTitle>
-                  </CardHeader>
-
-                  <CardContent className="p-0 pt-6 space-y-4">
-                    {renderQuestionControl(q, true)}
-
-                    {hasError && (
-                      <p className="text-xs font-semibold text-rose-600 flex items-center gap-1 animate-fadeIn">
-                        <AlertTriangle className="w-3.5 h-3.5" />
-                        <span>{validationErrors[q.id]}</span>
-                      </p>
-                    )}
-                  </CardContent>
+                    <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-slate-200/80 text-slate-600">
+                      Non-Graded Details
+                    </span>
+                  </div>
+                  <div className="space-y-4">
+                    {identityQuestions.map((q) => {
+                      const hasError = Boolean(validationErrors[q.id]);
+                      return (
+                        <div key={q.id} id={`question-card-${q.id}`} className="space-y-1.5">
+                          <label className="text-xs font-bold text-slate-700 block">
+                            {q.label} {q.required && <span className="text-rose-500 font-bold">*</span>}
+                          </label>
+                          {renderQuestionControl(q, activeQuestionId === q.id)}
+                          {hasError && (
+                            <p className="text-xs font-semibold text-rose-600 flex items-center gap-1 mt-1">
+                              <AlertTriangle className="w-3.5 h-3.5" />
+                              <span>{validationErrors[q.id]}</span>
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </Card>
-              );
-            })()}
+              )}
 
-            {/* Navigation Actions (Desktop and Mobile) */}
-            <div className="flex items-center justify-between pt-2">
-              <Button
-                type="button"
-                variant="outline"
-                disabled={currentQuestionIndex === 0}
-                onClick={() => {
-                  if (currentQuestionIndex > 0) {
-                    setCurrentQuestionIndex(currentQuestionIndex - 1);
-                  }
-                }}
-                className="h-11 px-5 rounded-xl text-xs font-bold flex items-center gap-1.5"
-              >
-                <ChevronLeft className="w-4 h-4" />
-                <span>Previous</span>
-              </Button>
+              {/* Step Progress Bar & Question Counter */}
+              <div className="flex items-center justify-between px-1 text-xs font-bold text-slate-600">
+                <span className="text-indigo-600 font-mono text-xs sm:text-sm font-extrabold" style={{ color: primaryColor }}>
+                  Question {currentQuestionIndex + 1} of {actualQuestions.length}
+                </span>
+                <span className="text-slate-500 font-semibold">{completionPercentage}% Answered</span>
+              </div>
 
-              {currentQuestionIndex < visibleQuestions.length - 1 ? (
-                <Button
+              {/* Active Focused Question Card */}
+              {actualQuestions[currentQuestionIndex] && (() => {
+                const q = actualQuestions[currentQuestionIndex];
+                const hasError = Boolean(validationErrors[q.id]);
+
+                return (
+                  <Card className={`bg-white rounded-3xl p-6 sm:p-8 shadow-xl border-2 transition-all ${
+                    hasError ? 'border-rose-400 ring-4 ring-rose-100' : 'border-slate-200'
+                  }`}>
+                    <CardHeader className="p-0 pb-4 border-b border-slate-100">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-extrabold text-indigo-600 uppercase tracking-wider bg-indigo-50 px-2.5 py-1 rounded-md" style={{ color: primaryColor, backgroundColor: `${primaryColor}15` }}>
+                          Question {currentQuestionIndex + 1}
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] font-extrabold px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200/60">
+                            {q.points || 2} Marks
+                          </span>
+                          {q.required && <span className="text-xs font-bold text-rose-500">* Required</span>}
+                        </div>
+                      </div>
+                      <CardTitle className="text-lg sm:text-xl font-bold text-slate-900 mt-3 leading-snug">
+                        {q.label}
+                      </CardTitle>
+                    </CardHeader>
+
+                    <CardContent className="p-0 pt-6 space-y-4">
+                      {renderQuestionControl(q, true)}
+
+                      {hasError && (
+                        <p className="text-xs font-semibold text-rose-600 flex items-center gap-1 animate-fadeIn">
+                          <AlertTriangle className="w-3.5 h-3.5" />
+                          <span>{validationErrors[q.id]}</span>
+                        </p>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })()}
+
+              {/* Navigation Actions (Responsive for Phone & Desktop) */}
+              <div className="flex items-center justify-between gap-3 pt-3 pb-2 w-full">
+                <button
                   type="button"
-                  style={{ backgroundColor: primaryColor }}
+                  disabled={currentQuestionIndex === 0}
                   onClick={() => {
-                    const currentQ = visibleQuestions[currentQuestionIndex];
-                    if (currentQ && currentQ.required) {
-                      const ans = answers[currentQ.id];
-                      if (ans === undefined || ans === null || String(ans).trim() === '' || (Array.isArray(ans) && ans.length === 0)) {
-                        setValidationErrors({ [currentQ.id]: "Please answer this question before continuing" });
-                        return;
-                      }
+                    if (currentQuestionIndex > 0) {
+                      setCurrentQuestionIndex(currentQuestionIndex - 1);
                     }
-                    setValidationErrors({});
+                  }}
+                  className={`h-11 sm:h-12 px-4 sm:px-6 rounded-xl text-xs sm:text-sm font-extrabold flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-xs border ${
+                    currentQuestionIndex === 0 
+                      ? 'bg-slate-100 text-slate-400 border-slate-200/80 cursor-not-allowed opacity-60' 
+                      : 'bg-white text-slate-800 border-slate-300 hover:bg-slate-50 hover:border-slate-400 active:scale-95'
+                  }`}
+                >
+                  <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
+                  <span>Previous</span>
+                </button>
 
-                    // Handle 'goto' logic branching if configured
-                    if (currentQ?.logic && currentQ.logic.action === 'goto' && currentQ.logic.target_question_id) {
-                      const targetQId = currentQ.logic.target_question_id;
-                      const targetVal = String(currentQ.logic.condition?.value || '').toLowerCase().trim();
-                      const currentAns = answers[currentQ.id];
-                      const operator = currentQ.logic.condition?.operator || 'equals';
-                      let isMatch = false;
-
-                      if (Array.isArray(currentAns)) {
-                        const lowerArr = currentAns.map((v: any) => String(v).toLowerCase().trim());
-                        if (operator === 'contains' || operator === 'equals') isMatch = lowerArr.includes(targetVal);
-                        else if (operator === 'not_equals') isMatch = !lowerArr.includes(targetVal);
-                      } else if (currentAns !== undefined && currentAns !== null) {
-                        const currentStr = String(currentAns).toLowerCase().trim();
-                        if (operator === 'equals') isMatch = currentStr === targetVal;
-                        else if (operator === 'not_equals') isMatch = currentStr !== targetVal;
-                        else if (operator === 'contains') isMatch = currentStr.includes(targetVal);
+                {currentQuestionIndex < actualQuestions.length - 1 ? (
+                  <button
+                    type="button"
+                    style={{ backgroundColor: primaryColor }}
+                    onClick={() => {
+                      // Validate identity questions before proceeding past step 0
+                      if (currentQuestionIndex === 0 && identityQuestions.length > 0) {
+                        for (const iq of identityQuestions) {
+                          if (iq.required) {
+                            const ans = answers[iq.id];
+                            if (ans === undefined || ans === null || String(ans).trim() === '') {
+                              setValidationErrors({ [iq.id]: `Please complete ${iq.label} above.` });
+                              return;
+                            }
+                          }
+                        }
                       }
 
-                      if (isMatch) {
-                        const targetIdx = visibleQuestions.findIndex(q => q.id === targetQId);
-                        if (targetIdx !== -1 && targetIdx > currentQuestionIndex) {
-                          setCurrentQuestionIndex(targetIdx);
+                      const currentQ = actualQuestions[currentQuestionIndex];
+                      if (currentQ && currentQ.required) {
+                        const ans = answers[currentQ.id];
+                        if (ans === undefined || ans === null || String(ans).trim() === '' || (Array.isArray(ans) && ans.length === 0)) {
+                          setValidationErrors({ [currentQ.id]: "Please answer this question before continuing" });
                           return;
                         }
                       }
-                    }
+                      setValidationErrors({});
 
-                    setCurrentQuestionIndex(currentQuestionIndex + 1);
-                  }}
-                  className="h-11 px-6 rounded-xl text-xs font-bold text-white shadow-md flex items-center gap-1.5 hover:opacity-95"
-                >
-                  <span>Next Question</span>
-                  <ChevronRight className="w-4 h-4" />
-                </Button>
-              ) : (
-                <Button
-                  type="button"
-                  onClick={handleSubmitForm}
-                  disabled={isSubmitting}
-                  style={{ backgroundColor: primaryColor }}
-                  className="h-11 px-8 rounded-xl text-xs font-bold text-white shadow-lg flex items-center gap-2 hover:opacity-95"
-                >
-                  <Send className="w-4 h-4" />
-                  <span>{isSubmitting ? 'Submitting...' : 'Submit Final Answers'}</span>
-                </Button>
-              )}
+                      // Handle 'goto' logic branching if configured
+                      if (currentQ?.logic && currentQ.logic.action === 'goto' && currentQ.logic.target_question_id) {
+                        const targetQId = currentQ.logic.target_question_id;
+                        const targetVal = String(currentQ.logic.condition?.value || '').toLowerCase().trim();
+                        const currentAns = answers[currentQ.id];
+                        const operator = currentQ.logic.condition?.operator || 'equals';
+                        let isMatch = false;
+
+                        if (Array.isArray(currentAns)) {
+                          const lowerArr = currentAns.map((v: any) => String(v).toLowerCase().trim());
+                          if (operator === 'contains' || operator === 'equals') isMatch = lowerArr.includes(targetVal);
+                          else if (operator === 'not_equals') isMatch = !lowerArr.includes(targetVal);
+                        } else if (currentAns !== undefined && currentAns !== null) {
+                          const currentStr = String(currentAns).toLowerCase().trim();
+                          if (operator === 'equals') isMatch = currentStr === targetVal;
+                          else if (operator === 'not_equals') isMatch = currentStr !== targetVal;
+                          else if (operator === 'contains') isMatch = currentStr.includes(targetVal);
+                        }
+
+                        if (isMatch) {
+                          const targetIdx = actualQuestions.findIndex(q => q.id === targetQId);
+                          if (targetIdx !== -1 && targetIdx > currentQuestionIndex) {
+                            setCurrentQuestionIndex(targetIdx);
+                            return;
+                          }
+                        }
+                      }
+
+                      setCurrentQuestionIndex(currentQuestionIndex + 1);
+                    }}
+                    className="h-11 sm:h-12 px-5 sm:px-8 rounded-xl text-xs sm:text-sm font-extrabold text-white shadow-md flex items-center justify-center gap-1.5 hover:opacity-95 active:scale-95 transition-all cursor-pointer"
+                  >
+                    <span>Next Question</span>
+                    <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      if (identityQuestions.length > 0) {
+                        for (const iq of identityQuestions) {
+                          if (iq.required) {
+                            const ans = answers[iq.id];
+                            if (ans === undefined || ans === null || String(ans).trim() === '') {
+                              setValidationErrors({ [iq.id]: `Please enter your ${iq.label} above.` });
+                              return;
+                            }
+                          }
+                        }
+                      }
+                      handleSubmitForm(e);
+                    }}
+                    disabled={isSubmitting}
+                    style={{ backgroundColor: primaryColor }}
+                    className="h-11 sm:h-12 px-6 sm:px-8 rounded-xl text-xs sm:text-sm font-extrabold text-white shadow-lg flex items-center justify-center gap-2 hover:opacity-95 active:scale-95 transition-all cursor-pointer"
+                  >
+                    <Send className="w-4 h-4" />
+                    <span>{isSubmitting ? 'Submitting...' : 'Submit Final Answers'}</span>
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* ========================================================================= */}
         {/* MODE 3: AI CONVERSATIONAL CHATBOT VIEW                                   */}
