@@ -260,9 +260,11 @@ export default function PublicFormPage() {
           (submittedKey3 ? localStorage.getItem(submittedKey3) === 'true' : false);
 
         if (hasSubmitted) {
+          setHasStarted(true);
           const savedAnswers = 
             localStorage.getItem(`promptform_submission_answers_${data.id}`) ||
-            localStorage.getItem(`promptform_submission_answers_${formId}`);
+            localStorage.getItem(`promptform_submission_answers_${formId}`) ||
+            (submittedKey3 ? localStorage.getItem(`promptform_submission_answers_${submittedKey3}`) : null);
 
           if (savedAnswers) {
             try {
@@ -274,6 +276,7 @@ export default function PublicFormPage() {
             } catch (e) {}
           }
           setIsAlreadySubmitted(true);
+          setSubmitted(true);
           setIsLoading(false);
           return;
         }
@@ -964,6 +967,7 @@ export default function PublicFormPage() {
 
         localStorage.setItem(`promptform_submission_answers_${form?.id || formId}`, JSON.stringify(finalAnswers));
         localStorage.setItem(`promptform_submission_answers_${formId}`, JSON.stringify(finalAnswers));
+        if (form?.uniqueShareId) localStorage.setItem(`promptform_submission_answers_${form.uniqueShareId}`, JSON.stringify(finalAnswers));
 
         if (emailToSubmit) localStorage.setItem(`promptform_submitted_email_${form?.id || formId}`, String(emailToSubmit).trim());
         if (enrollmentToSubmit) localStorage.setItem(`promptform_submitted_enrollment_${form?.id || formId}`, String(enrollmentToSubmit).trim());
@@ -2070,7 +2074,7 @@ export default function PublicFormPage() {
   /* -------------------------------------------------------------------------- */
   /* FORM INTRO SCREEN (Before user starts)                                     */
   /* -------------------------------------------------------------------------- */
-  if (!hasStarted && Object.keys(answers).length === 0) {
+  if (!hasStarted && Object.keys(answers).length === 0 && !submitted && !isAlreadySubmitted) {
     const estimatedMinutes = Math.max(1, Math.ceil(questions.length * 0.5));
 
     return (
