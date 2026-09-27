@@ -429,6 +429,9 @@ export default function AIPage() {
         formData.append('file', file);
         const promptToSend = basePrompt ? `${basePrompt} ${configSuffix}` : `Extract fields and generate a structured form ${configSuffix}`;
         formData.append('prompt', promptToSend);
+        if (generatedForm && generatedForm.id && !generatedForm.id.startsWith('gen-')) {
+          formData.append('formId', generatedForm.id);
+        }
         result = await api.postMultipart('/ai/generate', formData);
       } else {
         const fullPrompt = `${basePrompt} ${configSuffix}`;
@@ -494,14 +497,19 @@ export default function AIPage() {
           title: sanitizeTitle(formObj.title, prompt),
           description: formObj.description || "Created with PromptForm AI",
           category: summary?.formType ? summary.formType.toUpperCase() : (formObj.category || "AI FORM"),
-          questions: (formObj.questions || []).map((q: any, i: number) => ({
-            id: q.id || `q_${i}`,
-            type: q.type || "short_text",
-            label: q.label || `Question ${i + 1}`,
-            required: q.required !== undefined ? q.required : true,
-            options: Array.isArray(q.options) ? q.options : [],
-            placeholder: q.placeholder || `Enter response for ${q.label}...`
-          })),
+          questions: (formObj.questions || []).map((q: any, i: number) => {
+            let cleanLabel = q.label || `Question ${i + 1}`;
+            cleanLabel = cleanLabel.replace(/^Section\s*\d*\s*-\s*Q\d+\s*(?:\([^)]*\))?\s*:\s*/i, '').trim();
+            cleanLabel = cleanLabel.replace(/^(?:Q\d+[\s:-]+|\d+[\.\)]\s*)+/i, '').trim();
+            return {
+              id: q.id || `q_${i}`,
+              type: q.type || "short_text",
+              label: cleanLabel || q.label || `Question ${i + 1}`,
+              required: q.required !== undefined ? q.required : true,
+              options: Array.isArray(q.options) ? q.options : [],
+              placeholder: q.placeholder || `Enter response for ${cleanLabel || q.label}...`
+            };
+          }),
           theme: formObj.theme || { primary_color: "#8B6B55", background_color: "#FAF6EF" },
           isPublished: true
         };
