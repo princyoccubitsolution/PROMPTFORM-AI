@@ -145,6 +145,8 @@ app.get('/', (req: Request, res: Response) => {
   const feUrl = process.env.FRONTEND_URL || (process.env.NODE_ENV === 'production' ? 'https://promptform-ai-frontend.vercel.app' : 'http://127.0.0.1:4500');
   return res.json({
     message: "PromptForm AI REST API Server is running successfully.",
+    version: "2.1.0",
+    features: ["google-oauth", "ai-generator", "realtime-scoring"],
     frontendUrl: feUrl,
     healthCheck: "/health"
   });
