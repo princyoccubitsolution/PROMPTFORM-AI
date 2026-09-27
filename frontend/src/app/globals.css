@@ -209,25 +209,52 @@
     transition: background-color 250ms ease, border-color 250ms ease, color 250ms ease;
   }
 
-  /* --- Universal Input Text & Dark Mode Font Visibility --- */
-  input, textarea, select {
-    color: var(--foreground);
-  }
-  .dark input, 
-  .dark textarea, 
-  .dark select {
-    color: #FAF5F0 !important;
+  /* --- Universal Input Text & High Contrast Styling for Mobile & Dark Mode --- */
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="number"],
+  input[type="tel"],
+  input[type="url"],
+  input[type="search"],
+  input[type="date"],
+  input[type="time"],
+  input[type="datetime-local"],
+  textarea,
+  select,
+  .form-input-high-contrast {
+    color: #000000 !important;
+    background-color: #ffffff !important;
+    -webkit-text-fill-color: #000000 !important;
   }
 
-  ::placeholder {
-    color: var(--muted-foreground);
-    opacity: 0.75;
+  .dark input[type="text"],
+  .dark input[type="email"],
+  .dark input[type="password"],
+  .dark input[type="number"],
+  .dark input[type="tel"],
+  .dark input[type="url"],
+  .dark input[type="search"],
+  .dark input[type="date"],
+  .dark input[type="time"],
+  .dark input[type="datetime-local"],
+  .dark textarea,
+  .dark select,
+  .dark .form-input-high-contrast {
+    color: #000000 !important;
+    background-color: #ffffff !important;
+    -webkit-text-fill-color: #000000 !important;
   }
+
+  ::placeholder,
+  input::placeholder,
+  textarea::placeholder,
   .dark ::placeholder,
   .dark input::placeholder,
   .dark textarea::placeholder {
-    color: #C4B5A8 !important;
-    opacity: 0.85;
+    color: #64748B !important;
+    -webkit-text-fill-color: #64748B !important;
+    opacity: 1 !important;
   }
 
   /* Universal WebKit Browser Autofill Overrides */
@@ -242,15 +269,7 @@
   select:-webkit-autofill,
   select:-webkit-autofill:hover,
   select:-webkit-autofill:focus,
-  select:-webkit-autofill:active {
-    -webkit-text-fill-color: var(--foreground) !important;
-    -webkit-box-shadow: 0 0 0px 1000px var(--card) inset !important;
-    box-shadow: 0 0 0px 1000px var(--card) inset !important;
-    transition: background-color 50000s ease-in-out 0s !important;
-    color: var(--foreground) !important;
-    caret-color: var(--foreground) !important;
-  }
-
+  select:-webkit-autofill:active,
   .dark input:-webkit-autofill,
   .dark input:-webkit-autofill:hover,
   .dark input:-webkit-autofill:focus,
@@ -263,21 +282,19 @@
   .dark select:-webkit-autofill:hover,
   .dark select:-webkit-autofill:focus,
   .dark select:-webkit-autofill:active {
-    -webkit-text-fill-color: #FAF5F0 !important;
-    -webkit-box-shadow: 0 0 0px 1000px #231C18 inset !important;
-    box-shadow: 0 0 0px 1000px #231C18 inset !important;
-    color: #FAF5F0 !important;
-    caret-color: #FAF5F0 !important;
+    -webkit-text-fill-color: #000000 !important;
+    -webkit-box-shadow: 0 0 0px 1000px #ffffff inset !important;
+    box-shadow: 0 0 0px 1000px #ffffff inset !important;
+    transition: background-color 50000s ease-in-out 0s !important;
+    color: #000000 !important;
+    caret-color: #000000 !important;
   }
 
   /* Select Option Visibility in Dark Mode */
-  select option {
-    background-color: var(--card);
-    color: var(--foreground);
-  }
+  select option,
   .dark select option {
-    background-color: #231C18 !important;
-    color: #FAF5F0 !important;
+    background-color: #ffffff !important;
+    color: #000000 !important;
   }
 }
 

@@ -249,10 +249,30 @@ export default function PublicFormPage() {
       // Check if already submitted in this browser session (or single response limit active)
       const searchParams = new URLSearchParams(window.location.search);
       const isPreviewMode = searchParams.get('preview') === 'true';
-      const submittedKey = `promptform_submitted_${data.id || formId}`;
+      const submittedKey1 = `promptform_submitted_${data.id}`;
+      const submittedKey2 = `promptform_submitted_${formId}`;
+      const submittedKey3 = data.uniqueShareId ? `promptform_submitted_${data.uniqueShareId}` : null;
 
       if (typeof window !== 'undefined' && !isPreviewMode) {
-        if (localStorage.getItem(submittedKey) === 'true') {
+        const hasSubmitted = 
+          localStorage.getItem(submittedKey1) === 'true' ||
+          localStorage.getItem(submittedKey2) === 'true' ||
+          (submittedKey3 ? localStorage.getItem(submittedKey3) === 'true' : false);
+
+        if (hasSubmitted) {
+          const savedAnswers = 
+            localStorage.getItem(`promptform_submission_answers_${data.id}`) ||
+            localStorage.getItem(`promptform_submission_answers_${formId}`);
+
+          if (savedAnswers) {
+            try {
+              const parsed = JSON.parse(savedAnswers);
+              setAnswers(parsed);
+              setSubmitted(true);
+              setIsLoading(false);
+              return;
+            } catch (e) {}
+          }
           setIsAlreadySubmitted(true);
           setIsLoading(false);
           return;
@@ -937,8 +957,14 @@ export default function PublicFormPage() {
       if (typeof window !== 'undefined') {
         localStorage.removeItem(`promptform_form_timer_start_${form?.id || formId}`);
         localStorage.removeItem(`promptform_draft_answers_${form?.id || formId}`);
-        // Store single submission status and student identifiers
+        // Store single submission status and student identifiers across all IDs
         localStorage.setItem(`promptform_submitted_${form?.id || formId}`, 'true');
+        localStorage.setItem(`promptform_submitted_${formId}`, 'true');
+        if (form?.uniqueShareId) localStorage.setItem(`promptform_submitted_${form.uniqueShareId}`, 'true');
+
+        localStorage.setItem(`promptform_submission_answers_${form?.id || formId}`, JSON.stringify(finalAnswers));
+        localStorage.setItem(`promptform_submission_answers_${formId}`, JSON.stringify(finalAnswers));
+
         if (emailToSubmit) localStorage.setItem(`promptform_submitted_email_${form?.id || formId}`, String(emailToSubmit).trim());
         if (enrollmentToSubmit) localStorage.setItem(`promptform_submitted_enrollment_${form?.id || formId}`, String(enrollmentToSubmit).trim());
         if (userToSubmit) localStorage.setItem('promptform_user_name', String(userToSubmit).trim());
@@ -951,6 +977,7 @@ export default function PublicFormPage() {
         setSubmitted(false);
         if (typeof window !== 'undefined') {
           localStorage.setItem(`promptform_submitted_${form?.id || formId}`, 'true');
+          localStorage.setItem(`promptform_submitted_${formId}`, 'true');
         }
         return;
       }
@@ -961,6 +988,7 @@ export default function PublicFormPage() {
           localStorage.removeItem(`promptform_form_timer_start_${form?.id || formId}`);
           localStorage.removeItem(`promptform_draft_answers_${form?.id || formId}`);
           localStorage.setItem(`promptform_submitted_${form?.id || formId}`, 'true');
+          localStorage.setItem(`promptform_submitted_${formId}`, 'true');
         }
       } else {
         alert("Submission error: " + (err.message || "Failed to submit response. Please try again."));
@@ -971,16 +999,40 @@ export default function PublicFormPage() {
   };
 
   /* -------------------------------------------------------------------------- */
+  /* HELPER FOR NON-GRADED STUDENT IDENTITY METADATA FIELDS                    */
+  /* -------------------------------------------------------------------------- */
+  const isStudentIdentityField = (q: any) => {
+    if (q.isIdentityField) return true;
+    const l = (q.label || '').toLowerCase();
+    const t = (q.type || '').toLowerCase();
+    const qid = (q.id || '').toLowerCase();
+
+    if (l.includes('enrollment') || l.includes('roll no') || l.includes('roll number') || l.includes('student name') || l.includes('candidate name') || (l.includes('full name') && !l.includes('father')) || l.includes('student email')) return true;
+    if (qid === 'field_student_email' || qid === 'field_student_name' || qid === 'field_student_roll' || qid === 'field_enrollment_no') return true;
+    if (t === 'name' || (t === 'email' && (l.includes('student') || qid.includes('student')))) return true;
+
+    const hasCorrectAns = Boolean(q.validations?.correct_answer ?? q.validations?.correctAnswer ?? q.correctAnswer);
+    const pts = Number(q.validations?.points ?? q.points ?? 0);
+    if (!hasCorrectAns && pts === 0 && (l.includes('name') || l.includes('email') || l.includes('id') || l.includes('roll'))) return true;
+
+    return false;
+  };
+
+  /* -------------------------------------------------------------------------- */
   /* QUIZ SCORING CALCULATION                                                   */
   /* -------------------------------------------------------------------------- */
   const calculateQuizResults = () => {
     let totalPossiblePoints = 0;
     let earnedPoints = 0;
-    const questionsBreakdown = questions.map((q: any) => {
+
+    const gradedQuestions = questions.filter((q: any) => !isStudentIdentityField(q));
+
+    const questionsBreakdown = gradedQuestions.map((q: any) => {
       const correctAns = q.validations?.correct_answer ?? q.validations?.correctAnswer ?? q.correctAnswer;
       const explanation = q.validations?.explanation || q.explanation;
-      const isGraded = ['short_text', 'mcq', 'dropdown', 'checkbox', 'one_option'].includes(q.type) && Boolean(correctAns);
-      const points = (q.validations?.points ?? q.points) || (isGraded ? 10 : 0);
+      const pts = Number(q.validations?.points ?? q.points ?? 2);
+      const isGraded = pts > 0 || Boolean(correctAns);
+      const points = isGraded ? pts : 0;
       
       if (isGraded) {
         totalPossiblePoints += points;
@@ -990,8 +1042,8 @@ export default function PublicFormPage() {
       let isCorrect = false;
       if (isGraded && studentAns !== undefined && studentAns !== null) {
         const studentAnsStr = String(studentAns).trim().toLowerCase();
-        const correctAnsStr = String(correctAns).trim().toLowerCase();
-        isCorrect = studentAnsStr === correctAnsStr;
+        const correctAnsStr = String(correctAns || '').trim().toLowerCase();
+        isCorrect = correctAnsStr !== '' && studentAnsStr === correctAnsStr;
         if (isCorrect) {
           earnedPoints += points;
         }
@@ -1012,6 +1064,7 @@ export default function PublicFormPage() {
     return {
       totalPossiblePoints,
       earnedPoints,
+      totalGradedQuestions: gradedQuestions.length,
       questionsBreakdown
     };
   };
@@ -1399,7 +1452,7 @@ export default function PublicFormPage() {
               }
             }}
             required={q.required}
-            className={`w-full h-12 bg-white border rounded-xl text-sm transition-all focus:outline-none ${
+            className={`w-full h-12 bg-white !bg-white border rounded-xl text-sm font-medium text-black !text-black dark:text-black dark:!text-black placeholder:text-slate-400 dark:placeholder:text-slate-400 transition-all focus:outline-none ${
               validationErrors[q.id] 
                 ? 'border-rose-400 focus:ring-2 focus:ring-rose-200' 
                 : 'border-slate-200 hover:border-slate-300 focus:border-indigo-600 focus:ring-4 focus:ring-indigo-50'
@@ -1423,7 +1476,7 @@ export default function PublicFormPage() {
               if (validationErrors[q.id]) setValidationErrors(prev => ({ ...prev, [q.id]: "" }));
             }}
             required={q.required}
-            className={`w-full h-12 pl-10 pr-11 bg-white border rounded-xl text-sm transition-all focus:outline-none ${
+            className={`w-full h-12 pl-10 pr-11 bg-white !bg-white border rounded-xl text-sm font-medium text-black !text-black dark:text-black dark:!text-black placeholder:text-slate-400 dark:placeholder:text-slate-400 transition-all focus:outline-none ${
               validationErrors[q.id] 
                 ? 'border-rose-400 focus:ring-2 focus:ring-rose-200' 
                 : 'border-slate-200 hover:border-slate-300 focus:border-indigo-600 focus:ring-4 focus:ring-indigo-50'
@@ -1454,7 +1507,7 @@ export default function PublicFormPage() {
               if (validationErrors[q.id]) setValidationErrors(prev => ({ ...prev, [q.id]: "" }));
             }}
             required={q.required}
-            className={`w-full py-3 bg-white border rounded-xl text-sm transition-all resize-y min-h-[100px] focus:outline-none ${
+            className={`w-full py-3 bg-white !bg-white border rounded-xl text-sm font-medium text-black !text-black dark:text-black dark:!text-black placeholder:text-slate-400 dark:placeholder:text-slate-400 transition-all resize-y min-h-[100px] focus:outline-none ${
               validationErrors[q.id] 
                 ? 'border-rose-400 focus:ring-2 focus:ring-rose-200' 
                 : 'border-slate-200 hover:border-slate-300 focus:border-indigo-600 focus:ring-4 focus:ring-indigo-50'
@@ -1584,7 +1637,7 @@ export default function PublicFormPage() {
               if (validationErrors[q.id]) setValidationErrors(prev => ({ ...prev, [q.id]: "" }));
             }}
             required={q.required}
-            className="w-full h-12 px-4 bg-white border border-slate-200 hover:border-slate-300 rounded-xl text-sm text-slate-800 transition-all focus:outline-none focus:border-indigo-600 focus:ring-4 focus:ring-indigo-50 cursor-pointer appearance-none"
+            className="w-full h-12 px-4 bg-white !bg-white border border-slate-200 hover:border-slate-300 rounded-xl text-sm font-medium text-black !text-black dark:text-black dark:!text-black transition-all focus:outline-none focus:border-indigo-600 focus:ring-4 focus:ring-indigo-50 cursor-pointer appearance-none"
           >
             <option value="" disabled>Choose an option...</option>
             {options.map((opt: string, oIdx: number) => (
@@ -1834,7 +1887,7 @@ export default function PublicFormPage() {
               if (validationErrors[q.id]) setValidationErrors(prev => ({ ...prev, [q.id]: "" }));
             }}
             required={q.required}
-            className="w-full h-12 pl-10 pr-4 bg-white border border-slate-200 hover:border-slate-300 rounded-xl text-sm transition-all focus:outline-none focus:border-indigo-600 focus:ring-4 focus:ring-indigo-50"
+            className="w-full h-12 pl-10 pr-4 bg-white !bg-white border border-slate-200 hover:border-slate-300 rounded-xl text-sm font-medium text-black !text-black dark:text-black dark:!text-black transition-all focus:outline-none focus:border-indigo-600 focus:ring-4 focus:ring-indigo-50"
           />
         </div>
       );
@@ -1852,7 +1905,7 @@ export default function PublicFormPage() {
               if (validationErrors[q.id]) setValidationErrors(prev => ({ ...prev, [q.id]: "" }));
             }}
             required={q.required}
-            className="w-full h-12 pl-10 pr-4 bg-white border border-slate-200 hover:border-slate-300 rounded-xl text-sm transition-all focus:outline-none focus:border-indigo-600 focus:ring-4 focus:ring-indigo-50"
+            className="w-full h-12 pl-10 pr-4 bg-white !bg-white border border-slate-200 hover:border-slate-300 rounded-xl text-sm font-medium text-black !text-black dark:text-black dark:!text-black transition-all focus:outline-none focus:border-indigo-600 focus:ring-4 focus:ring-indigo-50"
           />
         </div>
       );
@@ -1890,7 +1943,7 @@ export default function PublicFormPage() {
                 if (validationErrors[q.id]) setValidationErrors(prev => ({ ...prev, [q.id]: "" }));
               }}
               required={q.required}
-              className="w-full h-12 pl-10 pr-4 bg-white border border-slate-200 hover:border-slate-300 rounded-xl text-sm transition-all focus:outline-none focus:border-indigo-600 focus:ring-4 focus:ring-indigo-50"
+              className="w-full h-12 pl-10 pr-4 bg-white !bg-white border border-slate-200 hover:border-slate-300 rounded-xl text-sm font-medium text-black !text-black dark:text-black dark:!text-black placeholder:text-slate-400 dark:placeholder:text-slate-400 transition-all focus:outline-none focus:border-indigo-600 focus:ring-4 focus:ring-indigo-50"
             />
           </div>
           {answers[q.id] && (
@@ -1941,7 +1994,7 @@ export default function PublicFormPage() {
                       }
                     }
                   }}
-                  className="w-9 sm:w-11 h-12 text-center text-base sm:text-lg font-bold border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-indigo-600 focus:ring-4 focus:ring-indigo-50 flex-1 max-w-[48px]"
+                  className="w-9 sm:w-11 h-12 text-center text-base sm:text-lg font-bold border border-slate-200 rounded-xl bg-white !bg-white text-black !text-black dark:text-black dark:!text-black focus:outline-none focus:border-indigo-600 focus:ring-4 focus:ring-indigo-50 flex-1 max-w-[48px]"
                 />
               );
             })}
@@ -1968,7 +2021,7 @@ export default function PublicFormPage() {
               [q.id]: { ...answers[q.id], cardNumber: e.target.value } 
             })}
             required={q.required}
-            className="w-full h-11 px-3.5 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-indigo-600"
+            className="w-full h-11 px-3.5 bg-white !bg-white border border-slate-200 rounded-xl text-xs font-medium text-black !text-black dark:text-black dark:!text-black placeholder:text-slate-400 dark:placeholder:text-slate-400 focus:outline-none focus:border-indigo-600"
           />
           <div className="grid grid-cols-2 gap-3">
             <input
@@ -1980,7 +2033,7 @@ export default function PublicFormPage() {
                 [q.id]: { ...answers[q.id], expiry: e.target.value } 
               })}
               required={q.required}
-              className="w-full h-11 px-3.5 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-indigo-600"
+              className="w-full h-11 px-3.5 bg-white !bg-white border border-slate-200 rounded-xl text-xs font-medium text-black !text-black dark:text-black dark:!text-black placeholder:text-slate-400 dark:placeholder:text-slate-400 focus:outline-none focus:border-indigo-600"
             />
             <input
               type="text"
@@ -1991,7 +2044,7 @@ export default function PublicFormPage() {
                 [q.id]: { ...answers[q.id], cvc: e.target.value } 
               })}
               required={q.required}
-              className="w-full h-11 px-3.5 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-indigo-600"
+              className="w-full h-11 px-3.5 bg-white !bg-white border border-slate-200 rounded-xl text-xs font-medium text-black !text-black dark:text-black dark:!text-black placeholder:text-slate-400 dark:placeholder:text-slate-400 focus:outline-none focus:border-indigo-600"
             />
           </div>
         </div>
@@ -2009,7 +2062,7 @@ export default function PublicFormPage() {
           if (validationErrors[q.id]) setValidationErrors(prev => ({ ...prev, [q.id]: "" }));
         }}
         required={q.required}
-        className="w-full h-12 px-4 bg-white border border-slate-200 hover:border-slate-300 rounded-xl text-sm transition-all focus:outline-none focus:border-indigo-600 focus:ring-4 focus:ring-indigo-50"
+        className="w-full h-12 px-4 bg-white !bg-white border border-slate-200 hover:border-slate-300 rounded-xl text-sm font-medium text-black !text-black dark:text-black dark:!text-black placeholder:text-slate-400 dark:placeholder:text-slate-400 transition-all focus:outline-none focus:border-indigo-600 focus:ring-4 focus:ring-indigo-50"
       />
     );
   };
@@ -2210,46 +2263,90 @@ export default function PublicFormPage() {
             </Card>
 
             {/* Questions Vertical Stack */}
-            {visibleQuestions.map((q, idx) => {
-              const hasError = Boolean(validationErrors[q.id]);
-              const isActive = activeQuestionId === q.id;
+            {(() => {
+              const identityQuestions = visibleQuestions.filter(q => isStudentIdentityField(q));
+              const gradedQuestions = visibleQuestions.filter(q => !isStudentIdentityField(q));
 
               return (
-                <Card 
-                  key={q.id}
-                  id={`question-card-${q.id}`}
-                  onClick={() => setActiveQuestionId(q.id)}
-                  className={`bg-white rounded-2xl transition-all duration-200 border ${
-                    hasError 
-                      ? 'border-rose-400 ring-2 ring-rose-100 shadow-md' 
-                      : isActive 
-                        ? 'border-indigo-400 shadow-md ring-1 ring-indigo-100' 
-                        : 'border-slate-200 shadow-xs hover:border-slate-300'
-                  }`}
-                >
-                  <CardContent className="p-5 sm:p-6 space-y-3.5">
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="text-sm sm:text-base font-semibold text-slate-900 leading-snug">
-                        {idx + 1}. {q.label} {q.required && <span className="text-rose-500 font-bold">*</span>}
-                      </p>
-                    </div>
+                <>
+                  {identityQuestions.length > 0 && (
+                    <Card className="bg-slate-50/90 border border-slate-200 rounded-2xl p-5 sm:p-6 space-y-4 shadow-xs">
+                      <div className="flex items-center justify-between border-b border-slate-200/80 pb-3">
+                        <div className="flex items-center gap-2">
+                          <User className="w-4 h-4 text-indigo-600" />
+                          <h3 className="text-sm font-bold text-slate-900">Student Information</h3>
+                        </div>
+                        <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-slate-200/80 text-slate-600">
+                          Non-Graded (0 Marks)
+                        </span>
+                      </div>
+                      <div className="space-y-4">
+                        {identityQuestions.map((q) => {
+                          const hasError = Boolean(validationErrors[q.id]);
+                          return (
+                            <div key={q.id} id={`question-card-${q.id}`} className="space-y-1.5">
+                              <label className="text-xs font-bold text-slate-700 block">
+                                {q.label} {q.required && <span className="text-rose-500 font-bold">*</span>}
+                              </label>
+                              {renderQuestionControl(q, activeQuestionId === q.id)}
+                              {hasError && (
+                                <p className="text-xs font-semibold text-rose-600 flex items-center gap-1 mt-1">
+                                  <AlertTriangle className="w-3.5 h-3.5" />
+                                  <span>{validationErrors[q.id]}</span>
+                                </p>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </Card>
+                  )}
 
-                    {/* Question Input Control */}
-                    <div className="pt-1">
-                      {renderQuestionControl(q, isActive)}
-                    </div>
+                  {/* Graded Assessment Questions Stack */}
+                  {gradedQuestions.map((q, gIdx) => {
+                    const hasError = Boolean(validationErrors[q.id]);
+                    const isActive = activeQuestionId === q.id;
 
-                    {/* Inline Validation Error Message */}
-                    {hasError && (
-                      <p className="text-xs font-semibold text-rose-600 flex items-center gap-1 animate-fadeIn">
-                        <AlertTriangle className="w-3.5 h-3.5" />
-                        <span>{validationErrors[q.id]}</span>
-                      </p>
-                    )}
-                  </CardContent>
-                </Card>
+                    return (
+                      <Card 
+                        key={q.id}
+                        id={`question-card-${q.id}`}
+                        onClick={() => setActiveQuestionId(q.id)}
+                        className={`bg-white rounded-2xl transition-all duration-200 border ${
+                          hasError 
+                            ? 'border-rose-400 ring-2 ring-rose-100 shadow-md' 
+                            : isActive 
+                              ? 'border-indigo-400 shadow-md ring-1 ring-indigo-100' 
+                              : 'border-slate-200 shadow-xs hover:border-slate-300'
+                        }`}
+                      >
+                        <CardContent className="p-5 sm:p-6 space-y-3.5">
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="text-sm sm:text-base font-semibold text-slate-900 leading-snug">
+                              {gIdx + 1}. {q.label} {q.required && <span className="text-rose-500 font-bold">*</span>}
+                            </p>
+                            <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200/60 shrink-0">
+                              {q.points || 2} Marks
+                            </span>
+                          </div>
+
+                          <div className="pt-1">
+                            {renderQuestionControl(q, isActive)}
+                          </div>
+
+                          {hasError && (
+                            <p className="text-xs font-semibold text-rose-600 flex items-center gap-1 animate-fadeIn">
+                              <AlertTriangle className="w-3.5 h-3.5" />
+                              <span>{validationErrors[q.id]}</span>
+                            </p>
+                          )}
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </>
               );
-            })}
+            })()}
 
             {/* Bottom Form Actions */}
             <div className="pt-4 flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -2495,7 +2592,7 @@ export default function PublicFormPage() {
                         placeholder="Type your response..."
                         autoFocus
                         required={currentQ.required}
-                        className="flex-1 h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-indigo-600"
+                        className="flex-1 h-11 px-4 bg-white !bg-white border border-slate-200 rounded-xl text-xs font-medium text-black !text-black dark:text-black dark:!text-black placeholder:text-slate-400 dark:placeholder:text-slate-400 focus:outline-none focus:border-indigo-600"
                       />
                       <button
                         type="submit"

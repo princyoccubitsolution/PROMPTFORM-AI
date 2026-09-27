@@ -122,7 +122,8 @@ export class EnterpriseQualityReviewer {
             // Ensure options array exists and has at least 4 items for general MCQs
             if (q.type === 'mcq' || q.type === 'one_option' || q.type === 'dropdown' || q.type === 'checkbox') {
               if (!Array.isArray(q.options)) q.options = [];
-              if (q.options.length < 4) {
+              const isTrueFalseQuestion = (q.options.length === 2 && q.options.some((o: string) => o.toLowerCase().includes('true')) && q.options.some((o: string) => o.toLowerCase().includes('false'))) || lowerLabel.includes("true or false") || lowerLabel.includes("true/false") || lowerLabel.includes("(true/false)");
+              if (q.options.length < 4 && !isTrueFalseQuestion) {
                 const fallbackChoices = ["Option A", "Option B", "Option C", "Option D"];
                 while (q.options.length < 4) {
                   q.options.push(fallbackChoices[q.options.length] || `Option ${q.options.length + 1}`);

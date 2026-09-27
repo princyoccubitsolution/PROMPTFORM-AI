@@ -13,6 +13,7 @@ export interface IQuestionMetadata {
   negativePoints?: number;
   learningObjective?: string;
   bloomsTaxonomy?: 'remembering' | 'understanding' | 'applying' | 'analyzing' | 'evaluating' | 'creating';
+  isIdentityField?: boolean;
   logic?: Record<string, any>;
 }
 

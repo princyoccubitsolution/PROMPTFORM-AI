@@ -66,9 +66,11 @@ export async function parseDocument(fileBuffer: Buffer, mimeType: string): Promi
       return fileBuffer.toString('utf-8');
     }
 
-    // 5. Image files (mock OCR description)
+    // 5. Image files — processed by Gemini API directly via inlineData (base64).
+    //    Return empty string so the fallback quiz engine uses prompt keywords
+    //    instead of fake OCR text that pollutes field discovery with wrong fields.
     if (mimeType.startsWith('image/')) {
-      return "Image upload detected. [Simulated OCR Extraction]: Image contains a form layout with fields: Full Name, Email Address, Contact Number, Organization Name, Signature Area, Date Picker.";
+      return "";
     }
 
     // Default fallback to string parsing

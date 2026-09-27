@@ -518,10 +518,11 @@ export class FieldDiscovery {
         { type: "agreement", label: "Declaration Consent", required: true, options: ["I declare all information is correct and true"] }
       );
     } else if (domain === 'quiz' || text.includes("quiz") || text.includes("exam") || text.includes("test") || text.includes("mcq")) {
-      if (text.includes("student") || text.includes("roll") || text.includes("candidate name") || text.includes("student name")) {
+      if (text.includes("student") || text.includes("roll") || text.includes("enrollment") || text.includes("candidate name") || text.includes("student name")) {
         fields.push(
-          { type: "name", label: "Student Full Name", required: true, options: [] },
-          { type: "amount", label: "Student Roll / ID Number", required: true, options: [] }
+          { type: "short_text", label: "Enrollment No / Roll No", required: true, options: [], isIdentityField: true, points: 0 },
+          { type: "name", label: "Student Full Name", required: true, options: [], isIdentityField: true, points: 0 },
+          { type: "email", label: "Student Email Address", required: true, options: [], isIdentityField: true, points: 0 }
         );
       }
 

@@ -6,7 +6,7 @@ export class QuestionGenerator {
       const isQuiz = domain === 'quiz';
       const label = field.label;
       const lowerLabel = label.toLowerCase();
-      const isIdentity = lowerLabel.includes("name") || lowerLabel.includes("roll") || lowerLabel.includes("id code") || lowerLabel.includes("student id") || lowerLabel.includes("email");
+      const isIdentity = lowerLabel.includes("name") || lowerLabel.includes("roll") || lowerLabel.includes("enrollment") || lowerLabel.includes("id code") || lowerLabel.includes("student id") || lowerLabel.includes("email");
 
       let type = field.type || "mcq";
       let options = Array.isArray(field.options) ? [...field.options] : [];
@@ -57,7 +57,10 @@ export class QuestionGenerator {
         options
       };
 
-      if (isQuiz && !isIdentity) {
+      if (isIdentity) {
+        (q as any).isIdentityField = true;
+        (q as any).points = 0;
+      } else if (isQuiz) {
         q.correctAnswer = field.correctAnswer || (q.options.length > 0 ? q.options[0] : (type === "long_text" ? "Algorithm / Code Implementation" : "Expected Answer"));
         q.explanation = field.explanation || `Verified explanation and analysis for "${label}".`;
         q.category = field.category || "Domain Knowledge";

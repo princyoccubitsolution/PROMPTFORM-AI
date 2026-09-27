@@ -19,6 +19,7 @@ export interface IFieldMetadata {
   tags?: string[];
   category?: string;
   difficulty?: string;
+  isIdentityField?: boolean;
   bloomsTaxonomy?: string;
 }
 
