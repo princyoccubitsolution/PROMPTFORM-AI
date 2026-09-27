@@ -760,8 +760,8 @@ router.post(['/generate', '/generate-from-file'], optionalAuthMiddleware, upload
           const isQuizIntent = intent.relevanceRules.requireQuizValidation;
           const docSnippet = parsedDocText ? `\nExtracted Document Content:\n"""\n${parsedDocText.substring(0, 10000)}\n"""` : '';
           const modelPrompt = fileBuffer
-            ? `Extract and generate a complete topic-specific form or quiz paper based on this uploaded document/image and instructions: "${userPrompt || 'Extract all questions and fields from document'}". ${docSnippet} ${isQuizIntent ? 'CRITICAL: This is an assignment/exam/quiz. Extract EVERY single question as an interactive multiple-choice question (mcq) with 4 options, the exact correctAnswer string, points, and an explanation.' : 'Generate appropriate topic-specific fields matching the document.'}`
-            : `Analyze the topic "${intent.topic}" for user prompt: "${userPrompt}". Perform a deep factual domain analysis of "${intent.topic}" using world knowledge (video games, esports, sports, movies, science, pop culture, history, technology, medicine, general trivia, etc.). Generate a factually 100% accurate, high-quality, topic-authentic ${intent.formType} with ${intent.questionCount} questions.`;
+            ? `Extract and generate a complete topic-specific form or exam/quiz paper based on this uploaded document/image and instructions: "${userPrompt || 'Extract all questions and fields from document'}". ${docSnippet} ${isQuizIntent ? 'CRITICAL: This is an assignment/exam/quiz. Follow user requested structure faithfully. If user specifies coding, true/false, fill-in-the-blank, or mcq sections, generate those exact question types (long_text for coding, mcq with True/False for true/false, short_text for fill in blanks, mcq with 4 options for MCQs). Set points according to instructions (e.g. 2 marks per question) and provide correctAnswer and explanation for each question.' : 'Generate appropriate topic-specific fields matching the document.'}`
+            : `Analyze the topic "${intent.topic}" for user prompt: "${userPrompt}". Perform a deep factual domain analysis of "${intent.topic}" using world knowledge. Follow user requested structure faithfully. If user specifies coding, true/false, fill-in-the-blank, or mcq sections, generate those exact question types (long_text for coding, mcq with True/False for true/false, short_text for fill in blanks, mcq with 4 options for MCQs). Set points according to instructions (e.g. 2 marks per question) and provide correctAnswer and explanation for each question. Generate a factually 100% accurate, high-quality, topic-authentic ${intent.formType} with ${intent.questionCount} questions.`;
           formConfig = await queryGemini(modelPrompt, systemInstruction, fileBuffer, mimeType);
         }
       } catch (geminiError: any) {
@@ -810,8 +810,9 @@ router.post(['/generate', '/generate-from-file'], optionalAuthMiddleware, upload
           options: q.options || [],
           validations: {
             ...(q.validations || {}),
-            points: q.points !== undefined ? Number(q.points) : (q.validations?.points !== undefined ? Number(q.validations.points) : 5),
-            correctAnswer: q.correctAnswer,
+            points: q.points !== undefined ? Number(q.points) : (q.validations?.points !== undefined ? Number(q.validations.points) : (intent.pointsPerQuestion || 2)),
+            correctAnswer: q.correctAnswer || q.validations?.correctAnswer || q.validations?.correct_answer || q.correct_answer,
+            correct_answer: q.correctAnswer || q.validations?.correctAnswer || q.validations?.correct_answer || q.correct_answer,
             explanation: q.explanation,
             difficulty: q.difficulty,
             negativePoints: q.negativePoints,
@@ -851,8 +852,9 @@ router.post(['/generate', '/generate-from-file'], optionalAuthMiddleware, upload
             options: q.options || [],
             validations: {
               ...(q.validations || {}),
-              points: q.points !== undefined ? Number(q.points) : (q.validations?.points !== undefined ? Number(q.validations.points) : 5),
-              correctAnswer: q.correctAnswer,
+              points: q.points !== undefined ? Number(q.points) : (q.validations?.points !== undefined ? Number(q.validations.points) : (intent.pointsPerQuestion || 2)),
+              correctAnswer: q.correctAnswer || q.validations?.correctAnswer || q.validations?.correct_answer || q.correct_answer,
+              correct_answer: q.correctAnswer || q.validations?.correctAnswer || q.validations?.correct_answer || q.correct_answer,
               explanation: q.explanation,
               difficulty: q.difficulty,
               negativePoints: q.negativePoints,
@@ -892,9 +894,10 @@ router.post(['/generate', '/generate-from-file'], optionalAuthMiddleware, upload
             required: q.required || false,
             orderIndex: idx,
             options: q.options || [],
+            points: q.points !== undefined ? Number(q.points) : (intent.pointsPerQuestion || 2),
             validations: {
               ...(q.validations || {}),
-              points: q.points !== undefined ? Number(q.points) : 5,
+              points: q.points !== undefined ? Number(q.points) : (intent.pointsPerQuestion || 2),
               correctAnswer: q.correctAnswer,
               explanation: q.explanation
             }
@@ -940,13 +943,16 @@ router.post('/analyze-sentiment', authMiddleware, subscriptionMiddleware, async 
     if (!formId) {
       return res.status(400).json({ error: 'formId is required' });
     }
-    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(formId);
-    if (!isUUID) {
-      return res.status(400).json({ error: 'Invalid formId format. Must be a valid UUID.' });
+    const isFormUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(formId);
+    let form = null;
+    if (isFormUUID) {
+      form = await db.form.findUnique({ where: { id: formId } });
     }
-
-    const form = await db.form.findUnique({ where: { id: formId } });
+    if (!form) {
+      form = await db.form.findUnique({ where: { uniqueShareId: formId } });
+    }
     if (!form) return res.status(404).json({ error: 'Form not found' });
+    const targetFormId = form.id;
     
     if (form.ownerId !== req.user.id) {
       if (form.teamId) {
@@ -962,7 +968,7 @@ router.post('/analyze-sentiment', authMiddleware, subscriptionMiddleware, async 
     }
 
     const responses = await db.response.findMany({
-      where: { formId }
+      where: { formId: targetFormId }
     });
 
     let sentimentSummary;
@@ -988,7 +994,7 @@ The sum of positive, neutral, and negative counts must equal the total number of
     }
 
     await db.analytics.updateMany({
-      where: { formId },
+      where: { formId: targetFormId },
       data: {
         sentimentSummary: sentimentSummary
       }

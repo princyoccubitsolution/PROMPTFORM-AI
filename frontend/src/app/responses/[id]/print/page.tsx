@@ -50,7 +50,7 @@ export default function PrintableResponsesReport() {
     form.title.toLowerCase().includes('quiz') || 
     form.title.toLowerCase().includes('test') || 
     form.title.toLowerCase().includes('exam') || 
-    form.questions.some((q: any) => (q.validations as any)?.correctAnswer !== undefined)
+    form.questions.some((q: any) => ((q.validations as any)?.correctAnswer !== undefined || (q.validations as any)?.correct_answer !== undefined))
   );
 
   const getEnrollmentNumber = (resp: any) => {
@@ -91,12 +91,15 @@ export default function PrintableResponsesReport() {
 
     form.questions.forEach((q: any) => {
       const validations = q.validations || {};
-      if (validations.correctAnswer !== undefined && validations.correctAnswer !== null && validations.correctAnswer !== "") {
+      const correctAns = (validations.correctAnswer !== undefined && validations.correctAnswer !== null && String(validations.correctAnswer).trim() !== "")
+        ? validations.correctAnswer
+        : (validations.correct_answer !== undefined && validations.correct_answer !== null && String(validations.correct_answer).trim() !== "" ? validations.correct_answer : undefined);
+      if (correctAns !== undefined) {
         totalGraded++;
         const pts = Number(validations.points || 5);
         maxPoints += pts;
         const userAns = resp.answers[q.id];
-        const isCorrect = userAns !== undefined && userAns !== null && String(userAns).trim().toLowerCase() === String(validations.correctAnswer).trim().toLowerCase();
+        const isCorrect = userAns !== undefined && userAns !== null && String(userAns).trim().toLowerCase() === String(correctAns).trim().toLowerCase();
         if (isCorrect) {
           correctCount++;
           earnedPoints += pts;
@@ -298,7 +301,9 @@ export default function PrintableResponsesReport() {
                       const hasAnswer = ansVal !== undefined && ansVal !== null && ansVal !== "";
                       
                       const validations = q.validations || {};
-                      const correctAnswer = validations.correctAnswer;
+                      const correctAnswer = (validations.correctAnswer !== undefined && validations.correctAnswer !== null && String(validations.correctAnswer).trim() !== "")
+                        ? validations.correctAnswer
+                        : (validations.correct_answer !== undefined && validations.correct_answer !== null && String(validations.correct_answer).trim() !== "" ? validations.correct_answer : undefined);
                       const isAnswerCorrect = hasAnswer && String(ansVal).trim().toLowerCase() === String(correctAnswer).trim().toLowerCase();
 
                       if (!hasAnswer) {

@@ -41,8 +41,10 @@ export class AIFormBrain {
         if (matchingQ) {
           return {
             ...q,
-            type: domain === 'quiz' ? (matchingQ.type || 'mcq') : (matchingQ.type || q.type),
-            options: (matchingQ.options && matchingQ.options.length >= 2) ? matchingQ.options : (domain === 'quiz' ? ["Option A (Correct)", "Option B", "Option C", "Option D"] : (q.options || [])),
+            type: domain === 'quiz' ? (matchingQ.type || q.type || 'mcq') : (matchingQ.type || q.type),
+            options: (['short_text', 'long_text', 'feedback'].includes(matchingQ.type || q.type))
+              ? []
+              : ((matchingQ.options && matchingQ.options.length >= 2) ? matchingQ.options : (domain === 'quiz' ? ["Option A (Correct)", "Option B", "Option C", "Option D"] : (q.options || []))),
             correctAnswer: matchingQ.correctAnswer,
             explanation: matchingQ.explanation,
             difficulty: matchingQ.difficulty,

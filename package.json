@@ -21,8 +21,7 @@
     "prisma:seed": "npm run prisma:seed --workspace=backend",
     "test:backend": "npm run test --workspace=backend"
   },
-  "dependencies": {},
-  "devDependencies": {
+  "dependencies": {
     "typescript": "^5.4.5",
     "prisma": "^5.12.1",
     "@types/node": "^20.12.7"

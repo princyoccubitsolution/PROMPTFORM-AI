@@ -15,6 +15,11 @@ export interface IFieldMetadata {
   hidden?: boolean;
   correctAnswer?: string;
   explanation?: string;
+  points?: number;
+  tags?: string[];
+  category?: string;
+  difficulty?: string;
+  bloomsTaxonomy?: string;
 }
 
 export interface IFormSection {

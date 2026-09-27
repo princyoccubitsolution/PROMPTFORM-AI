@@ -131,7 +131,12 @@ export default function AIPage() {
               )}
             </div>
           </div>
-          <div className="flex-shrink-0">
+          <div className="flex-shrink-0 flex items-center gap-1.5">
+            {(q.points !== undefined || q.validations?.points !== undefined) && (
+              <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20 shadow-xs">
+                {q.points !== undefined ? q.points : q.validations.points} Marks
+              </span>
+            )}
             {q.required ? (
               <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-red-500/10 text-red-500 dark:text-red-400 border border-red-500/20 shadow-xs">
                 *Required
@@ -146,46 +151,78 @@ export default function AIPage() {
 
         {/* Input / Control Layout Body */}
         <div className="w-full pt-1">
-          {/* Single-line text / specialized input fields */}
+          {/* Coding / Program / Algorithm */}
+          {(fieldType === 'code' || fieldType === 'coding' || (fieldType === 'long_text' && (q.label?.toLowerCase().includes("code") || q.label?.toLowerCase().includes("algorithm") || q.label?.toLowerCase().includes("program") || q.label?.toLowerCase().includes("c program")))) ? (
+            <div className="min-h-[110px] w-full bg-slate-900 border border-slate-700/80 rounded-xl p-3.5 font-mono text-xs text-emerald-400 leading-relaxed shadow-xs flex flex-col justify-between">
+              <span className="text-slate-400 select-none text-[11px]">// Write your C program or algorithm solution here</span>
+              <span className="text-slate-500 select-none text-[10px] self-end mt-4">Code / Algorithm Editor</span>
+            </div>
+          ) : (fieldType === 'long_text' || fieldType === 'paragraph' || fieldType === 'feedback' || fieldType === 'textarea' || fieldType === 'comments' || fieldType === 'description' || fieldType === 'message') ? (
+            <div className="min-h-[85px] w-full bg-card border border-border/80 rounded-xl p-3.5 text-xs text-muted-foreground/80 leading-relaxed shadow-xs flex items-start">
+              {q.placeholder || `Enter detailed response for ${q.label.toLowerCase()}...`}
+            </div>
+          ) : null}
+
+          {/* Single-line text / specialized input fields / fill in the blanks */}
           {(fieldType === 'short_text' || fieldType === 'text' || fieldType === 'name' || fieldType === 'first_name' || fieldType === 'last_name' || fieldType === 'full_name' || fieldType === 'email' || fieldType === 'email_address' || fieldType === 'phone' || fieldType === 'contact' || fieldType === 'mobile' || fieldType === 'telephone' || fieldType === 'price' || fieldType === 'amount' || fieldType === 'address' || fieldType === 'website' || fieldType === 'url' || fieldType === 'password') && (
             <div className="relative flex items-center w-full">
               <div className="absolute left-3 text-muted-foreground/70 pointer-events-none">
                 <IconComponent className="w-4 h-4" />
               </div>
               <div className="h-10 md:h-11 w-full bg-card border border-border/80 rounded-xl pl-9 pr-3.5 flex items-center text-xs text-muted-foreground/80 shadow-xs transition-all">
-                {q.placeholder || `Enter ${q.label.toLowerCase()}...`}
+                {q.placeholder || (q.label?.toLowerCase().includes("blank") || q.label?.includes("____") ? "Type your answer here..." : `Enter ${q.label.toLowerCase()}...`)}
               </div>
             </div>
           )}
 
-          {/* Textarea / Long Text */}
-          {(fieldType === 'long_text' || fieldType === 'paragraph' || fieldType === 'feedback' || fieldType === 'textarea' || fieldType === 'comments' || fieldType === 'description' || fieldType === 'message') && (
-            <div className="min-h-[85px] w-full bg-card border border-border/80 rounded-xl p-3.5 text-xs text-muted-foreground/80 leading-relaxed shadow-xs flex items-start">
-              {q.placeholder || `Enter detailed response for ${q.label.toLowerCase()}...`}
-            </div>
-          )}
+          {/* Radio Buttons / MCQ / Single Choice / True & False */}
+          {(fieldType === 'mcq' || fieldType === 'radio' || fieldType === 'one_option' || fieldType === 'gender' || fieldType === 'single_choice') && (() => {
+            const opts: string[] = (q.options && q.options.length > 0 ? q.options : ["Option A", "Option B", "Option C"]);
+            const isTrueFalse = opts.length === 2 && opts.some((o: string) => o.toLowerCase().includes('true')) && opts.some((o: string) => o.toLowerCase().includes('false'));
+            const hasLongOptions = opts.some((o: string) => o.length > 25);
+            const useVertical = optionLayout === 'vertical' || q.option_layout === 'vertical' || hasLongOptions;
 
-          {/* Radio Buttons / MCQ / Single Choice */}
-          {(fieldType === 'mcq' || fieldType === 'radio' || fieldType === 'one_option' || fieldType === 'gender' || fieldType === 'single_choice') && (
-            <div className={optionLayout === 'horizontal' || q.option_layout === 'horizontal' ? "flex flex-wrap gap-2.5 items-center w-full" : "flex flex-col gap-2 w-full"}>
-              {(q.options && q.options.length > 0 ? q.options : ["Option A", "Option B", "Option C"]).map((opt: string, oIdx: number) => (
-                <label
-                  key={oIdx}
-                  className="ai-option-chip group/chip"
-                >
-                  <input
-                    type="radio"
-                    name={`preview_${q.id}`}
-                    defaultChecked={oIdx === 0}
-                    className="w-4 h-4 text-primary accent-primary cursor-pointer flex-shrink-0"
-                  />
-                  <span className="text-xs font-semibold text-foreground group-hover/chip:text-primary transition-colors truncate">
-                    {opt}
-                  </span>
-                </label>
-              ))}
-            </div>
-          )}
+            if (isTrueFalse) {
+              return (
+                <div className="grid grid-cols-2 gap-3 w-full">
+                  {opts.map((opt: string, oIdx: number) => (
+                    <label key={oIdx} className="ai-option-chip group/chip justify-center font-bold">
+                      <input
+                        type="radio"
+                        name={`preview_${q.id}`}
+                        defaultChecked={oIdx === 0}
+                        className="w-4 h-4 text-primary accent-primary cursor-pointer flex-shrink-0"
+                      />
+                      <span className="text-xs font-bold text-foreground group-hover/chip:text-primary transition-colors">
+                        {opt}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              );
+            }
+
+            return (
+              <div className={useVertical ? "flex flex-col gap-2 w-full" : "flex flex-wrap gap-2.5 items-center w-full"}>
+                {opts.map((opt: string, oIdx: number) => (
+                  <label
+                    key={oIdx}
+                    className="ai-option-chip group/chip text-left items-start"
+                  >
+                    <input
+                      type="radio"
+                      name={`preview_${q.id}`}
+                      defaultChecked={oIdx === 0}
+                      className="w-4 h-4 text-primary accent-primary cursor-pointer flex-shrink-0 mt-0.5"
+                    />
+                    <span className="text-xs font-medium text-foreground group-hover/chip:text-primary transition-colors break-words whitespace-normal leading-relaxed text-left flex-1">
+                      {opt}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            );
+          })()}
 
           {/* Checkboxes / Multiple Options */}
           {(fieldType === 'checkbox' || fieldType === 'multiple_options' || fieldType === 'multi_choice' || fieldType === 'checkboxes' || fieldType === 'interactive-tag-cloud' || fieldType === 'tags') && (
@@ -193,14 +230,14 @@ export default function AIPage() {
               {(q.options && q.options.length > 0 ? q.options : ["Choice 1", "Choice 2", "Choice 3"]).map((opt: string, oIdx: number) => (
                 <label
                   key={oIdx}
-                  className="ai-option-chip group/chip"
+                  className="ai-option-chip group/chip text-left items-start"
                 >
                   <input
                     type="checkbox"
                     defaultChecked={oIdx === 0}
-                    className="w-4 h-4 rounded text-primary accent-primary cursor-pointer flex-shrink-0"
+                    className="w-4 h-4 rounded text-primary accent-primary cursor-pointer flex-shrink-0 mt-0.5"
                   />
-                  <span className="text-xs font-semibold text-foreground group-hover/chip:text-primary transition-colors truncate">
+                  <span className="text-xs font-medium text-foreground group-hover/chip:text-primary transition-colors break-words whitespace-normal leading-relaxed text-left flex-1">
                     {opt}
                   </span>
                 </label>
@@ -422,12 +459,19 @@ export default function AIPage() {
                 "analysis this pdf", 
                 "analysis this", 
                 "analysis pdf",
-                "created a quiz"
+                "created a quiz",
+                "attached syllabus",
+                "syllabus photo",
+                "photo paper",
+                "attached"
               ].some(bad => lower.includes(bad));
               if (!isBad) return trimmed;
             }
           }
           const lowerPrompt = (userPromptText || "").toLowerCase();
+          if (lowerPrompt.includes("data structure") || lowerPrompt.includes("dsa") || (lowerPrompt.includes("subject") && lowerPrompt.includes("structure"))) {
+            return "Data Structures Exam Paper";
+          }
           if (lowerPrompt.includes("gta v") || lowerPrompt.includes("gta 5") || lowerPrompt.includes("grand theft auto") || lowerPrompt.includes("gta")) {
             return "GTA V Gaming Quiz";
           }
@@ -437,8 +481,8 @@ export default function AIPage() {
           if (lowerPrompt.includes("patient") || lowerPrompt.includes("medical") || lowerPrompt.includes("dentist")) return "Dentistry Patient Intake Form";
           if (lowerPrompt.includes("nps") || lowerPrompt.includes("net promoter")) return "Net Promoter Score Survey";
           if (lowerPrompt.includes("feedback") || lowerPrompt.includes("survey")) return "Customer Feedback Survey";
-          if (mode === 'pdf') {
-            return (formType.toLowerCase().includes("quiz") || formType.toLowerCase().includes("assessment")) ? "Document Assessment Quiz" : "Document Extracted Form";
+          if (mode === 'pdf' || mode === 'image') {
+            return (formType.toLowerCase().includes("quiz") || formType.toLowerCase().includes("assessment") || lowerPrompt.includes("exam") || lowerPrompt.includes("quiz")) ? "Academic Assessment Exam" : "Document Extracted Form";
           }
           return "AI Generated Form";
         };

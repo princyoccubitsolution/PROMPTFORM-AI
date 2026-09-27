@@ -82,7 +82,7 @@ export class FieldDiscovery {
       if (lower.includes("frequency")) {
         return ["Daily", "Weekly", "Monthly", "Occasionally"];
       }
-      if (lower.includes("satisfaction") || lower.includes("rate") || lower.includes("opinion")) {
+      if (lower.includes("satisfaction") || /\brate\b|\brating\b/.test(lower) || lower.includes("opinion")) {
         return ["Very Satisfied", "Satisfied", "Neutral", "Dissatisfied", "Very Dissatisfied"];
       }
       
@@ -196,6 +196,102 @@ export class FieldDiscovery {
           });
 
           // 3. Fallback to fill up to targetCount if document lines were brief
+          const isDataStructures = text.includes("data structure") || text.includes("dsa") || (text.includes("subject") && text.includes("structure")) || text.includes("algorithm") || text.includes("c program");
+          if (isDataStructures) {
+            return [
+              {
+                type: "long_text",
+                label: "Section 1 - Q1 (Coding): Write a C program or algorithm function to insert a new node at the beginning of a Singly Linked List and display the list elements.",
+                required: true,
+                options: [],
+                points: 2,
+                correctAnswer: "Allocate node via malloc(), set newNode->next = head, update head = newNode. Traversal prints node->data while temp != NULL.",
+                explanation: "In a singly linked list, inserting at the head requires O(1) time complexity by updating the next pointer to current head and reassigning head pointer. Traversal is O(n)."
+              },
+              {
+                type: "mcq",
+                label: "Section 2 - Q2 (True/False): In a Binary Search Tree (BST), an Inorder Traversal (Left, Root, Right) always outputs keys in strictly ascending sorted order.",
+                required: true,
+                options: ["True", "False"],
+                points: 2,
+                correctAnswer: "True",
+                explanation: "By definition of BST, elements in the left subtree are smaller and right subtree elements are greater than the root. An inorder traversal (Left-Root-Right) visits keys in ascending order."
+              },
+              {
+                type: "mcq",
+                label: "Section 2 - Q3 (True/False): Accessing an arbitrary element by index in a standard Singly Linked List has a time complexity of O(1).",
+                required: true,
+                options: ["True", "False"],
+                points: 2,
+                correctAnswer: "False",
+                explanation: "Unlike contiguous arrays that offer O(1) random indexing, singly linked lists require sequential pointer traversal from the head, resulting in O(n) access time."
+              },
+              {
+                type: "short_text",
+                label: "Section 3 - Q4 (Fill-in-the-Blank): A Stack is a linear data structure that strictly operates on the _____ (LIFO / FIFO) principle.",
+                required: true,
+                options: [],
+                points: 2,
+                correctAnswer: "LIFO",
+                explanation: "A Stack strictly operates on Last-In First-Out (LIFO), where elements are pushed and popped from the same top end."
+              },
+              {
+                type: "short_text",
+                label: "Section 3 - Q5 (Fill-in-the-Blank): The worst-case time complexity of the Quick Sort algorithm when the partition is unbalanced is _____.",
+                required: true,
+                options: [],
+                points: 2,
+                correctAnswer: "O(n^2)",
+                explanation: "When the selected pivot consistently divides the list into 0 and n-1 elements (e.g. sorted input with extreme pivot), Quick Sort degrades to quadratic O(n^2) time."
+              },
+              {
+                type: "short_text",
+                label: "Section 3 - Q6 (Fill-in-the-Blank): In a Circular Queue of capacity N implemented via array, the queue-full condition preserving one empty slot is (rear + 1) % N == _____.",
+                required: true,
+                options: [],
+                points: 2,
+                correctAnswer: "front",
+                explanation: "In an array-based circular queue with one slot preserved to disambiguate full from empty, the queue is full when (rear + 1) % N == front."
+              },
+              {
+                type: "mcq",
+                label: "Section 4 - Q7 (MCQ): Which data structure is utilized by system runtimes to manage recursive function calls and local variables?",
+                required: true,
+                options: ["A) Call Stack", "B) Circular Queue", "C) Max-Heap", "D) Hash Map"],
+                points: 2,
+                correctAnswer: "A) Call Stack",
+                explanation: "The runtime call stack preserves activation frames, parameters, and return addresses during recursive function invocations in LIFO order."
+              },
+              {
+                type: "mcq",
+                label: "Section 4 - Q8 (MCQ): What is the average time complexity for searching an element in a height-balanced Binary Search Tree (AVL or Red-Black Tree)?",
+                required: true,
+                options: ["A) O(1)", "B) O(log n)", "C) O(n)", "D) O(n log n)"],
+                points: 2,
+                correctAnswer: "B) O(log n)",
+                explanation: "Balanced binary search trees maintain a maximum tree height of O(log n), ensuring that lookup, insertion, and deletion operate in O(log n) time."
+              },
+              {
+                type: "mcq",
+                label: "Section 4 - Q9 (MCQ): Which graph traversal algorithm uses a First-In First-Out (FIFO) Queue to visit vertices level-by-level?",
+                required: true,
+                options: ["A) Breadth-First Search (BFS)", "B) Depth-First Search (DFS)", "C) Topological Sort", "D) Prim's Algorithm"],
+                points: 2,
+                correctAnswer: "A) Breadth-First Search (BFS)",
+                explanation: "BFS explores all neighboring vertices at the present depth level before moving on, which is implemented using a FIFO Queue."
+              },
+              {
+                type: "mcq",
+                label: "Section 4 - Q10 (MCQ): What is the primary purpose of a Hash Function in a Hash Table data structure?",
+                required: true,
+                options: ["A) Map arbitrary search keys to fixed table indices", "B) Sort records in ascending alphabetic order", "C) Balance the depth of binary search trees", "D) Reconstruct circular linked lists"],
+                points: 2,
+                correctAnswer: "A) Map arbitrary search keys to fixed table indices",
+                explanation: "A hash function maps keys into array slot indices, providing average O(1) time complexity for insert, search, and delete operations."
+              }
+            ];
+          }
+
           const fallbackQuizBank = [
             {
               label: "What is defined as the 'communicative environment' in the source material?",
@@ -329,24 +425,26 @@ export class FieldDiscovery {
       }
     }
 
-    // 1. Try to dynamically parse custom fields from the prompt first
+    // 1. Try to dynamically parse custom fields from the prompt first (only for non-quizzes)
     const parsedFields: IFieldMetadata[] = [];
-    const fieldListMatch = text.match(/(?:fields|questions|with|include|contain|need|want|asking for|collect|add|insert|fields of|fields like)\b:?\s*([^.?!]*)/i);
-    if (fieldListMatch && fieldListMatch[1]) {
-      const listRaw = fieldListMatch[1];
-      const items = listRaw.split(/,|\band\b|;|\bor\b/i).map(i => i.replace(/["'\-\*]/g, "").trim()).filter(Boolean);
-      if (items.length > 0 && items.length < 25) {
-        items.forEach(item => {
-          let label = item.charAt(0).toUpperCase() + item.slice(1);
-          let type = mapType(label, "name");
-          let options = populateOptions(label, type);
-          parsedFields.push({ type, label, required: true, options });
-        });
+    if (domain !== 'quiz' && !text.includes("quiz") && !text.includes("exam") && !text.includes("test") && !text.includes("mcq")) {
+      const fieldListMatch = text.match(/(?:collect\s+fields|custom\s+fields|add\s+fields|fields\s*:\s*)([^.?!]*)/i);
+      if (fieldListMatch && fieldListMatch[1]) {
+        const listRaw = fieldListMatch[1];
+        const items = listRaw.split(/,|\band\b|;|\bor\b/i).map(i => i.replace(/["'\-\*]/g, "").trim()).filter(Boolean);
+        if (items.length > 0 && items.length < 25) {
+          items.forEach(item => {
+            let label = item.charAt(0).toUpperCase() + item.slice(1);
+            let type = mapType(label, "name");
+            let options = populateOptions(label, type);
+            parsedFields.push({ type, label, required: true, options });
+          });
+        }
       }
     }
 
     // 2. Core mapping based on domain / category
-    if (domain === 'medical' || text.includes("hospital") || text.includes("medical") || text.includes("patient") || text.includes("surgery") || text.includes("doctor")) {
+    if (domain !== 'quiz' && (domain === 'medical' || text.includes("hospital") || text.includes("medical") || text.includes("patient") || text.includes("surgery") || text.includes("doctor"))) {
       fields.push(
         { type: "name", label: "Patient Full Name", required: true, options: [] },
         { type: "date", label: "Date of Birth", required: true, options: [] },
@@ -368,7 +466,7 @@ export class FieldDiscovery {
         { type: "body-pain-selector", label: "Select Pain Regions (Visual Pain Map)", required: true, options: [] },
         { type: "interactive-tag-cloud", label: "Choose Accompanying Symptoms", required: true, options: ["Pain", "Fever", "Cough", "Cold", "Fatigue", "Headache"] }
       );
-    } else if (text.includes("school") || text.includes("college") || text.includes("admission") || text.includes("clg") || text.includes("education")) {
+    } else if (domain !== 'quiz' && (text.includes("school") || text.includes("college") || text.includes("admission") || text.includes("clg") || text.includes("education"))) {
       fields.push(
         { type: "name", label: "Student Full Name", required: true, options: [] },
         { type: "email", label: "Email Address", required: true, options: [] },
@@ -383,7 +481,7 @@ export class FieldDiscovery {
         { type: "resume", label: "Upload School Leaving Certificate (LC)", required: true, options: [] },
         { type: "agreement", label: "Declaration Checkbox", required: true, options: ["I declare all information is correct and complete"] }
       );
-    } else if (text.includes("tech") || text.includes("science") || text.includes("antigravity") || text.includes("aerospace") || text.includes("engineering") || text.includes("research") || text.includes("lab")) {
+    } else if (domain !== 'quiz' && (/\b(antigravity|aerospace)\b/i.test(text) || (text.includes("research") && /\blab\b/i.test(text)))) {
       fields.push(
         { type: "name", label: "Researcher Full Name", required: true, options: [] },
         { type: "name", label: "Research Institution / Lab Name", required: true, options: [] },
@@ -427,7 +525,100 @@ export class FieldDiscovery {
         );
       }
 
-      if (text.includes("js") || text.includes("javascript")) {
+      if (text.includes("data structure") || text.includes("dsa") || (text.includes("subject") && text.includes("structure")) || text.includes("algorithm") || text.includes("c program")) {
+        fields.push(
+          {
+            type: "long_text",
+            label: "Section 1 - Q1 (Coding): Write a C program or algorithm function to insert a new node at the beginning of a Singly Linked List and display the list elements.",
+            required: true,
+            options: [],
+            points: 2,
+            correctAnswer: "Allocate node via malloc(), set newNode->next = head, update head = newNode. Traversal prints node->data while temp != NULL.",
+            explanation: "In a singly linked list, inserting at the head requires O(1) time complexity by updating the next pointer to current head and reassigning head pointer. Traversal is O(n)."
+          },
+          {
+            type: "mcq",
+            label: "Section 2 - Q2 (True/False): In a Binary Search Tree (BST), an Inorder Traversal (Left, Root, Right) always outputs keys in strictly ascending sorted order.",
+            required: true,
+            options: ["True", "False"],
+            points: 2,
+            correctAnswer: "True",
+            explanation: "By definition of BST, elements in the left subtree are smaller and right subtree elements are greater than the root. An inorder traversal (Left-Root-Right) visits keys in ascending order."
+          },
+          {
+            type: "mcq",
+            label: "Section 2 - Q3 (True/False): Accessing an arbitrary element by index in a standard Singly Linked List has a time complexity of O(1).",
+            required: true,
+            options: ["True", "False"],
+            points: 2,
+            correctAnswer: "False",
+            explanation: "Unlike contiguous arrays that offer O(1) random indexing, singly linked lists require sequential pointer traversal from the head, resulting in O(n) access time."
+          },
+          {
+            type: "short_text",
+            label: "Section 3 - Q4 (Fill-in-the-Blank): A Stack is a linear data structure that strictly operates on the _____ (LIFO / FIFO) principle.",
+            required: true,
+            options: [],
+            points: 2,
+            correctAnswer: "LIFO",
+            explanation: "A Stack strictly operates on Last-In First-Out (LIFO), where elements are pushed and popped from the same top end."
+          },
+          {
+            type: "short_text",
+            label: "Section 3 - Q5 (Fill-in-the-Blank): The worst-case time complexity of the Quick Sort algorithm when the partition is unbalanced is _____.",
+            required: true,
+            options: [],
+            points: 2,
+            correctAnswer: "O(n^2)",
+            explanation: "When the selected pivot consistently divides the list into 0 and n-1 elements (e.g. sorted input with extreme pivot), Quick Sort degrades to quadratic O(n^2) time."
+          },
+          {
+            type: "short_text",
+            label: "Section 3 - Q6 (Fill-in-the-Blank): In a Circular Queue of capacity N implemented via array, the queue-full condition preserving one empty slot is (rear + 1) % N == _____.",
+            required: true,
+            options: [],
+            points: 2,
+            correctAnswer: "front",
+            explanation: "In an array-based circular queue with one slot preserved to disambiguate full from empty, the queue is full when (rear + 1) % N == front."
+          },
+          {
+            type: "mcq",
+            label: "Section 4 - Q7 (MCQ): Which data structure is utilized by system runtimes to manage recursive function calls and local variables?",
+            required: true,
+            options: ["A) Call Stack", "B) Circular Queue", "C) Max-Heap", "D) Hash Map"],
+            points: 2,
+            correctAnswer: "A) Call Stack",
+            explanation: "The runtime call stack preserves activation frames, parameters, and return addresses during recursive function invocations in LIFO order."
+          },
+          {
+            type: "mcq",
+            label: "Section 4 - Q8 (MCQ): What is the average time complexity for searching an element in a height-balanced Binary Search Tree (AVL or Red-Black Tree)?",
+            required: true,
+            options: ["A) O(1)", "B) O(log n)", "C) O(n)", "D) O(n log n)"],
+            points: 2,
+            correctAnswer: "B) O(log n)",
+            explanation: "Balanced binary search trees maintain a maximum tree height of O(log n), ensuring that lookup, insertion, and deletion operate in O(log n) time."
+          },
+          {
+            type: "mcq",
+            label: "Section 4 - Q9 (MCQ): Which graph traversal algorithm uses a First-In First-Out (FIFO) Queue to visit vertices level-by-level?",
+            required: true,
+            options: ["A) Breadth-First Search (BFS)", "B) Depth-First Search (DFS)", "C) Topological Sort", "D) Prim's Algorithm"],
+            points: 2,
+            correctAnswer: "A) Breadth-First Search (BFS)",
+            explanation: "BFS explores all neighboring vertices at the present depth level before moving on, which is implemented using a FIFO Queue."
+          },
+          {
+            type: "mcq",
+            label: "Section 4 - Q10 (MCQ): What is the primary purpose of a Hash Function in a Hash Table data structure?",
+            required: true,
+            options: ["A) Map arbitrary search keys to fixed table indices", "B) Sort records in ascending alphabetic order", "C) Balance the depth of binary search trees", "D) Reconstruct circular linked lists"],
+            points: 2,
+            correctAnswer: "A) Map arbitrary search keys to fixed table indices",
+            explanation: "A hash function maps keys into array slot indices, providing average O(1) time complexity for insert, search, and delete operations."
+          }
+        );
+      } else if (text.includes("js") || text.includes("javascript")) {
         fields.push(
           { type: "mcq", label: "Q1: What is the output of typeof null in JavaScript?", required: true, options: ["object", "null", "undefined", "number"] },
           { type: "mcq", label: "Q2: Which keyword is used to declare a block-scoped variable in ES6?", required: true, options: ["let", "var", "global", "def"] },

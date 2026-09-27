@@ -447,9 +447,40 @@ router.post('/:id/submit', async (req: Request, res: Response) => {
       const missingRequired: string[] = [];
       for (const q of formQuestions) {
         if (q.required) {
-          const ans = answers[q.id];
-          if (ans === undefined || ans === null || String(ans).trim() === '' || (Array.isArray(ans) && ans.length === 0)) {
-            missingRequired.push(q.label || q.id);
+          // Evaluate conditional visibility so hidden required questions don't block submit
+          let isVisible = true;
+          const logic = q.logic as any;
+          if (logic && logic.condition && logic.target_question_id) {
+            const targetVal = String(logic.condition.value || '').toLowerCase().trim();
+            const currentAns = answers[logic.target_question_id];
+            if (currentAns === undefined || currentAns === null || String(currentAns).trim() === '') {
+              isVisible = logic.action !== 'show';
+            } else {
+              const operator = logic.condition.operator || 'equals';
+              let isMatch = false;
+              if (Array.isArray(currentAns)) {
+                const lowerArr = currentAns.map((v: any) => String(v).toLowerCase().trim());
+                if (operator === 'contains' || operator === 'equals') {
+                  isMatch = lowerArr.includes(targetVal);
+                } else if (operator === 'not_equals') {
+                  isMatch = !lowerArr.includes(targetVal);
+                }
+              } else {
+                const currentStr = String(currentAns).toLowerCase().trim();
+                if (operator === 'equals') isMatch = currentStr === targetVal;
+                else if (operator === 'not_equals') isMatch = currentStr !== targetVal;
+                else if (operator === 'contains') isMatch = currentStr.includes(targetVal);
+              }
+              if (logic.action === 'show') isVisible = isMatch;
+              else if (logic.action === 'hide') isVisible = !isMatch;
+            }
+          }
+
+          if (isVisible) {
+            const ans = answers[q.id];
+            if (ans === undefined || ans === null || String(ans).trim() === '' || (Array.isArray(ans) && ans.length === 0)) {
+              missingRequired.push(q.label || q.id);
+            }
           }
         }
       }
@@ -737,11 +768,19 @@ router.get('/:id/export', authMiddleware, validateUuidMiddleware, async (req: Au
       return 3; 
     };
 
+    const getCorrectAnswer = (validations: any) => {
+      if (!validations) return undefined;
+      const ans = validations.correctAnswer !== undefined && validations.correctAnswer !== null && String(validations.correctAnswer).trim() !== ""
+        ? validations.correctAnswer
+        : (validations.correct_answer !== undefined && validations.correct_answer !== null && String(validations.correct_answer).trim() !== "" ? validations.correct_answer : undefined);
+      return ans;
+    };
+
     const isQuiz = form.category === 'quiz' || 
                    form.title.toLowerCase().includes('quiz') || 
                    form.title.toLowerCase().includes('test') || 
                    form.title.toLowerCase().includes('exam') || 
-                   form.questions.some((q: any) => (q.validations as any)?.correctAnswer !== undefined);
+                   form.questions.some((q: any) => getCorrectAnswer(q.validations) !== undefined);
 
     const getEnrollmentNumber = (r: any) => {
       const answersMap = (r.answers as Record<string, any>) || {};
@@ -780,12 +819,13 @@ router.get('/:id/export', authMiddleware, validateUuidMiddleware, async (req: Au
 
       form.questions.forEach((q: any) => {
         const validations = q.validations || {};
-        if (validations.correctAnswer !== undefined && validations.correctAnswer !== null && validations.correctAnswer !== "") {
+        const correctAns = getCorrectAnswer(validations);
+        if (correctAns !== undefined) {
           totalGraded++;
           const pts = Number(validations.points || 5);
           maxPoints += pts;
           const userAns = answersMap[q.id];
-          const isCorrect = userAns !== undefined && userAns !== null && String(userAns).trim().toLowerCase() === String(validations.correctAnswer).trim().toLowerCase();
+          const isCorrect = userAns !== undefined && userAns !== null && String(userAns).trim().toLowerCase() === String(correctAns).trim().toLowerCase();
           if (isCorrect) {
             correctCount++;
             earnedPoints += pts;
@@ -830,7 +870,7 @@ router.get('/:id/export', authMiddleware, validateUuidMiddleware, async (req: Au
 
     form.questions.forEach((q: any, idx: number) => {
       headers.push(`Q${idx + 1}: ${q.label.replace(/"/g, '""')}`);
-      if (isQuiz && (q.validations as any)?.correctAnswer !== undefined && (q.validations as any)?.correctAnswer !== null && (q.validations as any)?.correctAnswer !== "") {
+      if (isQuiz && getCorrectAnswer(q.validations) !== undefined) {
         headers.push(`Q${idx + 1} Grading`);
       } else {
         headers.push(`Q${idx + 1} Score`);
@@ -889,8 +929,9 @@ router.get('/:id/export', authMiddleware, validateUuidMiddleware, async (req: Au
         row.push(answerStr.replace(/"/g, '""'));
 
         const validations = q.validations || {};
-        if (isQuiz && (validations as any)?.correctAnswer !== undefined && (validations as any)?.correctAnswer !== null && (validations as any)?.correctAnswer !== "") {
-          const isCorrect = answer !== undefined && answer !== null && String(answer).trim().toLowerCase() === String((validations as any).correctAnswer).trim().toLowerCase();
+        const correctAns = getCorrectAnswer(validations);
+        if (isQuiz && correctAns !== undefined) {
+          const isCorrect = answer !== undefined && answer !== null && String(answer).trim().toLowerCase() === String(correctAns).trim().toLowerCase();
           row.push(isCorrect ? 'Correct ✓' : 'Incorrect ✗');
         } else {
           const score = calculateAnswerScore(q.type, answer);

@@ -1,6 +1,11 @@
+import dotenv from 'dotenv';
+import path from 'path';
+dotenv.config();
+dotenv.config({ path: path.join(__dirname, '../../.env') });
+dotenv.config({ path: path.join(__dirname, '../.env') });
+
 import http from 'http';
 import fs from 'fs';
-import path from 'path';
 import { db } from '../lib/db';
 
 const API_BASE = 'http://127.0.0.1:5050/api';

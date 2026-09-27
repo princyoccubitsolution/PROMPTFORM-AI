@@ -72,7 +72,7 @@ export default function AnalyticsPage() {
   const handleCompileSentiment = async () => {
     setIsCompilingSentiment(true);
     try {
-      const res = await api.post('/ai/analyze-sentiment', { formId });
+      const res = await api.post('/ai/analyze-sentiment', { formId: form?.id || formId });
       setAnalytics({ ...analytics, sentimentSummary: res.sentimentSummary });
       alert("Sentiment report successfully generated!");
     } catch (err: any) {

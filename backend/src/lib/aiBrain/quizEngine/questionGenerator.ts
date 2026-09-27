@@ -12,13 +12,29 @@ export class QuestionGenerator {
       let options = Array.isArray(field.options) ? [...field.options] : [];
 
       if (isQuiz && !isIdentity) {
-        if (type === "short_text" || type === "long_text" || type === "standard-input" || !type) {
+        const isExplicitMcq = (options.length >= 3) || lowerLabel.includes("(mcq)") || (type === 'mcq' && options.length > 2);
+        const isTrueFalse = !isExplicitMcq && ((options.length === 2 && options.some(o => o.toLowerCase().includes('true')) && options.some(o => o.toLowerCase().includes('false'))) || lowerLabel.includes("true or false") || lowerLabel.includes("true/false"));
+        const isFillInBlank = !isExplicitMcq && !isTrueFalse && (type === "short_text" || lowerLabel.includes("fill-in-the-blank") || lowerLabel.includes("fill in the blank") || lowerLabel.includes("____") || lowerLabel.includes("blank"));
+        const isCodingOrAlgorithm = !isExplicitMcq && !isTrueFalse && !isFillInBlank && (type === "long_text" || type === "feedback" || lowerLabel.includes("coding") || lowerLabel.includes("write a program") || lowerLabel.includes("write an algorithm") || lowerLabel.includes("c program") || lowerLabel.includes("write a c"));
+
+        if (isCodingOrAlgorithm) {
+          type = "long_text";
+          options = [];
+        } else if (isFillInBlank) {
+          type = "short_text";
+          options = [];
+        } else if (isTrueFalse) {
           type = "mcq";
-        }
-        if (options.length < 4 && (type === "mcq" || type === "one_option" || type === "dropdown" || type === "checkbox")) {
-          const defaultOptions = ["Option A (Correct)", "Option B", "Option C", "Option D"];
-          while (options.length < 4) {
-            options.push(defaultOptions[options.length] || `Option ${options.length + 1}`);
+          options = ["True", "False"];
+        } else {
+          if (type === "standard-input" || !type) {
+            type = "mcq";
+          }
+          if (options.length < 4 && (type === "mcq" || type === "one_option" || type === "dropdown" || type === "checkbox")) {
+            const defaultOptions = ["Option A (Correct)", "Option B", "Option C", "Option D"];
+            while (options.length < 4) {
+              options.push(defaultOptions[options.length] || `Option ${options.length + 1}`);
+            }
           }
         }
       }
@@ -31,11 +47,11 @@ export class QuestionGenerator {
       };
 
       if (isQuiz && !isIdentity) {
-        q.correctAnswer = field.correctAnswer || (q.options.length > 0 ? q.options[0] : "Option A");
-        q.explanation = field.explanation || `Choice '${q.correctAnswer}' is the verified answer for "${label}".`;
+        q.correctAnswer = field.correctAnswer || (q.options.length > 0 ? q.options[0] : (type === "long_text" ? "Algorithm / Code Implementation" : "Expected Answer"));
+        q.explanation = field.explanation || `Verified explanation and analysis for "${label}".`;
         q.category = field.category || "Domain Knowledge";
         q.tags = field.tags || ["Evaluation", "Assessment"];
-        q.points = field.points !== undefined ? Number(field.points) : 10;
+        q.points = field.points !== undefined ? Number(field.points) : 2;
         q.difficulty = field.difficulty || "Intermediate";
         q.estimatedTimeSeconds = 60;
         q.learningObjective = "Evaluate understanding of subject matter.";

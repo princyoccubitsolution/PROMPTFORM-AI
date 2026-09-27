@@ -42,9 +42,17 @@ export class JsonAssembler {
         formTitle = "Event Registration & RSVP";
       } else if (text.includes("travel") || text.includes("booking")) {
         formTitle = "Travel Booking Request Form";
+      } else if (text.includes("data structure") || text.includes("dsa")) {
+        formTitle = plan.domain === 'quiz' ? "Data Structures Exam Paper" : "Data Structures Feedback Form";
       } else {
+        const explicitSub = plan.normalizedPrompt?.match(/(?:for\s+the\s+subject|subject|course|topic)\s*[:="']*\s*["']?([^"',;\.\n\r]+)["']?/i);
+        if (explicitSub && explicitSub[1] && explicitSub[1].trim().length > 2 && !["exam", "paper", "quiz", "test", "form"].includes(explicitSub[1].trim().toLowerCase())) {
+          const rawSub = explicitSub[1].trim().split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+          formTitle = plan.domain === 'quiz' ? `${rawSub} Exam Paper` : `${rawSub} Form`;
+        }
+
         let topicClean = (plan.normalizedPrompt || "")
-          .replace(/\b(\d+[\s\-]question|\d+|\d+\-question|create|make|generate|build|form|survey|quiz|test|exam|created|built|please|for|a|an|the|around|questions|form type|feedback|intake|application|rsvp|medical|with|net promoter score|net|promoter|score|rating|ratings|scale|scales|and|or|set|minutes|timer|anti[\s\-]?cheat|add|marks|options|exact|correct|answers|this|id|number|field|remove|analysis|analyze|analysing|pdf|document|doc|docx|file|notes|summary|upload|uploaded|attachment|image|scan)\b/gi, "")
+          .replace(/\b(\d+[\s\-]question|\d+|\d+\-question|create|make|generate|build|form|survey|quiz|test|exam|created|built|please|for|a|an|the|around|questions|form type|feedback|intake|application|rsvp|medical|with|net promoter score|net|promoter|score|rating|ratings|scale|scales|and|or|set|minutes|timer|anti[\s\-]?cheat|add|marks|options|exact|correct|answers|this|id|number|field|remove|analysis|analyze|analysing|pdf|document|doc|docx|file|notes|summary|upload|uploaded|attachment|image|scan|attached|syllabus|photo|paper|strictly|follow|structure|carrying|worth|carrying\s+exactly|total\s+of|section|sections)\b/gi, "")
           .replace(/\([^)]*\)/g, "")
           .replace(/[\-\_\.]+/g, " ")
           .replace(/\s+/g, " ")
@@ -55,7 +63,7 @@ export class JsonAssembler {
 
         let topicName = "";
         if (topicClean.length > 1) {
-          let words = topicClean.split(/\s+/).filter(w => w.length > 1 && !["this", "id", "remove", "field", "analysis", "pdf", "document", "doc", "file", "and"].includes(w.toLowerCase()));
+          let words = topicClean.split(/\s+/).filter(w => w.length > 1 && !["this", "id", "remove", "field", "analysis", "pdf", "document", "doc", "file", "and", "attached", "syllabus", "photo", "paper"].includes(w.toLowerCase()));
           if (words.length > 0) {
             if (words.length > 4) words = words.slice(0, 4);
             topicName = words.map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');

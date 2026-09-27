@@ -337,7 +337,7 @@ input[type="number"] {
   }
   .ai-option-chip {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 0.625rem;
     padding: 0.625rem 0.875rem;
     border-radius: 0.875rem;
@@ -349,9 +349,11 @@ input[type="number"] {
     font-size: 0.75rem;
     font-weight: 500;
     color: var(--foreground);
-    flex: 1 1 0%;
-    min-width: 130px;
+    flex: 1 1 auto;
+    min-width: 140px;
     max-width: 100%;
+    height: auto;
+    text-align: left;
   }
   .dark .ai-option-chip {
     background-color: var(--card);

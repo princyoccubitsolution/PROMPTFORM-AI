@@ -98,21 +98,37 @@ export class EnterpriseQualityReviewer {
         const isIdentity = lowerLabel.includes("name") || lowerLabel.includes("roll") || lowerLabel.includes("id code") || lowerLabel.includes("student id") || lowerLabel.includes("email");
 
         if (!isIdentity) {
-          // Convert text fields to MCQ type for quiz questions
-          if (q.type === 'short_text' || q.type === 'long_text' || q.type === 'standard-input' || !q.type) {
-            q.type = 'mcq';
-            quizHealedCount++;
-          }
+          const isExplicitMcq = (Array.isArray(q.options) && q.options.length >= 3) || lowerLabel.includes("(mcq)") || (q.type === 'mcq' && Array.isArray(q.options) && q.options.length > 2);
+          const isTrueFalse = !isExplicitMcq && ((Array.isArray(q.options) && q.options.length === 2 && q.options.some((o: string) => o.toLowerCase().includes('true')) && q.options.some((o: string) => o.toLowerCase().includes('false'))) || lowerLabel.includes("true or false") || lowerLabel.includes("true/false"));
+          const isFillInBlank = !isExplicitMcq && !isTrueFalse && (q.type === 'short_text' || lowerLabel.includes("fill-in-the-blank") || lowerLabel.includes("fill in the blank") || lowerLabel.includes("____") || lowerLabel.includes("blank"));
+          const isCodingOrAlgorithm = !isExplicitMcq && !isTrueFalse && !isFillInBlank && (q.type === 'long_text' || q.type === 'feedback' || lowerLabel.includes("coding") || lowerLabel.includes("write a program") || lowerLabel.includes("write an algorithm") || lowerLabel.includes("c program") || lowerLabel.includes("write a c"));
 
-          // Ensure options array exists and has at least 4 items for MCQs/choice fields
-          if (q.type === 'mcq' || q.type === 'one_option' || q.type === 'dropdown' || q.type === 'checkbox') {
-            if (!Array.isArray(q.options)) q.options = [];
-            if (q.options.length < 4) {
-              const fallbackChoices = ["Option A", "Option B", "Option C", "Option D"];
-              while (q.options.length < 4) {
-                q.options.push(fallbackChoices[q.options.length] || `Option ${q.options.length + 1}`);
-              }
+          if (isCodingOrAlgorithm) {
+            q.type = 'long_text';
+            q.options = [];
+          } else if (isFillInBlank) {
+            q.type = 'short_text';
+            q.options = [];
+          } else if (isTrueFalse) {
+            q.type = 'mcq';
+            q.options = ["True", "False"];
+          } else {
+            // Convert standard inputs to MCQ type for quiz questions
+            if (q.type === 'standard-input' || !q.type) {
+              q.type = 'mcq';
               quizHealedCount++;
+            }
+
+            // Ensure options array exists and has at least 4 items for general MCQs
+            if (q.type === 'mcq' || q.type === 'one_option' || q.type === 'dropdown' || q.type === 'checkbox') {
+              if (!Array.isArray(q.options)) q.options = [];
+              if (q.options.length < 4) {
+                const fallbackChoices = ["Option A", "Option B", "Option C", "Option D"];
+                while (q.options.length < 4) {
+                  q.options.push(fallbackChoices[q.options.length] || `Option ${q.options.length + 1}`);
+                }
+                quizHealedCount++;
+              }
             }
           }
 
@@ -121,7 +137,7 @@ export class EnterpriseQualityReviewer {
             q.correctAnswer = q.options[0];
           }
           if (q.points === undefined) {
-            q.points = 10;
+            q.points = 2;
           }
           if (!q.explanation && q.correctAnswer) {
             q.explanation = `Option '${q.correctAnswer}' is the verified correct answer for "${q.label}".`;

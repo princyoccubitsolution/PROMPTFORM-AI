@@ -117,7 +117,8 @@ app.use('/api/', apiLimiter);
 // Strict rate limiters for critical public endpoints
 const submissionLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
-  max: 15, // max 15 submissions per minute per IP
+  max: process.env.NODE_ENV === 'production' ? 60 : 1000,
+  skip: (req) => process.env.NODE_ENV === 'test' || Boolean(req.ip && (req.ip.includes('127.0.0.1') || req.ip === '::1')),
   message: { error: 'Too many submissions. Please wait a minute before trying again.' }
 });
 app.use('/api/forms/:id/submit', submissionLimiter);

@@ -422,7 +422,7 @@ export default function BuilderPage() {
       label: q.label,
       required: q.required,
       options: q.options,
-      validations: { points: 1, correct_answer: "" },
+      validations: { points: 1, correct_answer: "", correctAnswer: "" },
       logic: {}
     }));
 
@@ -574,20 +574,22 @@ export default function BuilderPage() {
   let totalScorePossible = 0;
   let highestScore = 0;
 
-  const hasQuiz = store.questions.some(q => q.validations?.correct_answer);
+  const getQCorrectAns = (q: Question) => q.validations?.correct_answer ?? q.validations?.correctAnswer;
+  const hasQuiz = store.questions.some(q => Boolean(getQCorrectAns(q)));
 
   if (hasQuiz) {
     responses.forEach(r => {
       let earned = 0;
       let possible = 0;
       store.questions.forEach(q => {
-        const isGraded = ['short_text', 'mcq', 'dropdown', 'checkbox'].includes(q.type) && q.validations?.correct_answer;
+        const correctAns = getQCorrectAns(q);
+        const isGraded = ['short_text', 'mcq', 'dropdown', 'checkbox'].includes(q.type) && Boolean(correctAns);
         const pts = q.validations?.points ?? 0;
         if (isGraded) {
           possible += pts;
           const studentAns = r.answers?.[q.id];
           if (studentAns !== undefined && studentAns !== null) {
-            if (String(studentAns).trim().toLowerCase() === String(q.validations.correct_answer).trim().toLowerCase()) {
+            if (String(studentAns).trim().toLowerCase() === String(correctAns).trim().toLowerCase()) {
               earned += pts;
             }
           }
@@ -1587,12 +1589,12 @@ export default function BuilderPage() {
                             <label className="block text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">Correct Answer</label>
                             {['mcq', 'dropdown'].includes(selectedQuestion.type) ? (
                               <select
-                                value={selectedQuestion.validations?.correct_answer ?? ''}
+                                value={selectedQuestion.validations?.correct_answer ?? selectedQuestion.validations?.correctAnswer ?? ''}
                                 onChange={(e) => {
                                   saveStateForUndo(store.questions);
                                   const currentVals = selectedQuestion.validations || {};
                                   store.updateQuestion(selectedQuestion.id, {
-                                    validations: { ...currentVals, correct_answer: e.target.value }
+                                    validations: { ...currentVals, correct_answer: e.target.value, correctAnswer: e.target.value }
                                   });
                                 }}
                                 className="w-full px-2.5 py-1.5 border bg-muted dark:bg-background border-border dark:border-border rounded-lg text-xs outline-none focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/50 font-bold text-foreground dark:text-zinc-200"
@@ -1606,12 +1608,12 @@ export default function BuilderPage() {
                               <Input
                                 type="text"
                                 placeholder="Type correct answer..."
-                                value={selectedQuestion.validations?.correct_answer ?? ''}
+                                value={selectedQuestion.validations?.correct_answer ?? selectedQuestion.validations?.correctAnswer ?? ''}
                                 onChange={(e) => {
                                   saveStateForUndo(store.questions);
                                   const currentVals = selectedQuestion.validations || {};
                                   store.updateQuestion(selectedQuestion.id, {
-                                    validations: { ...currentVals, correct_answer: e.target.value }
+                                    validations: { ...currentVals, correct_answer: e.target.value, correctAnswer: e.target.value }
                                   });
                                 }}
                                 className="h-8 text-xs rounded-lg font-bold bg-muted dark:bg-background dark:border-border"
@@ -2318,13 +2320,14 @@ export default function BuilderPage() {
                                 if (!hasQuiz) return '-';
                                 
                                 store.questions.forEach(q => {
-                                  const isGraded = ['short_text', 'mcq', 'dropdown', 'checkbox'].includes(q.type) && q.validations?.correct_answer;
+                                  const correctAns = q.validations?.correct_answer ?? q.validations?.correctAnswer;
+                                  const isGraded = ['short_text', 'mcq', 'dropdown', 'checkbox'].includes(q.type) && Boolean(correctAns);
                                   const pts = q.validations?.points ?? 0;
                                   if (isGraded) {
                                     totalPossible += pts;
                                     const studentAns = r.answers?.[q.id];
                                     if (studentAns !== undefined && studentAns !== null) {
-                                      if (String(studentAns).trim().toLowerCase() === String(q.validations.correct_answer).trim().toLowerCase()) {
+                                      if (String(studentAns).trim().toLowerCase() === String(correctAns).trim().toLowerCase()) {
                                         earned += pts;
                                       }
                                     }
@@ -2512,18 +2515,20 @@ export default function BuilderPage() {
             {(() => {
               let totalPossiblePoints = 0;
               let earnedPoints = 0;
-              const hasQuizData = store.questions.some(q => q.validations?.correct_answer);
+              const getQCorrectAns = (q: Question) => q.validations?.correct_answer ?? q.validations?.correctAnswer;
+              const hasQuizData = store.questions.some(q => Boolean(getQCorrectAns(q)));
 
               if (!hasQuizData) return null;
 
               store.questions.forEach(q => {
-                const isGraded = ['short_text', 'mcq', 'dropdown', 'checkbox'].includes(q.type) && q.validations?.correct_answer;
+                const correctAns = getQCorrectAns(q);
+                const isGraded = ['short_text', 'mcq', 'dropdown', 'checkbox'].includes(q.type) && Boolean(correctAns);
                 const points = q.validations?.points ?? 0;
                 if (isGraded) {
                   totalPossiblePoints += points;
                   const ans = selectedResponse.answers?.[q.id];
                   if (ans !== undefined && ans !== null) {
-                    if (String(ans).trim().toLowerCase() === String(q.validations.correct_answer).trim().toLowerCase()) {
+                    if (String(ans).trim().toLowerCase() === String(correctAns).trim().toLowerCase()) {
                       earnedPoints += points;
                     }
                   }
@@ -2562,8 +2567,9 @@ export default function BuilderPage() {
                     displayAnswer = typeof answer === 'object' ? JSON.stringify(answer) : String(answer);
                   }
                   
-                  const isGraded = ['short_text', 'mcq', 'dropdown', 'checkbox'].includes(q.type) && q.validations?.correct_answer;
-                  const isCorrect = isGraded && String(answer).trim().toLowerCase() === String(q.validations.correct_answer).trim().toLowerCase();
+                  const correctAns = q.validations?.correct_answer ?? q.validations?.correctAnswer;
+                  const isGraded = ['short_text', 'mcq', 'dropdown', 'checkbox'].includes(q.type) && Boolean(correctAns);
+                  const isCorrect = isGraded && String(answer).trim().toLowerCase() === String(correctAns).trim().toLowerCase();
 
                   return (
                     <div key={q.id} className="p-4 bg-muted dark:bg-background border border-border dark:border-border rounded-[20px] flex justify-between items-start">

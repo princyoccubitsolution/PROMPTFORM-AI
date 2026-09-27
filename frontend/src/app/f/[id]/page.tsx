@@ -279,8 +279,8 @@ export default function PublicFormPage() {
         return;
       }
 
-      // Check if already submitted in this browser session (one-time submission)
-      if (typeof window !== 'undefined' && !isPreviewMode) {
+      // Check if already submitted in this browser session (only when limit_responses is enabled)
+      if (typeof window !== 'undefined' && !isPreviewMode && data.settings?.limit_responses) {
         const submittedKey = `promptform_submitted_${data.id || formId}`;
         if (localStorage.getItem(submittedKey) === 'true') {
           setSubmitted(true);
@@ -639,7 +639,32 @@ export default function PublicFormPage() {
       { sender: 'user' as const, text: userDisplayText }
     ];
 
-    const nextIndex = currentQuestionIndex + 1;
+    let nextIndex = currentQuestionIndex + 1;
+    if (currentQ?.logic && currentQ.logic.action === 'goto' && currentQ.logic.target_question_id) {
+      const targetQId = currentQ.logic.target_question_id;
+      const targetVal = String(currentQ.logic.condition?.value || '').toLowerCase().trim();
+      const operator = currentQ.logic.condition?.operator || 'equals';
+      let isMatch = false;
+
+      if (Array.isArray(value)) {
+        const lowerArr = value.map((v: any) => String(v).toLowerCase().trim());
+        if (operator === 'contains' || operator === 'equals') isMatch = lowerArr.includes(targetVal);
+        else if (operator === 'not_equals') isMatch = !lowerArr.includes(targetVal);
+      } else if (value !== undefined && value !== null) {
+        const currentStr = String(value).toLowerCase().trim();
+        if (operator === 'equals') isMatch = currentStr === targetVal;
+        else if (operator === 'not_equals') isMatch = currentStr !== targetVal;
+        else if (operator === 'contains') isMatch = currentStr.includes(targetVal);
+      }
+
+      if (isMatch) {
+        const targetIdx = visibleQuestions.findIndex(q => q.id === targetQId);
+        if (targetIdx !== -1 && targetIdx > currentQuestionIndex) {
+          nextIndex = targetIdx;
+        }
+      }
+    }
+
     if (nextIndex < visibleQuestions.length) {
       const nextQ = visibleQuestions[nextIndex];
       setCurrentQuestionIndex(nextIndex);
@@ -764,7 +789,9 @@ export default function PublicFormPage() {
       if (typeof window !== 'undefined') {
         localStorage.removeItem(`promptform_form_timer_start_${form?.id || formId}`);
         localStorage.removeItem(`promptform_draft_answers_${form?.id || formId}`);
-        localStorage.setItem(`promptform_submitted_${form?.id || formId}`, 'true');
+        if (form?.settings?.limit_responses) {
+          localStorage.setItem(`promptform_submitted_${form?.id || formId}`, 'true');
+        }
       }
     } catch (err: any) {
       if (isForceSubmit) {
@@ -772,7 +799,9 @@ export default function PublicFormPage() {
         if (typeof window !== 'undefined') {
           localStorage.removeItem(`promptform_form_timer_start_${form?.id || formId}`);
           localStorage.removeItem(`promptform_draft_answers_${form?.id || formId}`);
-          localStorage.setItem(`promptform_submitted_${form?.id || formId}`, 'true');
+          if (form?.settings?.limit_responses) {
+            localStorage.setItem(`promptform_submitted_${form?.id || formId}`, 'true');
+          }
         }
       } else {
         alert("Submission error: " + (err.message || "Failed to submit response. Please try again."));
@@ -789,7 +818,7 @@ export default function PublicFormPage() {
     let totalPossiblePoints = 0;
     let earnedPoints = 0;
     const questionsBreakdown = questions.map((q: any) => {
-      const correctAns = q.validations?.correct_answer || q.correctAnswer;
+      const correctAns = q.validations?.correct_answer ?? q.validations?.correctAnswer ?? q.correctAnswer;
       const explanation = q.validations?.explanation || q.explanation;
       const isGraded = ['short_text', 'mcq', 'dropdown', 'checkbox', 'one_option'].includes(q.type) && Boolean(correctAns);
       const points = (q.validations?.points ?? q.points) || (isGraded ? 10 : 0);
@@ -2096,6 +2125,35 @@ export default function PublicFormPage() {
                       }
                     }
                     setValidationErrors({});
+
+                    // Handle 'goto' logic branching if configured
+                    if (currentQ?.logic && currentQ.logic.action === 'goto' && currentQ.logic.target_question_id) {
+                      const targetQId = currentQ.logic.target_question_id;
+                      const targetVal = String(currentQ.logic.condition?.value || '').toLowerCase().trim();
+                      const currentAns = answers[currentQ.id];
+                      const operator = currentQ.logic.condition?.operator || 'equals';
+                      let isMatch = false;
+
+                      if (Array.isArray(currentAns)) {
+                        const lowerArr = currentAns.map((v: any) => String(v).toLowerCase().trim());
+                        if (operator === 'contains' || operator === 'equals') isMatch = lowerArr.includes(targetVal);
+                        else if (operator === 'not_equals') isMatch = !lowerArr.includes(targetVal);
+                      } else if (currentAns !== undefined && currentAns !== null) {
+                        const currentStr = String(currentAns).toLowerCase().trim();
+                        if (operator === 'equals') isMatch = currentStr === targetVal;
+                        else if (operator === 'not_equals') isMatch = currentStr !== targetVal;
+                        else if (operator === 'contains') isMatch = currentStr.includes(targetVal);
+                      }
+
+                      if (isMatch) {
+                        const targetIdx = visibleQuestions.findIndex(q => q.id === targetQId);
+                        if (targetIdx !== -1 && targetIdx > currentQuestionIndex) {
+                          setCurrentQuestionIndex(targetIdx);
+                          return;
+                        }
+                      }
+                    }
+
                     setCurrentQuestionIndex(currentQuestionIndex + 1);
                   }}
                   className="h-11 px-6 rounded-xl text-xs font-bold text-white shadow-md flex items-center gap-1.5 hover:opacity-95"

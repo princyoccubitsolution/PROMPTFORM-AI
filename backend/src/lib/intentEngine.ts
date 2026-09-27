@@ -14,6 +14,7 @@ export interface IntentResult {
   formType: string;
   difficulty: 'Beginner' | 'Intermediate' | 'Difficult' | 'Advanced';
   questionCount: number;
+  pointsPerQuestion?: number;
   normalizedPrompt: string;
   industry: string;
   expandedFields: string[];
@@ -108,8 +109,35 @@ function extractTopicFromDocument(documentText: string): string | null {
 }
 
 function extractTopic(normalized: string, documentContext?: string): string {
+  // Check for explicit subject / topic declaration in user prompt: e.g. 'subject "Data Structures"', 'for the subject Data Structures'
+  const explicitSubjectMatch = normalized.match(/(?:for\s+the\s+subject|subject|course|topic)\s*[:="']*\s*["']?([^"',;\.\n\r]+)["']?/i);
+  if (explicitSubjectMatch && explicitSubjectMatch[1]) {
+    const rawSubject = explicitSubjectMatch[1].trim();
+    if (rawSubject.length > 2 && rawSubject.length < 50 && !["exam", "paper", "quiz", "test", "form"].includes(rawSubject.toLowerCase())) {
+      return rawSubject.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+    }
+  }
+
   // Sort techTopics by length descending so longer keys match first (e.g. node.js before js)
   const techTopics: Record<string, string> = {
+    "data structures and algorithms": "Data Structures & Algorithms",
+    "data structures": "Data Structures",
+    "data structure": "Data Structures",
+    "dsa": "Data Structures",
+    "algorithms": "Algorithms",
+    "c programming": "C Programming",
+    "c++": "C++",
+    "c language": "C Programming",
+    "database management systems": "DBMS",
+    "database management": "DBMS",
+    "dbms": "DBMS",
+    "operating systems": "Operating Systems",
+    "computer networks": "Computer Networks",
+    "software engineering": "Software Engineering",
+    "machine learning": "Machine Learning",
+    "artificial intelligence": "Artificial Intelligence",
+    "cybersecurity": "Cybersecurity",
+    "system design": "System Design",
     "javascript": "JavaScript",
     "typescript": "TypeScript",
     "node.js": "Node.js",
@@ -127,7 +155,6 @@ function extractTopic(normalized: string, documentContext?: string): string {
     "html": "HTML5",
     "css": "CSS3",
     "java": "Java",
-    "c++": "C++",
     "cpp": "C++",
     "sql": "SQL Database",
     "aws": "AWS Cloud",
@@ -165,7 +192,7 @@ function extractTopic(normalized: string, documentContext?: string): string {
   if (normalized.includes("customer satisfaction") || normalized.includes("satisfaction")) return "Customer Satisfaction";
   if (normalized.includes("product feedback") || normalized.includes("feedback")) return "Product Experience";
 
-  const metaNoiseRegex = /\b(analysis|analyze|analysing|create|make|generate|build|please|quiz|exam|test|mcq|mcqs|form|survey|feedback|pdf|document|doc|docx|file|notes|summary|upload|uploaded|attachment|image|scan|this|that|these|those|and|for|a|an|the|around|with|based\s+on|about|from|into|give|get|created|built)\b/gi;
+  const metaNoiseRegex = /\b(analysis|analyze|analysing|create|make|generate|build|please|quiz|exam|test|mcq|mcqs|form|survey|feedback|pdf|document|doc|docx|file|notes|summary|upload|uploaded|attachment|image|scan|this|that|these|those|and|for|a|an|the|around|with|based\s+on|about|from|into|give|get|created|built|attached|syllabus|photo|paper|strictly|follow|structure|marks|carrying|worth|carrying\s+exactly|total\s+of|section|sections|question\s+carrying)\b/gi;
 
   // Regex extract "about X" or "for X" or "X quiz"
   const topicPatterns = [
@@ -299,6 +326,11 @@ export function detectIntent(text: string, documentContext?: string): IntentResu
   if (questionCount > 50) questionCount = 50;
   if (questionCount < 1) questionCount = requireQuizValidation ? 10 : 6;
 
+  // Points / Marks Extraction (e.g. "carrying exactly 2 marks", "2 marks each", "worth 2 points each")
+  const marksMatch = normalized.match(/(?:carrying\s+exactly|carrying|each\s+carrying|worth)\s*(\d+)\s*(?:marks?|pts?|points?)/i) ||
+                     normalized.match(/(\d+)\s*(?:marks?|pts?|points?)\s*(?:each|per\s+question)/i);
+  const pointsPerQuestion = marksMatch ? parseInt(marksMatch[1]) : (requireQuizValidation ? 2 : undefined);
+
   const summaryText = `I understood this as: Topic: ${topic} | Purpose: ${purpose} | Type: ${formType} | Difficulty: ${difficulty} | Questions: ${questionCount}`;
 
   return {
@@ -308,6 +340,7 @@ export function detectIntent(text: string, documentContext?: string): IntentResu
     formType,
     difficulty,
     questionCount,
+    pointsPerQuestion,
     normalizedPrompt: normalized,
     industry,
     expandedFields,
@@ -371,13 +404,18 @@ STRICT GENERATION RULES:
    - Difficulty: "${intent.difficulty}"
    - Number of Questions to Generate: ${intent.questionCount}
    ${intent.relevanceRules.requireQuizValidation 
-     ? `- THIS IS A QUIZ / MCQ EXAM ON "${intent.topic}".
-     - STRICT WIDGET TYPE REQUIREMENT: Every single evaluation question MUST be of type "mcq" (Multiple Choice Question) or "checkbox" / "dropdown". DO NOT use "short_text" or "long_text" for quiz questions.
+     ? `- THIS IS AN ASSESSMENT / EXAM / QUIZ ON "${intent.topic}".
+     - WIDGET TYPE REQUIREMENT & MULTI-SECTION EXAM RULES:
+       * Respect the exact sections and question types requested by the user prompt:
+         a) Coding / Algorithm / C Program / Descriptive questions: MUST use type "long_text" or "feedback" with empty options [] and a clear prompt. Store model solution and algorithmic complexity analysis in "explanation".
+         b) True / False questions: MUST use type "mcq" with options ["True", "False"].
+         c) Fill-in-the-Blank questions: MUST use type "short_text" with a sentence containing a blank (e.g., "_____") and empty options []. Set "correctAnswer" to the expected answer.
+         d) Multiple Choice Questions (MCQs): MUST use type "mcq" with 4 distinct options (e.g. ["A) ...", "B) ...", "C) ...", "D) ..."] or text options, 1 verified correct answer, and 3 realistic distractors.
+       * If no specific question types are requested, generate standard MCQs with 4 options.
      - TOPIC RIGOR: Questions must be deep, non-trivial, highly relevant to "${intent.topic}", challenging, and tailored for a "${intent.difficulty}" skill level.
-     - OPTIONS MANDATE: Every MCQ question MUST have an "options" array containing EXACTLY 4 distinct, plausible choices (1 correct answer and 3 realistic distractors).
-     - EVALUATION METADATA: Every question MUST specify:
-       * "correctAnswer": Exact string matching one of the 4 items in "options"
-       * "points": Point value for the question (e.g. 10)
+     - EVALUATION METADATA & MARKS: Every question MUST specify:
+       * "correctAnswer": Exact string matching the correct choice or fill-in-the-blank answer
+       * "points": Point value matching user instructions (e.g. 2 marks per question if specified, otherwise 5 or 10)
        * "difficulty": "${intent.difficulty}"
        * "explanation": Detailed step-by-step explanation of why the correct answer is right and why other options are incorrect.` 
      : '- This is a Survey / Feedback / Form. Use appropriate ratings, options, Likert scales, or text fields. Do NOT include correct answers or exam pass/fail settings.'}
