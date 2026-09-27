@@ -11,7 +11,18 @@ export class QuestionGenerator {
       let type = field.type || "mcq";
       let options = Array.isArray(field.options) ? [...field.options] : [];
 
-      if (isQuiz && !isIdentity) {
+      if (isIdentity) {
+        if (lowerLabel.includes("name")) {
+          type = "name";
+          options = [];
+        } else if (lowerLabel.includes("email")) {
+          type = "email";
+          options = [];
+        } else if (lowerLabel.includes("roll") || lowerLabel.includes("enrollment") || lowerLabel.includes("student id") || lowerLabel.includes("id code")) {
+          type = "short_text";
+          options = [];
+        }
+      } else if (isQuiz) {
         const isExplicitMcq = (options.length >= 3) || lowerLabel.includes("(mcq)") || (type === 'mcq' && options.length > 2);
         const isTrueFalse = !isExplicitMcq && ((options.length === 2 && options.some(o => o.toLowerCase().includes('true')) && options.some(o => o.toLowerCase().includes('false'))) || lowerLabel.includes("true or false") || lowerLabel.includes("true/false"));
         const isFillInBlank = !isExplicitMcq && !isTrueFalse && (type === "short_text" || lowerLabel.includes("fill-in-the-blank") || lowerLabel.includes("fill in the blank") || lowerLabel.includes("____") || lowerLabel.includes("blank"));

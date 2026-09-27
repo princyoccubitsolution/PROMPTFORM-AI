@@ -404,6 +404,131 @@ router.delete('/:id', authMiddleware, validateUuidMiddleware, async (req: Authen
   }
 });
 
+// Student Identity Extraction Helpers
+export const extractEnrollmentNumber = (answers: Record<string, any>, questions: any[] = []): string => {
+  if (!answers) return '';
+  if (answers.enrollment_no && String(answers.enrollment_no).trim()) return String(answers.enrollment_no).trim();
+  if (answers.enrollment && String(answers.enrollment).trim()) return String(answers.enrollment).trim();
+  if (answers.roll_no && String(answers.roll_no).trim()) return String(answers.roll_no).trim();
+  if (answers.student_id && String(answers.student_id).trim()) return String(answers.student_id).trim();
+  if (answers.gr_no && String(answers.gr_no).trim()) return String(answers.gr_no).trim();
+  if (answers.gr_number && String(answers.gr_number).trim()) return String(answers.gr_number).trim();
+
+  // Search questions
+  const q = questions.find((item: any) => {
+    const label = (item.label || '').toLowerCase();
+    const qid = (item.id || '').toLowerCase();
+    return (
+      label.includes('enrollment') ||
+      label.includes('roll') ||
+      label.includes('student id') ||
+      label.includes('student_id') ||
+      label.includes('gr number') ||
+      label.includes('reg no') ||
+      label.includes('registration no') ||
+      label.includes('seat no') ||
+      qid.includes('enrollment') ||
+      qid.includes('roll') ||
+      qid === 'field_enrollment_no'
+    );
+  });
+  if (q && answers[q.id] !== undefined && answers[q.id] !== null && String(answers[q.id]).trim()) {
+    return String(answers[q.id]).trim();
+  }
+
+  // Scan answers keys
+  for (const [k, v] of Object.entries(answers)) {
+    if (v !== undefined && v !== null && String(v).trim()) {
+      const lk = k.toLowerCase();
+      if (lk.includes('enrollment') || lk.includes('roll') || lk.includes('student_id') || lk.includes('gr_no')) {
+        return String(v).trim();
+      }
+    }
+  }
+
+  return '';
+};
+
+export const extractStudentName = (answers: Record<string, any>, questions: any[] = [], explicitName?: string | null): string => {
+  if (explicitName && explicitName.trim() && explicitName.toLowerCase() !== 'anonymous') {
+    return explicitName.trim();
+  }
+  if (!answers) return 'Anonymous';
+  if (answers.student_name && String(answers.student_name).trim()) return String(answers.student_name).trim();
+  if (answers.fullName && String(answers.fullName).trim()) return String(answers.fullName).trim();
+  if (answers.name && String(answers.name).trim()) return String(answers.name).trim();
+
+  // Search questions
+  const q = questions.find((item: any) => {
+    const label = (item.label || '').toLowerCase();
+    const qid = (item.id || '').toLowerCase();
+    return (
+      item.type === 'name' ||
+      qid.includes('student_name') ||
+      qid === 'field_student_name' ||
+      label === 'student name' ||
+      label === 'full name' ||
+      label === 'name' ||
+      label.includes('student name') ||
+      label.includes('full name') ||
+      (label.includes('name') && !label.includes('file') && !label.includes('user') && !label.includes('company'))
+    );
+  });
+  if (q && answers[q.id] !== undefined && answers[q.id] !== null && String(answers[q.id]).trim()) {
+    return String(answers[q.id]).trim();
+  }
+
+  // Scan answers keys
+  for (const [k, v] of Object.entries(answers)) {
+    if (v !== undefined && v !== null && String(v).trim()) {
+      const lk = k.toLowerCase();
+      if (lk === 'name' || lk.includes('student_name') || lk.includes('fullname')) {
+        return String(v).trim();
+      }
+    }
+  }
+
+  return 'Anonymous';
+};
+
+export const extractStudentEmail = (answers: Record<string, any>, questions: any[] = [], explicitEmail?: string | null): string => {
+  if (explicitEmail && explicitEmail.trim() && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(explicitEmail.trim())) {
+    return explicitEmail.trim();
+  }
+  if (!answers) return '';
+  if (answers.responder_email && String(answers.responder_email).trim()) return String(answers.responder_email).trim();
+  if (answers.email && String(answers.email).trim() && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(answers.email).trim())) {
+    return String(answers.email).trim();
+  }
+  if (answers.student_email && String(answers.student_email).trim()) return String(answers.student_email).trim();
+
+  // Search questions
+  const q = questions.find((item: any) => {
+    const label = (item.label || '').toLowerCase();
+    const qid = (item.id || '').toLowerCase();
+    return (
+      item.type === 'email' ||
+      qid.includes('email') ||
+      qid === 'field_student_email' ||
+      label.includes('email') ||
+      label.includes('e-mail')
+    );
+  });
+  if (q && answers[q.id] !== undefined && answers[q.id] !== null && String(answers[q.id]).trim()) {
+    const val = String(answers[q.id]).trim();
+    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)) return val;
+  }
+
+  // Scan answers keys
+  for (const [, v] of Object.entries(answers)) {
+    if (typeof v === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim())) {
+      return v.trim();
+    }
+  }
+
+  return '';
+};
+
 // 7. PUBLIC RESPONSE SUBMISSION
 router.post('/:id/submit', async (req: Request, res: Response) => {
   try {
@@ -439,15 +564,56 @@ router.post('/:id/submit', async (req: Request, res: Response) => {
       }
     }
 
-    // Validate required questions (skip if forced auto-submit due to timer expiration or anti-cheat violation)
+    // Fetch form questions
     const formQuestions = await db.question.findMany({ where: { formId: form.id } });
     const isForceSubmit = Boolean(req.body.isForceSubmit || req.body.isTimeExpired || (req.body.browserMetadata?.is_flagged && Number(req.body.browserMetadata?.tab_switches) >= 3));
 
+    // Extract normalized student identity data
+    const answersMap = (answers as Record<string, any>) || {};
+    const resolvedEnrollmentNo = extractEnrollmentNumber(answersMap, formQuestions);
+    const resolvedStudentName = extractStudentName(answersMap, formQuestions, submittedBy || req.body.submittedBy);
+    const resolvedEmail = extractStudentEmail(answersMap, formQuestions, email || req.body.email);
+
+    // Auto-detect Quiz or Student Assessment
+    const isQuizOrStudent = Boolean(
+      form.category === 'quiz' || 
+      form.category === 'education' ||
+      form.title.toLowerCase().includes('quiz') || 
+      form.title.toLowerCase().includes('test') || 
+      form.title.toLowerCase().includes('exam') || 
+      form.title.toLowerCase().includes('student') ||
+      formQuestions.some((q: any) => {
+        const l = (q.label || '').toLowerCase();
+        return l.includes('enrollment') || l.includes('roll') || l.includes('student id');
+      })
+    );
+
+    // Validate required questions (skip if forced auto-submit due to timer expiration or anti-cheat violation)
     if (!isForceSubmit) {
+      // 1. Enforce Mandatory Student Identity for Quizzes/Student Forms
+      if (isQuizOrStudent) {
+        const missingIdentity: string[] = [];
+        if (!resolvedStudentName || resolvedStudentName === 'Anonymous') {
+          missingIdentity.push('Student Name');
+        }
+        if (!resolvedEnrollmentNo) {
+          missingIdentity.push('Enrollment Number');
+        }
+        if (!resolvedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(resolvedEmail)) {
+          missingIdentity.push('Valid Email Address');
+        }
+        if (missingIdentity.length > 0) {
+          return res.status(400).json({
+            error: `Mandatory field(s) missing: ${missingIdentity.join(', ')}. Please provide all required details before submitting.`,
+            missingFields: missingIdentity
+          });
+        }
+      }
+
+      // 2. Standard required question validations
       const missingRequired: string[] = [];
       for (const q of formQuestions) {
         if (q.required) {
-          // Evaluate conditional visibility so hidden required questions don't block submit
           let isVisible = true;
           const logic = q.logic as any;
           if (logic && logic.condition && logic.target_question_id) {
@@ -496,7 +662,6 @@ router.post('/:id/submit', async (req: Request, res: Response) => {
     if (form.responseLimit && form.responseLimit > 0) {
       const currentCount = await db.response.count({ where: { formId: form.id } });
       if (currentCount >= form.responseLimit) {
-        // Auto-close form
         await db.form.update({
           where: { id: form.id },
           data: { status: 'CLOSED' }
@@ -505,18 +670,41 @@ router.post('/:id/submit', async (req: Request, res: Response) => {
       }
     }
 
-    // Check limit_responses (Limit to 1 response)
-    const limitResponses = (form.settings as any)?.limit_responses || false;
-    const responderEmail = email || req.body.email;
-    if (limitResponses && responderEmail) {
-      const existing = await db.response.findFirst({
-        where: {
-          formId: form.id,
-          email: responderEmail
+    // Check Single Submission Restriction (Limit to 1 response per student / browser session / email)
+    const limitResponses = Boolean((form.settings as any)?.limit_responses || isQuizOrStudent);
+    if (limitResponses) {
+      // Check duplicate by email
+      if (resolvedEmail) {
+        const existingByEmail = await db.response.findFirst({
+          where: {
+            formId: form.id,
+            email: { equals: resolvedEmail.trim(), mode: 'insensitive' }
+          }
+        });
+        if (existingByEmail) {
+          return res.status(400).json({
+            error: 'You have already submitted this form.',
+            alreadySubmitted: true
+          });
         }
-      });
-      if (existing) {
-        return res.status(400).json({ error: 'You have already submitted a response to this form.' });
+      }
+
+      // Check duplicate by enrollment number
+      if (resolvedEnrollmentNo) {
+        const existingResponses = await db.response.findMany({
+          where: { formId: form.id },
+          select: { id: true, answers: true }
+        });
+        const duplicateEnrollment = existingResponses.some((r: any) => {
+          const exEnroll = extractEnrollmentNumber((r.answers as Record<string, any>) || {}, formQuestions);
+          return exEnroll && exEnroll.toLowerCase() === resolvedEnrollmentNo.toLowerCase();
+        });
+        if (duplicateEnrollment) {
+          return res.status(400).json({
+            error: `A submission for Enrollment Number "${resolvedEnrollmentNo}" has already been recorded.`,
+            alreadySubmitted: true
+          });
+        }
       }
     }
 
@@ -553,7 +741,7 @@ router.post('/:id/submit', async (req: Request, res: Response) => {
         }
       } else if (isInvitedOnly) {
         const invitedEmails = (form.settings as any)?.invited_emails || [];
-        const currentEmail = responderEmail || currentUser?.email;
+        const currentEmail = resolvedEmail || currentUser?.email;
         if (!currentEmail || !invitedEmails.includes(currentEmail.toLowerCase())) {
           return res.status(403).json({ error: 'Access denied. You are not on the invited list for this form.' });
         }
@@ -567,15 +755,20 @@ router.post('/:id/submit', async (req: Request, res: Response) => {
       ip_address: browserMetadata?.ip_address && browserMetadata.ip_address !== '127.0.0.1' ? browserMetadata.ip_address : rawIp
     };
 
-    // Save user response
+    // Save user response with guaranteed student identity mapping
     const response = await db.response.create({
       data: {
         formId: form.id,
-        answers,
+        answers: {
+          ...answers,
+          ...(resolvedEnrollmentNo ? { enrollment_no: resolvedEnrollmentNo } : {}),
+          ...(resolvedStudentName && resolvedStudentName !== 'Anonymous' ? { student_name: resolvedStudentName } : {}),
+          ...(resolvedEmail ? { responder_email: resolvedEmail, email: resolvedEmail } : {})
+        },
         browserMetadata: finalBrowserMetadata,
         timeTaken,
-        submittedBy: submittedBy || req.body.submittedBy || null,
-        email: responderEmail || null
+        submittedBy: resolvedStudentName && resolvedStudentName !== 'Anonymous' ? resolvedStudentName : (submittedBy || null),
+        email: resolvedEmail || null
       }
     });
 
@@ -782,34 +975,9 @@ router.get('/:id/export', authMiddleware, validateUuidMiddleware, async (req: Au
                    form.title.toLowerCase().includes('exam') || 
                    form.questions.some((q: any) => getCorrectAnswer(q.validations) !== undefined);
 
-    const getEnrollmentNumber = (r: any) => {
-      const answersMap = (r.answers as Record<string, any>) || {};
-      const q = form.questions.find((q: any) => {
-        const label = (q.label || '').toLowerCase();
-        return q.type === 'short_text' && (
-          label.includes('enrollment') || 
-          label.includes('roll') || 
-          label.includes('student id') || 
-          label.includes('student_id') || 
-          label.includes('gr number')
-        );
-      });
-      return q ? String(answersMap[q.id] || '').trim() : '';
-    };
-
-    const getStudentName = (r: any) => {
-      const answersMap = (r.answers as Record<string, any>) || {};
-      const q = form.questions.find((q: any) => {
-        const label = (q.label || '').toLowerCase();
-        return q.type === 'short_text' && (
-          label === 'name' || 
-          label === 'full name' || 
-          label === 'student name' || 
-          label.includes('name')
-        );
-      });
-      return q ? String(answersMap[q.id] || '').trim() : (answersMap['responder_email'] || answersMap['email'] || r.email || 'Anonymous');
-    };
+    const getEnrollmentNumber = (r: any) => extractEnrollmentNumber((r.answers as Record<string, any>) || {}, form.questions);
+    const getStudentName = (r: any) => extractStudentName((r.answers as Record<string, any>) || {}, form.questions, r.submittedBy);
+    const getEmail = (r: any) => extractStudentEmail((r.answers as Record<string, any>) || {}, form.questions, r.email);
 
     const calculateQuizScore = (answersMap: Record<string, any>) => {
       let correctCount = 0;
@@ -887,9 +1055,9 @@ router.get('/:id/export', authMiddleware, validateUuidMiddleware, async (req: Au
       const answersMap = (r.answers as Record<string, any>) || {};
       const row: string[] = [];
 
-      const enroll = getEnrollmentNumber(r);
-      const name = getStudentName(r);
-      const email = answersMap['responder_email'] || answersMap['email'] || r.email || 'anonymous';
+      const enroll = getEnrollmentNumber(r) || 'N/A';
+      const name = getStudentName(r) || 'Anonymous';
+      const email = getEmail(r) || 'Anonymous';
       const timestamp = new Date(r.completedAt).toISOString();
 
       if (isQuiz) {

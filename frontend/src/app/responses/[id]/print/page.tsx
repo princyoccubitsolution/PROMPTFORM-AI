@@ -53,33 +53,145 @@ export default function PrintableResponsesReport() {
     form.questions.some((q: any) => ((q.validations as any)?.correctAnswer !== undefined || (q.validations as any)?.correct_answer !== undefined))
   );
 
-  const getEnrollmentNumber = (resp: any) => {
-    if (!form) return '';
-    const q = form.questions.find((q: any) => {
-      const label = (q.label || '').toLowerCase();
-      return q.type === 'short_text' && (
-        label.includes('enrollment') || 
-        label.includes('roll') || 
-        label.includes('student id') || 
-        label.includes('student_id') || 
-        label.includes('gr number')
-      );
-    });
-    return q ? String(resp.answers[q.id] || '').trim() : '';
+  // Auto-detect Student / Academic Form
+  const isStudentForm = Boolean(
+    isQuiz ||
+    form?.category === 'education' ||
+    (form?.title || '').toLowerCase().match(/(student|class|exam|test|quiz|college|school|academic|course|batch)/i) ||
+    form?.questions?.some((q: any) => {
+      const l = (q.label || '').toLowerCase();
+      return l.includes('enrollment') || l.includes('roll') || l.includes('student') || l.includes('gr number');
+    })
+  );
+
+  const getEnrollmentNumber = (resp: any): string => {
+    if (!resp) return '';
+    const answers = resp?.answers || {};
+    if (answers.enrollment_no && String(answers.enrollment_no).trim()) return String(answers.enrollment_no).trim();
+    if (answers.enrollment && String(answers.enrollment).trim()) return String(answers.enrollment).trim();
+    if (answers.roll_no && String(answers.roll_no).trim()) return String(answers.roll_no).trim();
+    if (answers.student_id && String(answers.student_id).trim()) return String(answers.student_id).trim();
+    if (answers.gr_no && String(answers.gr_no).trim()) return String(answers.gr_no).trim();
+    if (answers.gr_number && String(answers.gr_number).trim()) return String(answers.gr_number).trim();
+
+    if (form?.questions && Array.isArray(form.questions)) {
+      const q = form.questions.find((item: any) => {
+        const label = (item.label || '').toLowerCase();
+        const qid = (item.id || '').toLowerCase();
+        return (
+          label.includes('enrollment') || 
+          label.includes('roll') || 
+          label.includes('student id') || 
+          label.includes('student_id') || 
+          label.includes('gr number') ||
+          label.includes('reg no') ||
+          label.includes('registration no') ||
+          label.includes('seat no') ||
+          qid.includes('enrollment') ||
+          qid.includes('roll') ||
+          qid === 'field_enrollment_no'
+        );
+      });
+      if (q && answers[q.id] !== undefined && answers[q.id] !== null && String(answers[q.id]).trim()) {
+        return String(answers[q.id]).trim();
+      }
+    }
+
+    for (const [k, v] of Object.entries(answers)) {
+      if (v !== undefined && v !== null && String(v).trim()) {
+        const lk = k.toLowerCase();
+        if (lk.includes('enrollment') || lk.includes('roll') || lk.includes('student_id')) {
+          return String(v).trim();
+        }
+      }
+    }
+    return '';
   };
 
-  const getStudentName = (resp: any) => {
-    if (!form) return 'Anonymous';
-    const q = form.questions.find((q: any) => {
-      const label = (q.label || '').toLowerCase();
-      return q.type === 'short_text' && (
-        label === 'name' || 
-        label === 'full name' || 
-        label === 'student name' || 
-        label.includes('name')
-      );
-    });
-    return q ? String(resp.answers[q.id] || '').trim() : (resp.answers.responder_email || "Anonymous");
+  const getStudentName = (resp: any): string => {
+    if (!resp) return 'Anonymous';
+    const answers = resp?.answers || {};
+    if (answers.student_name && String(answers.student_name).trim()) return String(answers.student_name).trim();
+    if (answers.fullName && String(answers.fullName).trim()) return String(answers.fullName).trim();
+    if (answers.name && String(answers.name).trim()) return String(answers.name).trim();
+
+    if (resp.submittedBy && String(resp.submittedBy).trim() && resp.submittedBy.toLowerCase() !== 'anonymous') {
+      return String(resp.submittedBy).trim();
+    }
+
+    if (form?.questions && Array.isArray(form.questions)) {
+      const q = form.questions.find((item: any) => {
+        const label = (item.label || '').toLowerCase();
+        const qid = (item.id || '').toLowerCase();
+        return (
+          item.type === 'name' ||
+          qid.includes('student_name') ||
+          qid === 'field_student_name' ||
+          label === 'student name' || 
+          label === 'full name' || 
+          label === 'name' || 
+          label.includes('student name') ||
+          label.includes('full name') ||
+          (label.includes('name') && !label.includes('file') && !label.includes('user'))
+        );
+      });
+      if (q && answers[q.id] !== undefined && answers[q.id] !== null && String(answers[q.id]).trim()) {
+        return String(answers[q.id]).trim();
+      }
+    }
+
+    for (const [k, v] of Object.entries(answers)) {
+      if (v !== undefined && v !== null && String(v).trim()) {
+        const lk = k.toLowerCase();
+        if (lk === 'name' || lk.includes('student_name') || lk.includes('fullname')) {
+          return String(v).trim();
+        }
+      }
+    }
+
+    const email = getStudentEmail(resp);
+    if (email && email !== 'Anonymous' && email.includes('@')) {
+      const userPart = email.split('@')[0].replace(/[._-]/g, ' ');
+      return userPart.charAt(0).toUpperCase() + userPart.slice(1);
+    }
+
+    return 'Anonymous';
+  };
+
+  const getStudentEmail = (resp: any): string => {
+    if (!resp) return 'Anonymous';
+    const answers = resp?.answers || {};
+    if (resp.email && String(resp.email).trim() && resp.email.includes('@')) {
+      return String(resp.email).trim();
+    }
+    if (answers.responder_email && String(answers.responder_email).trim()) return String(answers.responder_email).trim();
+    if (answers.email && String(answers.email).trim() && String(answers.email).includes('@')) return String(answers.email).trim();
+    if (answers.student_email && String(answers.student_email).trim()) return String(answers.student_email).trim();
+
+    if (form?.questions && Array.isArray(form.questions)) {
+      const q = form.questions.find((item: any) => {
+        const label = (item.label || '').toLowerCase();
+        const qid = (item.id || '').toLowerCase();
+        return (
+          item.type === 'email' ||
+          qid.includes('email') ||
+          qid === 'field_student_email' ||
+          label.includes('email') ||
+          label.includes('e-mail')
+        );
+      });
+      if (q && answers[q.id] !== undefined && answers[q.id] !== null && String(answers[q.id]).trim()) {
+        const val = String(answers[q.id]).trim();
+        if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)) return val;
+      }
+    }
+
+    for (const [, v] of Object.entries(answers)) {
+      if (typeof v === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim())) {
+        return v.trim();
+      }
+    }
+    return 'Anonymous';
   };
 
   const calculateQuizScore = (resp: any) => {
@@ -232,11 +344,11 @@ export default function PrintableResponsesReport() {
           <table className="w-full text-left text-xs border-collapse">
             <thead className="bg-muted border-b border-border font-bold uppercase tracking-wider text-muted-foreground">
               <tr>
-                {isQuiz && <th className="p-3.5 border-r border-border min-w-[100px]">Enrollment No</th>}
-                <th className="p-3.5 border-r border-border min-w-[120px]">
-                  {isQuiz ? "Student Name" : "Respondent"}
+                {(isQuiz || isStudentForm) && <th className="p-3.5 border-r border-border min-w-[110px]">Enrollment No</th>}
+                <th className="p-3.5 border-r border-border min-w-[140px]">
+                  {isQuiz || isStudentForm ? "Student Name" : "Respondent"}
                 </th>
-                <th className="p-3.5 border-r border-border min-w-[120px]">Email Address</th>
+                <th className="p-3.5 border-r border-border min-w-[130px]">Email Address</th>
                 {isQuiz && <th className="p-3.5 border-r border-border min-w-[90px]">Obtained Score</th>}
                 {isQuiz && <th className="p-3.5 border-r border-border text-center min-w-[80px]">Status</th>}
                 <th className="p-3.5 border-r border-border min-w-[110px]">Submitted At</th>
@@ -253,20 +365,20 @@ export default function PrintableResponsesReport() {
             <tbody className="divide-y divide-border bg-card">
               {sortedResponses.map((resp) => {
                 const dateStr = new Date(resp.completedAt).toLocaleString();
-                const email = resp.answers.responder_email || resp.email || "Anonymous";
+                const email = getStudentEmail(resp);
                 const enroll = getEnrollmentNumber(resp);
                 const name = getStudentName(resp);
 
                 return (
                   <tr key={resp.id} className="hover:bg-accent/40 transition-colors">
-                    {isQuiz && (
+                    {(isQuiz || isStudentForm) && (
                       <td className="p-3.5 border-r border-border font-bold text-primary">
                         {enroll || "N/A"}
                       </td>
                     )}
                     <td className="p-3.5 border-r border-border font-bold text-foreground leading-tight">
-                      <div>{isQuiz ? name : email}</div>
-                      {!isQuiz && (
+                      <div>{(isQuiz || isStudentForm) ? name : email}</div>
+                      {!(isQuiz || isStudentForm) && (
                         <div className="text-[9px] font-mono text-muted-foreground mt-0.5 truncate max-w-[120px]">{resp.id}</div>
                       )}
                     </td>

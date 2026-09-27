@@ -199,6 +199,7 @@ export default function PublicFormPage() {
   const [errorStatus, setErrorStatus] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
   const [isInactive, setIsInactive] = useState(false);
+  const [isAlreadySubmitted, setIsAlreadySubmitted] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
   const [isPreview, setIsPreview] = useState(false);
 
@@ -234,9 +235,125 @@ export default function PublicFormPage() {
       setForm(data);
       let loadedQuestions = data.questions || [];
 
-      // Anti-cheat: Shuffle questions order if enabled
+      // Detect if this is a Quiz or Student Assessment
+      const isQuizOrStudent = Boolean(
+        data.category === 'quiz' || 
+        data.category === 'education' ||
+        (data.title || '').toLowerCase().match(/(quiz|exam|test|student|assessment|class|college|school)/i) ||
+        loadedQuestions.some((q: any) => {
+          const l = (q.label || '').toLowerCase();
+          return l.includes('enrollment') || l.includes('roll') || l.includes('student id');
+        })
+      );
+
+      // Check if already submitted in this browser session (or single response limit active)
+      const searchParams = new URLSearchParams(window.location.search);
+      const isPreviewMode = searchParams.get('preview') === 'true';
+      const submittedKey = `promptform_submitted_${data.id || formId}`;
+
+      if (typeof window !== 'undefined' && !isPreviewMode) {
+        if (localStorage.getItem(submittedKey) === 'true') {
+          setIsAlreadySubmitted(true);
+          setIsLoading(false);
+          return;
+        }
+      }
+
+      // Check form status: only PUBLISHED forms can accept responses (unless preview mode)
+      if (data.status !== "PUBLISHED" && !isPreviewMode) {
+        setIsInactive(true);
+        if (data.status === "DRAFT") {
+          setStatusMessage("This form is currently a draft and is not ready to accept responses.");
+        } else if (data.status === "CLOSED") {
+          setStatusMessage("This form has been closed by its author and is no longer accepting submissions.");
+        } else {
+          setStatusMessage("This form is not currently accepting responses.");
+        }
+        setIsLoading(false);
+        return;
+      }
+
+      // Ensure Enrollment No, Student Name, and Email are present & mandatory for Student/Quiz forms
+      if (isQuizOrStudent) {
+        const hasNameQ = loadedQuestions.some((q: any) => {
+          const l = (q.label || '').toLowerCase();
+          return q.type === 'name' || l === 'name' || l === 'student name' || l === 'full name' || l.includes('student name') || l.includes('full name') || (l.includes('name') && !l.includes('file'));
+        });
+
+        const hasEnrollQ = loadedQuestions.some((q: any) => {
+          const l = (q.label || '').toLowerCase();
+          return l.includes('enrollment') || l.includes('roll') || l.includes('student id') || l.includes('gr number') || l.includes('reg no');
+        });
+
+        const hasEmailQ = loadedQuestions.some((q: any) => {
+          const l = (q.label || '').toLowerCase();
+          return q.type === 'email' || l.includes('email') || l.includes('e-mail');
+        });
+
+        const prepends: any[] = [];
+        if (!hasEnrollQ) {
+          prepends.push({
+            id: 'field_enrollment_no',
+            formId: data.id || formId,
+            type: 'short_text',
+            label: 'Enrollment No / Roll No',
+            required: true,
+            orderIndex: -3,
+            options: [],
+            validations: { min_length: 1 },
+            logic: {}
+          });
+        }
+        if (!hasNameQ) {
+          prepends.push({
+            id: 'field_student_name',
+            formId: data.id || formId,
+            type: 'name',
+            label: 'Student Full Name',
+            required: true,
+            orderIndex: -2,
+            options: [],
+            validations: { min_length: 2 },
+            logic: {}
+          });
+        }
+        if (!hasEmailQ) {
+          prepends.push({
+            id: 'field_student_email',
+            formId: data.id || formId,
+            type: 'email',
+            label: 'Student Email Address',
+            required: true,
+            orderIndex: -1,
+            options: [],
+            validations: {},
+            logic: {}
+          });
+        }
+
+        // Force all existing identity questions to required: true
+        loadedQuestions = loadedQuestions.map((q: any) => {
+          const l = (q.label || '').toLowerCase();
+          if (
+            q.type === 'name' || q.type === 'email' ||
+            l.includes('enrollment') || l.includes('roll') || l.includes('student') ||
+            l.includes('name') || l.includes('email')
+          ) {
+            return { ...q, required: true };
+          }
+          return q;
+        });
+
+        if (prepends.length > 0) {
+          loadedQuestions = [...prepends, ...loadedQuestions];
+        }
+      }
+
+      // Anti-cheat: Shuffle questions order if enabled (keep identity questions at top)
       if (data.settings?.shuffle_questions) {
-        loadedQuestions = shuffleArray(loadedQuestions);
+        const identityQs = loadedQuestions.filter((q: any) => q.id?.startsWith('field_') || q.type === 'name');
+        const normalQs = loadedQuestions.filter((q: any) => !q.id?.startsWith('field_') && q.type !== 'name');
+        loadedQuestions = [...identityQs, ...shuffleArray(normalQs)];
       }
 
       // Anti-cheat: Shuffle option choices if enabled
@@ -252,7 +369,6 @@ export default function PublicFormPage() {
       setQuestions(loadedQuestions);
 
       // Read saved display mode preference from URL query parameter (?mode=...) or form settings
-      const searchParams = new URLSearchParams(window.location.search);
       const queryMode = searchParams.get('mode');
       const savedMode = queryMode || data.settings?.display_mode || data.settings?.displayMode || data.theme?.layoutType;
       if (savedMode === 'wizard' || savedMode === 'one-by-one') {
@@ -261,32 +377,6 @@ export default function PublicFormPage() {
         setLayoutMode('conversational');
       } else {
         setLayoutMode('standard');
-      }
-
-      // Check form status: only PUBLISHED forms can accept responses (unless preview mode)
-      const isPreviewMode = searchParams.get('preview') === 'true';
-
-      if (data.status !== "PUBLISHED" && !isPreviewMode) {
-        setIsInactive(true);
-        if (data.status === "DRAFT") {
-          setStatusMessage("This form is currently a draft and is not ready to accept responses.");
-        } else if (data.status === "CLOSED") {
-          setStatusMessage("This form has been closed by its author and is no longer accepting submissions.");
-        } else {
-          setStatusMessage("This form is not currently accepting responses.");
-        }
-        setIsLoading(false);
-        return;
-      }
-
-      // Check if already submitted in this browser session (only when limit_responses is enabled)
-      if (typeof window !== 'undefined' && !isPreviewMode && data.settings?.limit_responses) {
-        const submittedKey = `promptform_submitted_${data.id || formId}`;
-        if (localStorage.getItem(submittedKey) === 'true') {
-          setSubmitted(true);
-          setIsLoading(false);
-          return;
-        }
       }
 
       // Restore saved draft answers from localStorage if present
@@ -688,17 +778,93 @@ export default function PublicFormPage() {
     if (e) e.preventDefault();
     if (isSubmitting) return;
 
+    // Detect if this is a Quiz or Student Assessment
+    const isQuizOrStudent = Boolean(
+      form?.category === 'quiz' || 
+      form?.category === 'education' ||
+      (form?.title || '').toLowerCase().match(/(quiz|exam|test|student|assessment|class|college|school)/i) ||
+      questions.some((q: any) => {
+        const l = (q.label || '').toLowerCase();
+        return l.includes('enrollment') || l.includes('roll') || l.includes('student id');
+      })
+    );
+
+    // Extract Student Enrollment Number
+    let enrollmentToSubmit = answers['field_enrollment_no'] || answers['enrollment_no'] || answers['enrollment'] || answers['roll_no'] || answers['student_id'] || '';
+    if (!enrollmentToSubmit) {
+      const enrollQ = questions.find(q => {
+        const l = (q.label || '').toLowerCase();
+        return l.includes('enrollment') || l.includes('roll') || l.includes('student id') || l.includes('student_id') || l.includes('gr number') || l.includes('reg no');
+      });
+      if (enrollQ && answers[enrollQ.id]) {
+        enrollmentToSubmit = String(answers[enrollQ.id]).trim();
+      }
+    }
+
+    // Extract Student Full Name
+    let userToSubmit = answers['field_student_name'] || answers['student_name'] || answers['fullName'] || (typeof window !== 'undefined' ? localStorage.getItem('promptform_user_name') : null);
+    if (!userToSubmit || userToSubmit === 'Anonymous') {
+      const nameQ = questions.find(q => 
+        q.type === 'name' || 
+        (q.type === 'short_text' && (q.label.toLowerCase().includes('name') || q.label.toLowerCase().includes('fullname')))
+      );
+      if (nameQ && answers[nameQ.id]) {
+        userToSubmit = String(answers[nameQ.id]).trim();
+      }
+    }
+
+    // Extract Student Email
+    let emailToSubmit = answers['field_student_email'] || answers['responder_email'] || answers['email'] || answers['student_email'] || (form?.settings?.collect_emails ? collectedEmail : (typeof window !== 'undefined' ? localStorage.getItem('promptform_user_email') : null));
+    if (!emailToSubmit) {
+      const emailQ = questions.find(q => 
+        q.type === 'email' || 
+        (q.type === 'short_text' && q.label.toLowerCase().includes('email'))
+      );
+      if (emailQ && answers[emailQ.id]) {
+        const emailStr = String(answers[emailQ.id]).trim();
+        if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailStr)) {
+          emailToSubmit = emailStr;
+        }
+      }
+    }
+
     if (!isForceSubmit) {
-      // Check required fields
       const missing: string[] = [];
       const newErrors: Record<string, string> = {};
 
+      // 1. Mandatory Student Identity Checks for Quizzes and Student Forms
+      if (isQuizOrStudent) {
+        if (!enrollmentToSubmit || !String(enrollmentToSubmit).trim()) {
+          const enrollQ = questions.find(q => (q.label || '').toLowerCase().includes('enrollment') || (q.label || '').toLowerCase().includes('roll'));
+          const enrollId = enrollQ?.id || 'field_enrollment_no';
+          newErrors[enrollId] = "Enrollment Number is required before submission";
+          missing.push("Enrollment Number");
+        }
+
+        if (!userToSubmit || !String(userToSubmit).trim() || userToSubmit === 'Anonymous') {
+          const nameQ = questions.find(q => q.type === 'name' || (q.label || '').toLowerCase().includes('name'));
+          const nameId = nameQ?.id || 'field_student_name';
+          newErrors[nameId] = "Student Full Name is required before submission";
+          missing.push("Student Name");
+        }
+
+        if (!emailToSubmit || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(emailToSubmit).trim())) {
+          const emailQ = questions.find(q => q.type === 'email' || (q.label || '').toLowerCase().includes('email'));
+          const emailId = emailQ?.id || 'field_student_email';
+          newErrors[emailId] = "A valid Email Address is required before submission";
+          missing.push("Email Address");
+        }
+      }
+
+      // 2. Check standard required fields
       visibleQuestions.forEach(q => {
         if (q.required) {
           const ans = answers[q.id];
           if (ans === undefined || ans === null || String(ans).trim() === '' || (Array.isArray(ans) && ans.length === 0)) {
             missing.push(q.label || `Question ${q.orderIndex + 1}`);
-            newErrors[q.id] = "This question is required";
+            if (!newErrors[q.id]) {
+              newErrors[q.id] = "This question is required";
+            }
           }
         }
       });
@@ -732,30 +898,12 @@ export default function PublicFormPage() {
       finalAnswers['signature_pad_url'] = canvasRef.current.toDataURL("image/png");
     }
 
-    let emailToSubmit = form?.settings?.collect_emails ? collectedEmail : (typeof window !== 'undefined' ? localStorage.getItem('promptform_user_email') : null);
-    let userToSubmit = typeof window !== 'undefined' ? localStorage.getItem('promptform_user_name') : null;
-
-    if (!emailToSubmit) {
-      const emailQ = questions.find(q => 
-        q.type === 'email' || 
-        (q.type === 'short_text' && q.label.toLowerCase().includes('email'))
-      );
-      if (emailQ && answers[emailQ.id]) {
-        const emailStr = String(answers[emailQ.id]).trim();
-        if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailStr)) {
-          emailToSubmit = emailStr;
-        }
-      }
-    }
-
-    if (!userToSubmit) {
-      const nameQ = questions.find(q => 
-        q.type === 'name' || 
-        (q.type === 'short_text' && (q.label.toLowerCase().includes('name') || q.label.toLowerCase().includes('fullname')))
-      );
-      if (nameQ && answers[nameQ.id]) {
-        userToSubmit = String(answers[nameQ.id]).trim();
-      }
+    // Attach mapped identity fields to answers dictionary
+    if (enrollmentToSubmit) finalAnswers['enrollment_no'] = String(enrollmentToSubmit).trim();
+    if (userToSubmit && userToSubmit !== 'Anonymous') finalAnswers['student_name'] = String(userToSubmit).trim();
+    if (emailToSubmit) {
+      finalAnswers['responder_email'] = String(emailToSubmit).trim();
+      finalAnswers['email'] = String(emailToSubmit).trim();
     }
 
     const payload = {
@@ -789,19 +937,30 @@ export default function PublicFormPage() {
       if (typeof window !== 'undefined') {
         localStorage.removeItem(`promptform_form_timer_start_${form?.id || formId}`);
         localStorage.removeItem(`promptform_draft_answers_${form?.id || formId}`);
-        if (form?.settings?.limit_responses) {
-          localStorage.setItem(`promptform_submitted_${form?.id || formId}`, 'true');
-        }
+        // Store single submission status and student identifiers
+        localStorage.setItem(`promptform_submitted_${form?.id || formId}`, 'true');
+        if (emailToSubmit) localStorage.setItem(`promptform_submitted_email_${form?.id || formId}`, String(emailToSubmit).trim());
+        if (enrollmentToSubmit) localStorage.setItem(`promptform_submitted_enrollment_${form?.id || formId}`, String(enrollmentToSubmit).trim());
+        if (userToSubmit) localStorage.setItem('promptform_user_name', String(userToSubmit).trim());
+        if (emailToSubmit) localStorage.setItem('promptform_user_email', String(emailToSubmit).trim());
       }
     } catch (err: any) {
+      // Check for duplicate response error
+      if (err?.data?.alreadySubmitted || err?.message?.toLowerCase()?.includes('already submitted')) {
+        setIsAlreadySubmitted(true);
+        setSubmitted(false);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(`promptform_submitted_${form?.id || formId}`, 'true');
+        }
+        return;
+      }
+
       if (isForceSubmit) {
         setSubmitted(true);
         if (typeof window !== 'undefined') {
           localStorage.removeItem(`promptform_form_timer_start_${form?.id || formId}`);
           localStorage.removeItem(`promptform_draft_answers_${form?.id || formId}`);
-          if (form?.settings?.limit_responses) {
-            localStorage.setItem(`promptform_submitted_${form?.id || formId}`, 'true');
-          }
+          localStorage.setItem(`promptform_submitted_${form?.id || formId}`, 'true');
         }
       } else {
         alert("Submission error: " + (err.message || "Failed to submit response. Please try again."));
@@ -921,26 +1080,95 @@ export default function PublicFormPage() {
   }
 
   /* -------------------------------------------------------------------------- */
+  /* ALREADY SUBMITTED CUSTOM SCREEN (PREVENT DUPLICATE SUBMISSIONS)            */
+  /* -------------------------------------------------------------------------- */
+  if (isAlreadySubmitted) {
+    const prevEnrollment = typeof window !== 'undefined' ? localStorage.getItem(`promptform_submitted_enrollment_${form?.id || formId}`) : null;
+    const prevEmail = typeof window !== 'undefined' ? (localStorage.getItem(`promptform_submitted_email_${form?.id || formId}`) || localStorage.getItem('promptform_user_email')) : null;
+    const prevName = typeof window !== 'undefined' ? localStorage.getItem('promptform_user_name') : null;
+
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 flex items-center justify-center p-4 font-sans">
+        <Card className="w-full max-w-lg text-center border-t-[6px] shadow-xl bg-card dark:bg-zinc-900 rounded-3xl p-6 sm:p-8" style={{ borderTopColor: primaryColor }}>
+          <div className="w-16 h-16 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-emerald-500/20">
+            <CheckCircle2 className="w-8 h-8" />
+          </div>
+          
+          <h2 className="text-2xl font-bold text-foreground">You have already submitted this form.</h2>
+          <p className="text-sm text-muted-foreground mt-2 max-w-md mx-auto leading-relaxed">
+            Your response has already been recorded. This form is restricted to a single submission per student or email address.
+          </p>
+
+          <div className="mt-6 p-4 bg-muted/40 rounded-2xl border border-border/70 text-left space-y-2.5 text-xs">
+            <div className="flex justify-between items-center py-1 border-b border-border/50">
+              <span className="text-muted-foreground font-semibold">Form Title</span>
+              <span className="font-bold text-foreground truncate max-w-[200px]">{form?.title || 'Assessment Form'}</span>
+            </div>
+            <div className="flex justify-between items-center py-1 border-b border-border/50">
+              <span className="text-muted-foreground font-semibold">Submission Status</span>
+              <span className="font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                <Check className="w-3.5 h-3.5" /> Completed & Locked
+              </span>
+            </div>
+            {prevEnrollment && (
+              <div className="flex justify-between items-center py-1 border-b border-border/50">
+                <span className="text-muted-foreground font-semibold">Enrollment No</span>
+                <span className="font-bold text-primary">{prevEnrollment}</span>
+              </div>
+            )}
+            {prevName && (
+              <div className="flex justify-between items-center py-1 border-b border-border/50">
+                <span className="text-muted-foreground font-semibold">Student Name</span>
+                <span className="font-bold text-foreground">{prevName}</span>
+              </div>
+            )}
+            {prevEmail && (
+              <div className="flex justify-between items-center py-1">
+                <span className="text-muted-foreground font-semibold">Registered Email</span>
+                <span className="font-medium text-foreground">{prevEmail}</span>
+              </div>
+            )}
+          </div>
+
+          <div className="mt-6">
+            <Button 
+              variant="outline" 
+              className="w-full h-11 text-xs font-semibold rounded-xl"
+              onClick={() => {
+                if (window.history.length > 1) {
+                  router.back();
+                } else {
+                  router.push('/');
+                }
+              }}
+            >
+              Return to Previous Page
+            </Button>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  /* -------------------------------------------------------------------------- */
   /* INACTIVE / CLOSED FORM STATE                                               */
   /* -------------------------------------------------------------------------- */
   if (isInactive) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-        <Card className="w-full max-w-md text-center border-t-4 border-t-amber-500 shadow-xl bg-white rounded-2xl">
-          <CardHeader className="pt-8">
-            <div className="w-14 h-14 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center mx-auto mb-3">
-              <AlertTriangle className="w-7 h-7" />
-            </div>
-            <CardTitle className="text-2xl font-bold text-slate-900">Form Closed</CardTitle>
-            <CardDescription className="text-sm mt-2 text-slate-500">
-              {statusMessage}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="pb-8">
-            <Button variant="outline" className="w-full h-11 text-xs font-semibold rounded-xl" onClick={() => router.push('/')}>
+      <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 flex items-center justify-center p-4 font-sans">
+        <Card className="w-full max-w-md text-center border-t-4 border-t-amber-500 shadow-xl bg-card dark:bg-zinc-900 rounded-3xl p-6 sm:p-8">
+          <div className="w-14 h-14 bg-amber-500/10 text-amber-600 rounded-2xl flex items-center justify-center mx-auto mb-3 border border-amber-500/20">
+            <AlertTriangle className="w-7 h-7" />
+          </div>
+          <CardTitle className="text-xl font-bold text-foreground">This form is no longer accepting responses.</CardTitle>
+          <CardDescription className="text-xs text-muted-foreground mt-2 leading-relaxed">
+            {statusMessage || "The author has paused or closed responses for this form. If you believe this is an error, please contact your instructor or administrator."}
+          </CardDescription>
+          <div className="mt-6">
+            <Button variant="outline" className="w-full h-10 text-xs font-semibold rounded-xl" onClick={() => router.push('/')}>
               Go to Home Page
             </Button>
-          </CardContent>
+          </div>
         </Card>
       </div>
     );
