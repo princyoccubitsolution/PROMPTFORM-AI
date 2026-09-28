@@ -413,6 +413,7 @@ export default function AIPage() {
 
     setError(null);
     setIsGenerating(true);
+    setShowSampleDemo(false);
 
     try {
       let result;
@@ -429,16 +430,10 @@ export default function AIPage() {
         formData.append('file', file);
         const promptToSend = basePrompt ? `${basePrompt} ${configSuffix}` : `Extract fields and generate a structured form ${configSuffix}`;
         formData.append('prompt', promptToSend);
-        if (generatedForm && generatedForm.id && !generatedForm.id.startsWith('gen-')) {
-          formData.append('formId', generatedForm.id);
-        }
         result = await api.postMultipart('/ai/generate', formData);
       } else {
         const fullPrompt = `${basePrompt} ${configSuffix}`;
         const payload: any = { prompt: fullPrompt };
-        if (generatedForm && generatedForm.id && !generatedForm.id.startsWith('gen-')) {
-          payload.formId = generatedForm.id;
-        }
         result = await api.post('/ai/generate', payload);
       }
 
@@ -452,7 +447,7 @@ export default function AIPage() {
         const sanitizeTitle = (rawTitle: string, userPromptText: string) => {
           if (rawTitle && typeof rawTitle === 'string') {
             const trimmed = rawTitle.trim();
-            if (trimmed.length > 0 && trimmed.length < 80) {
+            if (trimmed.length > 0 && trimmed.length < 120) {
               const lower = trimmed.toLowerCase();
               const isBad = [
                 "create a form with id", 
@@ -461,31 +456,17 @@ export default function AIPage() {
                 "options with field remove", 
                 "analysis this pdf", 
                 "analysis this", 
-                "analysis pdf",
-                "created a quiz",
-                "attached syllabus",
-                "syllabus photo",
-                "photo paper",
-                "attached"
+                "analysis pdf"
               ].some(bad => lower.includes(bad));
               if (!isBad) return trimmed;
             }
           }
           const lowerPrompt = (userPromptText || "").toLowerCase();
-          if (lowerPrompt.includes("data structure") || lowerPrompt.includes("dsa") || (lowerPrompt.includes("subject") && lowerPrompt.includes("structure"))) {
-            return "Data Structures Exam Paper";
-          }
-          if (lowerPrompt.includes("gta v") || lowerPrompt.includes("gta 5") || lowerPrompt.includes("grand theft auto") || lowerPrompt.includes("gta")) {
-            return "GTA V Gaming Quiz";
-          }
-          if (lowerPrompt.includes("minecraft")) return "Minecraft Gaming Quiz";
-          if (lowerPrompt.includes("valorant")) return "Valorant Esports Quiz";
-          if (lowerPrompt.includes("cricket")) return "Cricket World Cup Quiz";
-          if (lowerPrompt.includes("patient") || lowerPrompt.includes("medical") || lowerPrompt.includes("dentist")) return "Dentistry Patient Intake Form";
-          if (lowerPrompt.includes("nps") || lowerPrompt.includes("net promoter")) return "Net Promoter Score Survey";
-          if (lowerPrompt.includes("feedback") || lowerPrompt.includes("survey")) return "Customer Feedback Survey";
-          if (mode === 'pdf' || mode === 'image') {
-            return (formType.toLowerCase().includes("quiz") || formType.toLowerCase().includes("assessment") || lowerPrompt.includes("exam") || lowerPrompt.includes("quiz")) ? "Academic Assessment Exam" : "Document Extracted Form";
+          if (lowerPrompt.length > 3) {
+            const clean = userPromptText.replace(/\b(create|make|generate|build|a|an|the|form|quiz|test|exam|survey|for|about|with|questions|please|me)\b/gi, "").trim();
+            if (clean.length > 2) {
+              return clean.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') + (lowerPrompt.includes("quiz") || lowerPrompt.includes("exam") ? " Quiz" : " Form");
+            }
           }
           return "AI Generated Form";
         };

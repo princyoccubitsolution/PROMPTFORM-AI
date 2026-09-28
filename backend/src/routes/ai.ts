@@ -38,15 +38,14 @@ async function queryGemini(
   }
 
   const candidateModels = [
-    'gemini-3.8-flash',
-    'gemini-3.7-flash',
-    'gemini-3.6-flash',
-    'gemini-3.5-flash',
-    'gemini-flash-latest',
-    'gemini-2.5-flash-lite',
-    'gemini-2.5-pro',
     'gemini-2.5-flash',
-    'gemini-flash-lite-latest',
+    'gemini-2.5-pro',
+    'gemini-2.5-flash-lite',
+    'gemini-1.5-flash',
+    'gemini-1.5-pro',
+    'gemini-1.5-flash-8b',
+    'gemini-2.0-flash-exp',
+    'gemini-flash-latest',
     'gemini-pro-latest'
   ];
 
@@ -342,10 +341,10 @@ function parsePromptFallback(prompt: string) {
     }
   }
 
-  if (trimmed.length < 15 || isInappropriate || (!hasKeywords && parsedFields.length === 0)) {
+  if (trimmed.length < 3 || isInappropriate) {
     return {
       title: "Feedback Questionnaire",
-      description: "I couldn't detect the exact format from your description, so I've created a standard feedback form for you. Feel free to add or edit fields!",
+      description: "Standard feedback form. Feel free to add or edit fields!",
       questions: [
         { type: "rating", label: "Overall Satisfaction", required: true, options: [] },
         { type: "short_text", label: "Full Name", required: true, options: [] },
@@ -459,12 +458,15 @@ function parsePromptFallback(prompt: string) {
       { type: "mcq", label: "Have you had surgery in the past 12 months?", required: true, options: ["Yes", "No"] }
     ];
   } else {
-    title = "AI Prompt Form";
-    description = "Created automatically based on your prompt.";
+    const topicClean = prompt.replace(/\b(create|make|generate|build|a|an|the|form|questionnaire|survey|for|about|with|questions|please|me)\b/gi, "").trim();
+    const displayTopic = topicClean.length > 2 ? topicClean.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') : "Custom Prompt";
+    title = `${displayTopic} Form`;
+    description = `Created automatically for ${displayTopic}.`;
     questions = [
       { type: "short_text", label: "Full Name", required: true, options: [] },
       { type: "short_text", label: "Email Address", required: true, options: [] },
-      { type: "long_text", label: "Your Query", required: true, options: [] }
+      { type: "short_text", label: `${displayTopic} Details / Requirements`, required: true, options: [] },
+      { type: "long_text", label: `Additional Notes / Comments regarding ${displayTopic}`, required: false, options: [] }
     ];
   }
 
