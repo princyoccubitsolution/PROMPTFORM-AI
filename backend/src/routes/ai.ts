@@ -52,16 +52,11 @@ async function queryGemini(
   }
 
   const candidateModels = [
-    'gemini-flash-latest',
-    'gemini-2.5-flash',
     'gemini-2.0-flash',
-    'gemini-2.5-pro',
-    'gemini-2.5-flash-lite',
-    'gemini-2.0-flash-exp',
     'gemini-1.5-flash',
     'gemini-1.5-pro',
-    'gemini-1.5-flash-8b',
-    'gemini-pro-latest'
+    'gemini-2.0-flash-exp',
+    'gemini-flash-latest'
   ];
 
   const contents: any[] = [];
@@ -138,12 +133,18 @@ async function queryGemini(
           }
         } catch {}
         lastError = new Error(`Gemini API error (${model} - HTTP ${res.status}): ${parsedErrMsg}`);
+
+        if (parsedErrMsg.toLowerCase().includes('api key not valid') || parsedErrMsg.toLowerCase().includes('api_key_invalid')) {
+          console.warn(`GEMINI_API_KEY is invalid: ${parsedErrMsg}`);
+          throw lastError;
+        }
+
         if (res.status === 503 || res.status === 404 || res.status === 429) {
           console.warn(`Model ${model} returned ${res.status}, retrying with fallback model after brief delay...`);
           await new Promise(r => setTimeout(r, 1500));
           continue;
         }
-        if (res.status === 400 && fileBuffer && parts.length > 1) {
+        if (res.status === 400 && fileBuffer && parts.length > 1 && !parsedErrMsg.toLowerCase().includes('key')) {
           console.warn(`Model ${model} rejected binary inlineData with 400, retrying with text-only prompt...`);
           parts.splice(1, 1);
           await new Promise(r => setTimeout(r, 500));
@@ -753,6 +754,10 @@ router.post(['/generate', '/generate-from-file'], optionalAuthMiddleware, upload
         req.file?.originalname || 'document', 
         req.file?.size || 0
       );
+      if (isImage) {
+        const fileNameSnippet = req.file?.originalname ? `Uploaded Image File Name: ${req.file.originalname}. ` : '';
+        parsedDocText = `${fileNameSnippet}${userPrompt ? `User instructions: ${userPrompt}. ` : ''}${parsedDocText || 'Uploaded Form Image Scan.'}`;
+      }
     }
 
     const intent = detectIntent(userPrompt, parsedDocText);

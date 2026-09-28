@@ -196,7 +196,7 @@ export class FieldDiscovery {
           });
 
           // 3. Fallback to fill up to targetCount if document lines were brief
-          const isDataStructures = text.includes("data structure") || text.includes("dsa") || (text.includes("subject") && text.includes("structure")) || text.includes("algorithm") || text.includes("c program");
+          const isDataStructures = /\b(data\s+structures?|dsa|c\s+program|linked\s+list|binary\s+search\s+tree|quick\s+sort|stack\s+and\s+queue)\b/i.test(text) || (text.includes("subject") && /\bdata\s+structures?\b/i.test(text));
           if (isDataStructures) {
             return [
               {
@@ -526,7 +526,7 @@ export class FieldDiscovery {
         );
       }
 
-      if (text.includes("data structure") || text.includes("dsa") || (text.includes("subject") && text.includes("structure")) || text.includes("algorithm") || text.includes("c program")) {
+      if (/\b(data\s+structures?|dsa|c\s+program|linked\s+list|binary\s+search\s+tree|quick\s+sort|stack\s+and\s+queue)\b/i.test(text) || (text.includes("subject") && /\bdata\s+structures?\b/i.test(text))) {
         fields.push(
           {
             type: "long_text",
