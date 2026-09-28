@@ -67,10 +67,9 @@ export async function parseDocument(fileBuffer: Buffer, mimeType: string): Promi
     }
 
     // 5. Image files — processed by Gemini API directly via inlineData (base64).
-    //    Return empty string so the fallback quiz engine uses prompt keywords
-    //    instead of fake OCR text that pollutes field discovery with wrong fields.
+    // Provide a structured image document context for fallback engines
     if (mimeType.startsWith('image/')) {
-      return "";
+      return "Uploaded Form Image Scan (Image file payload provided for AI extraction).";
     }
 
     // Default fallback to string parsing

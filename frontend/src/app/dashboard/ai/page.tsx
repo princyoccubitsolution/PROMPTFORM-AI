@@ -777,7 +777,7 @@ export default function AIPage() {
                           </div>
                           <input 
                             type="file" 
-                            accept={mode === 'pdf' ? ".pdf,.docx" : "image/*"}
+                            accept={mode === 'pdf' ? ".pdf,.docx" : "image/*,.png,.jpg,.jpeg,.webp,.heic"}
                             onChange={(e) => setFile(e.target.files?.[0] || null)}
                             className="hidden" 
                             id="side-file-input"

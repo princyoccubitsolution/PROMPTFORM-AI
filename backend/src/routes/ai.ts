@@ -21,6 +21,20 @@ const generatePromptSchema = z.object({
   formId: z.string().optional() // if editing / updating existing form
 });
 
+// Helper to normalize image/document MIME types for Gemini API
+function normalizeMimeType(mimeType: string = "", originalName: string = ""): string {
+  let lower = (mimeType || "").toLowerCase().trim();
+  if (lower === 'image/jpg' || lower === 'image/jfif' || lower === 'image/pjpeg' || lower === 'image/jp2') return 'image/jpeg';
+  if (lower === 'image/x-png') return 'image/png';
+  if (lower === 'application/octet-stream' || !lower) {
+    if (/\.(jpe?g|jfif)$/i.test(originalName)) return 'image/jpeg';
+    if (/\.png$/i.test(originalName)) return 'image/png';
+    if (/\.webp$/i.test(originalName)) return 'image/webp';
+    if (/\.pdf$/i.test(originalName)) return 'application/pdf';
+  }
+  return lower || 'application/pdf';
+}
+
 // Helper to make direct REST calls to Gemini API (supporting multimodal inputs)
 async function queryGemini(
   prompt: string, 
@@ -61,10 +75,11 @@ async function queryGemini(
 
   const parts: any[] = [{ text: prompt }];
 
-  if (fileBuffer && mimeType && (mimeType.startsWith('image/') || mimeType === 'application/pdf')) {
+  const cleanMime = mimeType ? normalizeMimeType(mimeType) : "";
+  if (fileBuffer && cleanMime && (cleanMime.startsWith('image/') || cleanMime === 'application/pdf')) {
     parts.push({
       inlineData: {
-        mimeType: mimeType,
+        mimeType: cleanMime,
         data: fileBuffer.toString('base64')
       }
     });
@@ -262,6 +277,45 @@ async function ultraCognitiveSemanticSifting(
   const documentContext = fileBuffer ? await getOrParseDocument(fileBuffer, mimeType, originalName, fileSize) : "";
   const intent = detectIntent(rawInput, documentContext);
   return buildSystemInstruction(intent, documentContext);
+}
+
+function buildImageScanSystemInstruction(userPrompt: string = ""): string {
+  return `You are the Expert Vision & Document Scan Extraction Engine for PromptForm AI.
+Your sole mission is to analyze the provided image scan of a form, document, quiz, or survey, and perform a 100% precise, complete extraction of all fields, questions, options, sections, and structural components visible in the image.
+
+CRITICAL EXTRACTION MANDATES FOR IMAGE SCANS:
+1. READ THE IMAGE SCAN VISUALLY:
+   - Carefully scan all text, headers, question titles, fill-in blanks, checkboxes, radio options, tables, and signature blocks in the image.
+   - Extract EVERY SINGLE question and field shown in the scan in exact original top-to-bottom sequence.
+
+2. PRESERVE ORIGINAL FORM TITLE & DESCRIPTION:
+   - "title": Extract the main title printed at the top of the scanned image document (e.g., "Patient Medical Intake Form", "Event Registration Form", "Employment Application").
+   - "description": Extract any subtitle, instructions, or header notice printed under the title.
+
+3. MAP VISUAL WIDGET TYPES ACCURATELY:
+   - Text boxes / Underlined blanks -> "short_text" or "long_text"
+   - Checkboxes / Square boxes -> "multiple_options" or "agreement" or "mcq"
+   - Radio buttons / Ovals / Choice lists -> "mcq" or "dropdown"
+   - Star ratings / Satisfaction scales -> "rating" or "emoji-satisfaction-scale"
+   - Full Name fields -> "name"
+   - Email fields -> "email"
+   - Phone / Contact number fields -> "phone"
+   - File upload / Photo / Signature boxes -> "file_upload" or "signature"
+   - Date / Time fields -> "date"
+   - Address / Location fields -> "location"
+
+4. PRESERVE OPTIONS & CHOICES:
+   - For any multiple choice, checkbox, or dropdown field in the image scan, extract all option labels verbatim as listed in the scan.
+
+5. USER CUSTOM INSTRUCTIONS OVERRIDE:
+   ${userPrompt ? `User custom instructions for this scan: "${userPrompt}". Apply any requested modifications or additions to the extracted form structure.` : 'Follow the exact structure of the scanned document.'}
+
+6. CLEANUP & QUALITY:
+   - Clean up question labels so they do not contain raw prefixes like "Q1." or "Section A:".
+   - Ensure every field has an appropriate placeholder.
+
+7. STRUCTURED JSON OUTPUT:
+   Output valid JSON with "title", "description", "theme", and "questions" array containing extracted fields.`;
 }
 
 // Helper for Fallback Natural Language Parsing (No API Keys needed)
@@ -668,10 +722,11 @@ function runResponseFallback(answers: any) {
 router.post(['/generate', '/generate-from-file'], optionalAuthMiddleware, upload.single('file'), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const fileBuffer = req.file ? req.file.buffer : null;
-    const mimeType = req.file ? req.file.mimetype : "application/pdf";
+    const rawMimeType = req.file ? req.file.mimetype : "application/pdf";
+    const mimeType = req.file ? normalizeMimeType(rawMimeType, req.file.originalname) : "application/pdf";
     const userPrompt = typeof req.body?.prompt === 'string' ? req.body.prompt : '';
     const formId = req.body?.formId;
-    const isImage = req.file && req.file.mimetype.startsWith('image/');
+    const isImage = mimeType.startsWith('image/');
 
     const trimmedUserPrompt = userPrompt.trim().toLowerCase();
     if (!fileBuffer && (trimmedUserPrompt.length < 3 || trimmedUserPrompt === 'review form' || trimmedUserPrompt === 'test form')) {
@@ -712,7 +767,7 @@ router.post(['/generate', '/generate-from-file'], optionalAuthMiddleware, upload
           req.file?.size || 0
         );
       } else {
-        systemInstruction = buildSystemInstruction(intent, parsedDocText);
+        systemInstruction = buildImageScanSystemInstruction(userPrompt);
       }
     } else {
       systemInstruction = buildSystemInstruction(intent, "");
@@ -762,7 +817,9 @@ router.post(['/generate', '/generate-from-file'], optionalAuthMiddleware, upload
           const isQuizIntent = intent.relevanceRules.requireQuizValidation;
           const docSnippet = parsedDocText ? `\nExtracted Document Content:\n"""\n${parsedDocText.substring(0, 10000)}\n"""` : '';
           const modelPrompt = fileBuffer
-            ? `Extract and generate a complete topic-specific form or exam/quiz paper based on this uploaded document/image and instructions: "${userPrompt || 'Extract all questions and fields from document'}". ${docSnippet} ${isQuizIntent ? 'CRITICAL: This is an assignment/exam/quiz. Follow user requested structure faithfully. If user prompt asks for easy/beginner questions, DO NOT copy hard questions verbatim from the image—simplify them into clear, beginner-level questions. Clean up question labels by removing raw exam prefixes like "Section 3 - Q4 (Fill-in-the-Blank):". If user specifies coding, true/false, fill-in-the-blank, or mcq sections, generate those exact question types (long_text for coding, mcq with True/False for true/false, short_text for fill in blanks, mcq with 4 options for MCQs). Set points according to instructions (e.g. 2 marks per question) and provide correctAnswer and explanation for each question.' : 'Generate appropriate topic-specific fields matching the document.'}`
+            ? (isImage 
+                ? `Analyze the attached image scan visually in detail. Read all printed text, headings, input boxes, radio buttons, checkboxes, titles, and text questions. Extract and generate a complete structured form matching the visual layout of the image scan faithfully. Additional user instructions: "${userPrompt || 'Extract all questions and fields from image scan'}".`
+                : `Extract and generate a complete topic-specific form or exam/quiz paper based on this uploaded document/image and instructions: "${userPrompt || 'Extract all questions and fields from document'}". ${docSnippet} ${isQuizIntent ? 'CRITICAL: This is an assignment/exam/quiz. Follow user requested structure faithfully. If user prompt asks for easy/beginner questions, DO NOT copy hard questions verbatim from the image—simplify them into clear, beginner-level questions. Clean up question labels by removing raw exam prefixes like "Section 3 - Q4 (Fill-in-the-Blank):". If user specifies coding, true/false, fill-in-the-blank, or mcq sections, generate those exact question types (long_text for coding, mcq with True/False for true/false, short_text for fill in blanks, mcq with 4 options for MCQs). Set points according to instructions (e.g. 2 marks per question) and provide correctAnswer and explanation for each question.' : 'Generate appropriate topic-specific fields matching the document.'}`)
             : `Analyze the topic "${intent.topic}" for user prompt: "${userPrompt}". Perform a deep factual domain analysis of "${intent.topic}" using world knowledge. Follow user requested structure faithfully. If user specifies coding, true/false, fill-in-the-blank, or mcq sections, generate those exact question types (long_text for coding, mcq with True/False for true/false, short_text for fill in blanks, mcq with 4 options for MCQs). Set points according to instructions (e.g. 2 marks per question) and provide correctAnswer and explanation for each question. Generate a factually 100% accurate, high-quality, topic-authentic ${intent.formType} with ${intent.questionCount} questions.`;
           formConfig = await queryGemini(modelPrompt, systemInstruction, fileBuffer, mimeType);
         }
@@ -1306,8 +1363,9 @@ router.post('/chat-stream', authMiddleware, subscriptionMiddleware, upload.singl
     const sessionId = req.body?.sessionId;
     const autoBuildMode = req.body?.autoBuildMode === true;
     const fileBuffer = req.file ? req.file.buffer : null;
-    const mimeType = req.file ? req.file.mimetype : "application/pdf";
-    const isImage = req.file && req.file.mimetype.startsWith('image/');
+    const rawMimeType = req.file ? req.file.mimetype : "application/pdf";
+    const mimeType = req.file ? normalizeMimeType(rawMimeType, req.file.originalname) : "application/pdf";
+    const isImage = mimeType.startsWith('image/');
 
     if (!rawPrompt.trim() && fileBuffer) {
       rawPrompt = `Generate a form based on the uploaded file structure: ${req.file?.originalname || 'document'}`;
