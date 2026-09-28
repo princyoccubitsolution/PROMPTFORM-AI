@@ -42,7 +42,7 @@ export class JsonAssembler {
         formTitle = "Event Registration & RSVP";
       } else if (text.includes("travel") || text.includes("booking")) {
         formTitle = "Travel Booking Request Form";
-      } else if (text.includes("data structure") || text.includes("dsa")) {
+      } else if ((text.includes("data structure") || text.includes("dsa")) && !plan.documentContext) {
         formTitle = plan.domain === 'quiz' ? "Data Structures Exam Paper" : "Data Structures Feedback Form";
       } else {
         const explicitSub = plan.normalizedPrompt?.match(/(?:for\s+the\s+subject|subject|course|topic)\s*[:="']*\s*["']?([^"',;\.\n\r]+)["']?/i);
@@ -74,7 +74,7 @@ export class JsonAssembler {
           if (plan.documentContext) {
             const lines = plan.documentContext.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
             for (const line of lines.slice(0, 15)) {
-              const lectureMatch = line.match(/(?:lecture\s*\d*|chapter\s*\d*|module\s*\d*|unit\s*\d*|topic|title)\s*[:\-–]\s*([^.,;\n\r]+)/i);
+              const lectureMatch = line.match(/(?:course\s+syllabus|syllabus|subject|course|lecture\s*\d*|chapter\s*\d*|module\s*\d*|unit\s*\d*|topic|title)\s*[:\-–]\s*([^.,;\n\r]+)/i);
               if (lectureMatch && lectureMatch[1] && lectureMatch[1].trim().length > 3) {
                 let clean = lectureMatch[1].trim().replace(/^(?:the\s+|understanding\s+|introduction\s+to\s+|fundamentals\s+of\s+|overview\s+of\s+)+/i, '').replace(/[\-–]\s*[IVX\d]+$/i, '').trim();
                 if (clean.length > 3 && clean.length < 40) {

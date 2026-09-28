@@ -3,9 +3,23 @@ import { IntentContext } from './intentDetector';
 export type FormDomain = 'quiz' | 'survey' | 'rsvp' | 'job' | 'contact' | 'medical' | 'complaint' | 'invoice' | 'general';
 
 export class DomainDetector {
-  static detect(context: IntentContext): FormDomain {
-    const normalized = context.normalizedPrompt;
-    if (normalized.includes("quiz") || normalized.includes("exam") || normalized.includes("test")) {
+  static detect(context: IntentContext, documentContext?: string): FormDomain {
+    const normalized = context.normalizedPrompt.toLowerCase();
+    if (
+      normalized.includes("quiz") || 
+      normalized.includes("exam") || 
+      normalized.includes("test") ||
+      normalized.includes("question") ||
+      normalized.includes("answer key") ||
+      normalized.includes("explanation") ||
+      normalized.includes("syllabus") ||
+      normalized.includes("mcq") ||
+      normalized.includes("assignment") ||
+      normalized.includes("paper") ||
+      normalized.includes("marks") ||
+      normalized.includes("score") ||
+      (documentContext && documentContext.trim().length > 10 && !normalized.includes("survey") && !normalized.includes("medical") && !normalized.includes("job") && !normalized.includes("hospital"))
+    ) {
       return 'quiz';
     }
     if (normalized.includes("survey") || normalized.includes("feedback") || normalized.includes("review") || normalized.includes("satisfaction") || normalized.includes("evaluation")) {

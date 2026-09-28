@@ -195,207 +195,103 @@ export class FieldDiscovery {
             }
           });
 
-          // 3. Fallback to fill up to targetCount if document lines were brief
-          const isDataStructures = /\b(data\s+structures?|dsa|c\s+program|linked\s+list|binary\s+search\s+tree|quick\s+sort|stack\s+and\s+queue)\b/i.test(text) || (text.includes("subject") && /\bdata\s+structures?\b/i.test(text));
-          if (isDataStructures) {
-            return [
-              {
-                type: "long_text",
-                label: "Section 1 - Q1 (Coding): Write a C program or algorithm function to insert a new node at the beginning of a Singly Linked List and display the list elements.",
-                required: true,
-                options: [],
-                points: 2,
-                correctAnswer: "Allocate node via malloc(), set newNode->next = head, update head = newNode. Traversal prints node->data while temp != NULL.",
-                explanation: "In a singly linked list, inserting at the head requires O(1) time complexity by updating the next pointer to current head and reassigning head pointer. Traversal is O(n)."
-              },
-              {
-                type: "mcq",
-                label: "Section 2 - Q2 (True/False): In a Binary Search Tree (BST), an Inorder Traversal (Left, Root, Right) always outputs keys in strictly ascending sorted order.",
-                required: true,
-                options: ["True", "False"],
-                points: 2,
-                correctAnswer: "True",
-                explanation: "By definition of BST, elements in the left subtree are smaller and right subtree elements are greater than the root. An inorder traversal (Left-Root-Right) visits keys in ascending order."
-              },
-              {
-                type: "mcq",
-                label: "Section 2 - Q3 (True/False): Accessing an arbitrary element by index in a standard Singly Linked List has a time complexity of O(1).",
-                required: true,
-                options: ["True", "False"],
-                points: 2,
-                correctAnswer: "False",
-                explanation: "Unlike contiguous arrays that offer O(1) random indexing, singly linked lists require sequential pointer traversal from the head, resulting in O(n) access time."
-              },
-              {
-                type: "short_text",
-                label: "Section 3 - Q4 (Fill-in-the-Blank): A Stack is a linear data structure that strictly operates on the _____ (LIFO / FIFO) principle.",
-                required: true,
-                options: [],
-                points: 2,
-                correctAnswer: "LIFO",
-                explanation: "A Stack strictly operates on Last-In First-Out (LIFO), where elements are pushed and popped from the same top end."
-              },
-              {
-                type: "short_text",
-                label: "Section 3 - Q5 (Fill-in-the-Blank): The worst-case time complexity of the Quick Sort algorithm when the partition is unbalanced is _____.",
-                required: true,
-                options: [],
-                points: 2,
-                correctAnswer: "O(n^2)",
-                explanation: "When the selected pivot consistently divides the list into 0 and n-1 elements (e.g. sorted input with extreme pivot), Quick Sort degrades to quadratic O(n^2) time."
-              },
-              {
-                type: "short_text",
-                label: "Section 3 - Q6 (Fill-in-the-Blank): In a Circular Queue of capacity N implemented via array, the queue-full condition preserving one empty slot is (rear + 1) % N == _____.",
-                required: true,
-                options: [],
-                points: 2,
-                correctAnswer: "front",
-                explanation: "In an array-based circular queue with one slot preserved to disambiguate full from empty, the queue is full when (rear + 1) % N == front."
-              },
-              {
-                type: "mcq",
-                label: "Section 4 - Q7 (MCQ): Which data structure is utilized by system runtimes to manage recursive function calls and local variables?",
-                required: true,
-                options: ["A) Call Stack", "B) Circular Queue", "C) Max-Heap", "D) Hash Map"],
-                points: 2,
-                correctAnswer: "A) Call Stack",
-                explanation: "The runtime call stack preserves activation frames, parameters, and return addresses during recursive function invocations in LIFO order."
-              },
-              {
-                type: "mcq",
-                label: "Section 4 - Q8 (MCQ): What is the average time complexity for searching an element in a height-balanced Binary Search Tree (AVL or Red-Black Tree)?",
-                required: true,
-                options: ["A) O(1)", "B) O(log n)", "C) O(n)", "D) O(n log n)"],
-                points: 2,
-                correctAnswer: "B) O(log n)",
-                explanation: "Balanced binary search trees maintain a maximum tree height of O(log n), ensuring that lookup, insertion, and deletion operate in O(log n) time."
-              },
-              {
-                type: "mcq",
-                label: "Section 4 - Q9 (MCQ): Which graph traversal algorithm uses a First-In First-Out (FIFO) Queue to visit vertices level-by-level?",
-                required: true,
-                options: ["A) Breadth-First Search (BFS)", "B) Depth-First Search (DFS)", "C) Topological Sort", "D) Prim's Algorithm"],
-                points: 2,
-                correctAnswer: "A) Breadth-First Search (BFS)",
-                explanation: "BFS explores all neighboring vertices at the present depth level before moving on, which is implemented using a FIFO Queue."
-              },
-              {
-                type: "mcq",
-                label: "Section 4 - Q10 (MCQ): What is the primary purpose of a Hash Function in a Hash Table data structure?",
-                required: true,
-                options: ["A) Map arbitrary search keys to fixed table indices", "B) Sort records in ascending alphabetic order", "C) Balance the depth of binary search trees", "D) Reconstruct circular linked lists"],
-                points: 2,
-                correctAnswer: "A) Map arbitrary search keys to fixed table indices",
-                explanation: "A hash function maps keys into array slot indices, providing average O(1) time complexity for insert, search, and delete operations."
+          // 3. Dynamically extract MCQs & questions from documentContext
+          if (quizFields.length < targetCount) {
+            candidateLines.forEach(cl => {
+              if (quizFields.length >= targetCount) return;
+              const cleanLine = cl.replace(/^[\-\*\•\d\.\)\s]+/, '').trim();
+              if (cleanLine.length < 8) return;
+
+              // Unit / Chapter / Topic line
+              const unitMatch = cleanLine.match(/^(?:unit\s*\d*|chapter\s*\d*|module\s*\d*|section\s*\d*|topic)\s*[:\-–]?\s*(.*)/i);
+              if (unitMatch && unitMatch[1] && unitMatch[1].trim().length > 3) {
+                const topicStr = unitMatch[1].trim();
+                const qLabel = `What primary concept is covered under "${topicStr}"?`;
+                if (!quizFields.some(q => q.label === qLabel)) {
+                  quizFields.push({
+                    type: "mcq",
+                    label: qLabel,
+                    required: true,
+                    options: [
+                      `Foundational principles of ${topicStr}`,
+                      `Hardware interrupt latency optimization`,
+                      `Linear regression cost function minimization`,
+                      `Network routing protocol packet analysis`
+                    ],
+                    points: 2,
+                    correctAnswer: `Foundational principles of ${topicStr}`,
+                    explanation: `The document details foundational principles and core concepts under ${topicStr}.`
+                  });
+                }
+              } else if (cleanLine.includes(":") && cleanLine.split(":")[0].length < 50) {
+                const [heading, detail] = cleanLine.split(":");
+                const headingStr = heading.trim();
+                const detailStr = detail.trim();
+                if (headingStr.length > 3) {
+                  const qLabel = `What key concept is described under "${headingStr}"?`;
+                  if (!quizFields.some(q => q.label === qLabel)) {
+                    quizFields.push({
+                      type: "mcq",
+                      label: qLabel,
+                      required: true,
+                      options: [
+                        detailStr.length > 5 ? detailStr : `Key principles of ${headingStr}`,
+                        `Mechanical disk head seek time`,
+                        `Hardware bus arbitration rules`,
+                        `Asymmetric encryption key length`
+                      ],
+                      points: 2,
+                      correctAnswer: detailStr.length > 5 ? detailStr : `Key principles of ${headingStr}`,
+                      explanation: `As specified in the uploaded document, ${headingStr} covers ${detailStr}.`
+                    });
+                  }
+                }
+              } else if (cleanLine.length >= 20 && cleanLine.length <= 160 && !cleanLine.includes("?")) {
+                const qLabel = `Which statement accurately reflects the principles outlined regarding "${cleanLine.slice(0, 45)}..."?`;
+                if (!quizFields.some(q => q.label === qLabel)) {
+                  quizFields.push({
+                    type: "mcq",
+                    label: qLabel,
+                    required: true,
+                    options: [
+                      cleanLine,
+                      `System throughput is exclusively constrained by mechanical storage latency`,
+                      `Shared semantic codes are unnecessary for contextual comprehension`,
+                      `Communication signals operate independently of physical channel medium`
+                    ],
+                    points: 2,
+                    correctAnswer: cleanLine,
+                    explanation: `Directly referenced from document text: "${cleanLine}".`
+                  });
+                }
               }
-            ];
+            });
           }
 
-          const fallbackQuizBank = [
-            {
-              label: "What is defined as the 'communicative environment' in the source material?",
-              options: [
-                "The shared contextual setting, codes, and channels through which messages are exchanged",
-                "The physical hardware enclosure of a computing workstation",
-                "The corporate organizational hierarchy of financial stakeholders",
-                "The algorithmic sorting efficiency in database queries"
-              ]
-            },
-            {
-              label: "Why is a shared 'code' essential between participants in communication?",
-              options: [
-                "To ensure message symbols are mutually decoded and understood accurately without breakdown",
-                "To compress transmission packets across physical fiber links",
-                "To bypass security validation rules on the communication server",
-                "To calculate transmission latency across wireless bandwidths"
-              ]
-            },
-            {
-              label: "Which element causes the primary breakdown when shared understanding is missing?",
-              options: [
-                "Semantic mismatch and absence of mutually recognized coding rules",
-                "Power supply fluctuation in transmitter electronics",
-                "Hardware cache invalidation during multi-threaded processing",
-                "Operating system thread deadlock"
-              ]
-            },
-            {
-              label: "What role does feedback play within an effective communication environment?",
-              options: [
-                "Verifies that the decoded message matches the sender's original intent",
-                "Reboots the transmission hardware upon timeout",
-                "Decreases the total number of participants in the network",
-                "Encrypts the message payload using asymmetric keys"
-              ]
-            },
-            {
-              label: "How does context influence message interpretation in communication?",
-              options: [
-                "It shapes the semantic meaning and expectations of the participants",
-                "It determines the electrical resistance of the transmission cable",
-                "It overrides the grammatical structure of the language automatically",
-                "It eliminates the need for a message receiver"
-              ]
-            },
-            {
-              label: "Which factor represents a major barrier to communication in the environment?",
-              options: [
-                "Interference, environmental noise, and cognitive bias between parties",
-                "High-speed fiber optic infrastructure deployment",
-                "Automated spell-checking in digital interfaces",
-                "Standardized dictionary definitions"
-              ]
-            },
-            {
-              label: "What distinguishes one-way communication from interactive two-way communication?",
-              options: [
-                "Two-way communication incorporates real-time feedback and dynamic adaptation",
-                "One-way communication is always faster and free of errors",
-                "Two-way communication does not require a shared code",
-                "One-way communication requires multiple receivers simultaneously"
-              ]
-            },
-            {
-              label: "In communication theory, what constitutes the 'message'?",
-              options: [
-                "The encoded information, ideas, or feelings transmitted by the sender",
-                "The physical copper wire connecting two computer nodes",
-                "The invoice issued for communication services rendered",
-                "The binary machine code executed by the CPU"
-              ]
-            },
-            {
-              label: "How should communicators adapt when environmental noise disrupts the signal?",
-              options: [
-                "Clarify key points, seek feedback, and utilize complementary communication channels",
-                "Terminate all communication permanently",
-                "Increase transmission speed without verification",
-                "Ignore participant questions and proceed unchanged"
-              ]
-            },
-            {
-              label: "What is the ultimate objective of understanding the communicative environment?",
-              options: [
-                "Achieving clear, mutually intelligible shared understanding and meaningful engagement",
-                "Minimizing server bandwidth consumption across internet gateways",
-                "Replacing interpersonal dialogue with automated notifications",
-                "Eliminating all spoken languages in favor of numeric codes"
-              ]
-            }
-          ];
+          // 4. Fill remaining fields up to targetCount dynamically using topic titles from documentContext
+          let topicKey = documentContext.split(/\r?\n/).find(l => l.trim().length > 5 && !l.includes("?"))?.trim() || "Uploaded Document";
+          topicKey = topicKey.replace(/^(?:course\s+syllabus|syllabus|subject|lecture\s*\d*|unit\s*\d*)[:\-–]?\s*/i, '').slice(0, 35);
 
-          let fbIdx = 0;
-          while (quizFields.length < targetCount && fbIdx < fallbackQuizBank.length) {
-            const item = fallbackQuizBank[fbIdx++];
-            if (!quizFields.some(q => q.label === item.label)) {
+          let fillIdx = 1;
+          while (quizFields.length < targetCount) {
+            const qLabel = `Key Assessment Question #${quizFields.length + 1}: Topic ${topicKey} (Item ${fillIdx})`;
+            if (!quizFields.some(q => q.label === qLabel)) {
               quizFields.push({
                 type: "mcq",
-                label: item.label,
+                label: qLabel,
                 required: true,
-                options: item.options
+                options: [
+                  `Primary factual principle of ${topicKey}`,
+                  `Secondary alternative protocol`,
+                  `Legacy hardware constraint`,
+                  `Unrelated domain parameter`
+                ],
+                points: 2,
+                correctAnswer: `Primary factual principle of ${topicKey}`,
+                explanation: `Evaluates foundational understanding of ${topicKey} as outlined in the uploaded document.`
               });
             }
+            fillIdx++;
           }
         }
 
@@ -526,7 +422,7 @@ export class FieldDiscovery {
         );
       }
 
-      if (/\b(data\s+structures?|dsa|c\s+program|linked\s+list|binary\s+search\s+tree|quick\s+sort|stack\s+and\s+queue)\b/i.test(text) || (text.includes("subject") && /\bdata\s+structures?\b/i.test(text))) {
+      if (/\b(data\s+structures?|dsa)\b/i.test(text) && !documentContext && !text.includes("pdf") && !text.includes("doc") && !text.includes("document")) {
         fields.push(
           {
             type: "long_text",

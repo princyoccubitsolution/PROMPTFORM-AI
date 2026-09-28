@@ -26,7 +26,7 @@ export class AIFormBrain {
     let context = IntentDetector.detect(prompt);
     context = LanguageDetector.detect(context);
     
-    const domain = DomainDetector.detect(context);
+    const domain = DomainDetector.detect(context, documentContext);
     const industry = IndustryDetector.detect(domain, context.normalizedPrompt);
     const requirements = RequirementAnalyzer.analyze(context, domain);
     const reasoning = DeepReasoner.reason(domain, requirements);

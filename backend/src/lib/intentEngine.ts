@@ -89,8 +89,8 @@ function extractTopicFromDocument(documentText: string): string | null {
   if (!documentText || documentText.trim().length < 5) return null;
   const lines = documentText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
   for (const line of lines.slice(0, 20)) {
-    // Check for lecture/chapter/title patterns
-    const lectureMatch = line.match(/(?:lecture\s*\d*|chapter\s*\d*|module\s*\d*|unit\s*\d*|topic|title)\s*[:\-–]\s*([^.,;\n\r]+)/i);
+    // Check for course syllabus/subject/lecture/chapter/title patterns
+    const lectureMatch = line.match(/(?:course\s+syllabus|syllabus|subject|course|lecture\s*\d*|chapter\s*\d*|module\s*\d*|unit\s*\d*|topic|title)\s*[:\-–]\s*([^.,;\n\r]+)/i);
     if (lectureMatch && lectureMatch[1] && lectureMatch[1].trim().length > 3) {
       let clean = lectureMatch[1].replace(/^(?:understanding|introduction to|fundamentals of|overview of)\s+/i, '').replace(/[\-–]\s*[IVX\d]+$/i, '').trim();
       if (clean.length > 3 && clean.length < 50) {
@@ -99,7 +99,7 @@ function extractTopicFromDocument(documentText: string): string | null {
     }
     // Check if line looks like a title
     if (line.length >= 6 && line.length <= 60 && !line.includes("?") && !line.includes("http") && !line.startsWith("(") && !line.toLowerCase().startsWith("page")) {
-      const clean = line.replace(/^\d+[\s.)\-]+/, '').replace(/^(?:understanding|introduction to|lecture\s*\d*[:\-]?)\s*/i, '').replace(/[\-–]\s*[IVX\d]+$/i, '').trim();
+      const clean = line.replace(/^\d+[\s.)\-]+/, '').replace(/^(?:course\s+syllabus|syllabus|subject|understanding|introduction to|lecture\s*\d*[:\-]?)\s*/i, '').replace(/[\-–]\s*[IVX\d]+$/i, '').trim();
       if (clean.length > 4 && clean.length < 50 && !/^(true|false|option|section|table|figure|where|when|what|which|how|who)\b/i.test(clean)) {
         return clean.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
       }
@@ -261,13 +261,19 @@ export function detectIntent(text: string, documentContext?: string): IntentResu
     normalized.includes("homework") ||
     normalized.includes("practical") ||
     normalized.includes("paper") ||
+    normalized.includes("question") ||
+    normalized.includes("questions") ||
+    normalized.includes("answer key") ||
+    normalized.includes("explanation") ||
+    normalized.includes("syllabus") ||
     normalized.includes("prashno") ||
-    normalized.includes("dakhla")
+    normalized.includes("dakhla") ||
+    (documentContext && documentContext.trim().length > 10 && !normalized.includes("survey") && !normalized.includes("medical") && !normalized.includes("job") && !normalized.includes("hospital"))
   ) {
     category = 'quiz';
     formType = normalized.includes("assignment") 
       ? "Assignment Quiz" 
-      : (normalized.includes("mcq") ? "MCQ Quiz" : (normalized.includes("exam") ? "Exam" : "Quiz"));
+      : (normalized.includes("mcq") ? "MCQ Quiz" : (normalized.includes("exam") || normalized.includes("syllabus") ? "Exam" : "Quiz"));
     purpose = "Knowledge Testing & Skill Assessment";
     industry = "Education & Skill Verification";
     requireQuizValidation = true;
