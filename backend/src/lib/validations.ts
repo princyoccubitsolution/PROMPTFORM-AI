@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 export const registerSchema = z.object({
-  email: z.string().email("Invalid email address"),
+  email: z.string().trim().toLowerCase().email("Invalid email address"),
   name: z.string().optional().or(z.literal('')),
   password: z.string()
     .min(6, "Password must be at least 6 characters")
@@ -9,7 +9,7 @@ export const registerSchema = z.object({
 });
 
 export const loginSchema = z.object({
-  email: z.string().email("Invalid email address").optional(),
+  email: z.string().trim().toLowerCase().email("Invalid email address").optional(),
   password: z.string().optional(),
   idToken: z.string().optional(),
 }).refine(data => data.idToken || (data.email && data.password), {

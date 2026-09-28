@@ -45,9 +45,11 @@ export default function RegisterPage() {
       return;
     }
 
+    const normalizedEmail = email.trim().toLowerCase();
+
     // Client-side schema validation using shared package
     const validationResult = registerSchema.safeParse({
-      email,
+      email: normalizedEmail,
       name: name.trim() || undefined,
       password,
     });
@@ -62,7 +64,7 @@ export default function RegisterPage() {
 
     try {
       const data = await api.post('/auth/register', { 
-        email, 
+        email: normalizedEmail, 
         password,
         name: name.trim() || undefined 
       });

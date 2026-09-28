@@ -72,8 +72,10 @@ function LoginContent() {
     setError(null);
     setIsLoading(true);
 
+    const normalizedEmail = email.trim().toLowerCase();
+
     try {
-      const data = await api.post('/auth/login', { email, password });
+      const data = await api.post('/auth/login', { email: normalizedEmail, password });
       localStorage.setItem('promptform_access_token', data.accessToken);
       localStorage.setItem('promptform_refresh_token', data.refreshToken);
       localStorage.setItem('promptform_user_email', data.user.email);

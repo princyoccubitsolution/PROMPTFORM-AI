@@ -166,12 +166,14 @@ router.get('/google/callback', async (req: Request, res: Response) => {
     }
 
     const profile = (await userInfoResponse.json()) as { email?: string; name?: string; sub?: string };
-    const email = profile.email;
-    const name = profile.name || (email ? email.split('@')[0] : 'Google User');
+    const rawEmail = profile.email;
+    const name = profile.name || (rawEmail ? rawEmail.split('@')[0] : 'Google User');
 
-    if (!email) {
+    if (!rawEmail) {
       return res.redirect(`${frontendUrl}/login?error=${encodeURIComponent('No email address provided by your Google account.')}`);
     }
+
+    const email = rawEmail.trim().toLowerCase();
 
     // 3. User lookup or creation
     let user = await db.user.findUnique({
@@ -230,9 +232,10 @@ router.get('/google/callback', async (req: Request, res: Response) => {
 router.post('/register', async (req: Request, res: Response) => {
   try {
     const body = registerSchema.parse(req.body);
+    const email = body.email.trim().toLowerCase();
     
     const existingUser = await db.user.findUnique({
-      where: { email: body.email }
+      where: { email }
     });
 
     if (existingUser) {
@@ -243,7 +246,7 @@ router.post('/register', async (req: Request, res: Response) => {
     const sessionToken = crypto.randomUUID();
     const user = await db.user.create({
       data: {
-        email: body.email,
+        email,
         name: body.name || null,
         password: hashedPassword,
         role: 'user',
@@ -267,10 +270,13 @@ router.post('/register', async (req: Request, res: Response) => {
       isNewUser: true,
       ...tokens
     });
-  } catch (error) {
+  } catch (error: any) {
     if (error instanceof z.ZodError) {
       const firstMsg = error.errors[0]?.message || 'Validation failed';
       return res.status(400).json({ error: firstMsg, details: error.errors });
+    }
+    if (error?.code === 'P2002') {
+      return res.status(400).json({ error: 'User with this email already exists' });
     }
     return res.status(500).json({ error: 'Internal server error' });
   }
@@ -315,8 +321,9 @@ router.post('/login', async (req: Request, res: Response) => {
         }
       }
 
+      const normalizedOAuthEmail = email ? email.trim().toLowerCase() : '';
       let user = await db.user.findUnique({
-        where: { email }
+        where: { email: normalizedOAuthEmail }
       });
 
       const sessionToken = crypto.randomUUID();
@@ -327,7 +334,7 @@ router.post('/login', async (req: Request, res: Response) => {
         const randomPassword = await bcrypt.hash(Math.random().toString(36).substring(2, 15), 10);
         user = await db.user.create({
           data: {
-            email,
+            email: normalizedOAuthEmail,
             name,
             password: randomPassword,
             role: 'user',
@@ -360,15 +367,20 @@ router.post('/login', async (req: Request, res: Response) => {
     }
 
     // Email/Password Sign In Flow
+    if (!body.email || !body.password) {
+      return res.status(400).json({ error: 'Invalid email or password' });
+    }
+
+    const email = body.email.trim().toLowerCase();
     let user = await db.user.findUnique({
-      where: { email: body.email }
+      where: { email }
     });
 
     if (!user) {
       return res.status(400).json({ error: 'Invalid email or password' });
     }
 
-    const passwordMatch = await bcrypt.compare(body.password!, user.password);
+    const passwordMatch = await bcrypt.compare(body.password, user.password);
     if (!passwordMatch) {
       return res.status(400).json({ error: 'Invalid email or password' });
     }
