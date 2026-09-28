@@ -1186,22 +1186,6 @@ export default function PublicFormPage() {
               </div>
             )}
           </div>
-
-          <div className="mt-6">
-            <Button 
-              variant="outline" 
-              className="w-full h-11 text-xs font-semibold rounded-xl"
-              onClick={() => {
-                if (window.history.length > 1) {
-                  router.back();
-                } else {
-                  router.push('/');
-                }
-              }}
-            >
-              Return to Previous Page
-            </Button>
-          </div>
         </Card>
       </div>
     );
