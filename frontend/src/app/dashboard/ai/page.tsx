@@ -687,7 +687,7 @@ export default function AIPage() {
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
-                    onClick={() => { setMode('prompt'); setError(null); }}
+                    onClick={() => { setMode('prompt'); setFile(null); setError(null); }}
                     className={`flex items-center space-x-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-none cursor-pointer outline-none focus:outline-none focus-visible:outline-none focus:ring-0 ${
                       mode === 'prompt' 
                         ? 'bg-primary text-primary-foreground shadow-sm' 
@@ -700,7 +700,7 @@ export default function AIPage() {
 
                   <button
                     type="button"
-                    onClick={() => { setMode('pdf'); setError(null); }}
+                    onClick={() => { setMode('pdf'); setFile(null); setError(null); }}
                     className={`flex items-center space-x-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-none cursor-pointer outline-none focus:outline-none focus-visible:outline-none focus:ring-0 ${
                       mode === 'pdf' 
                         ? 'bg-primary text-primary-foreground shadow-sm' 
@@ -713,7 +713,7 @@ export default function AIPage() {
 
                   <button
                     type="button"
-                    onClick={() => { setMode('image'); setError(null); }}
+                    onClick={() => { setMode('image'); setFile(null); setError(null); }}
                     className={`flex items-center space-x-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-none cursor-pointer outline-none focus:outline-none focus-visible:outline-none focus:ring-0 ${
                       mode === 'image' 
                         ? 'bg-primary text-primary-foreground shadow-sm' 
@@ -776,13 +776,14 @@ export default function AIPage() {
                             </p>
                           </div>
                           <input 
+                            key={mode}
                             type="file" 
                             accept={mode === 'pdf' ? ".pdf,.docx" : "image/*,.png,.jpg,.jpeg,.webp,.heic"}
                             onChange={(e) => setFile(e.target.files?.[0] || null)}
                             className="hidden" 
-                            id="side-file-input"
+                            id={mode === 'pdf' ? "pdf-file-input" : "image-file-input"}
                           />
-                          <label htmlFor="side-file-input" className="inline-block bg-primary hover:bg-primary/90 text-white font-semibold text-xs px-4 py-1.5 rounded-xl cursor-pointer">
+                          <label htmlFor={mode === 'pdf' ? "pdf-file-input" : "image-file-input"} className="inline-block bg-primary hover:bg-primary/90 text-white font-semibold text-xs px-4 py-1.5 rounded-xl cursor-pointer">
                             Browse File
                           </label>
                         </div>
