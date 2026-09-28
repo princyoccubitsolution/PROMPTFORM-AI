@@ -459,13 +459,56 @@ ${contextSnippet}${langInstruction}`;
 }
 
 export function isGreetingOrHelp(prompt: string): boolean {
-  const clean = prompt.toLowerCase().trim();
-  const greetings = ['hi', 'hello', 'hey', 'help', 'hlo', 'kem cho', 'namaste', 'kaise ho', 'what can you do', 'who are you', 'how to use'];
-  return greetings.some(g => clean === g || clean.startsWith(g + ' ') || clean.endsWith(' ' + g));
+  if (!prompt || typeof prompt !== 'string') return false;
+  const clean = prompt.toLowerCase().replace(/[^\w\s]/g, "").replace(/(.)\1+/g, '$1$1').trim();
+  const greetings = ['hi', 'hy', 'hii', 'hyy', 'hello', 'helo', 'hey', 'help', 'hlo', 'kem cho', 'namaste', 'kaise ho', 'what can you do', 'who are you', 'how to use', 'yo', 'sup'];
+  return greetings.some(g => clean === g || clean.startsWith(g + ' ') || clean.endsWith(' ' + g) || clean.includes('how are you') || clean.includes('who are you'));
 }
 
 export function translateFormConfig(formObj: any, targetLang: string): any {
   if (!formObj) return formObj;
+  const lang = (targetLang || '').toLowerCase();
+  
+  if (lang === 'gujarati' || lang === 'gujrish') {
+    const dictionary: Record<string, string> = {
+      "customer feedback form": "ગ્રાહક પ્રતિસાદ ફોર્મ",
+      "full name": "પૂરેપૂરું નામ",
+      "email address": "ઈમેલ એડ્રેસ",
+      "phone number": "ફોન નંબર",
+      "message": "સંદેશ",
+      "comments": "ટિપ્પણીઓ",
+      "feedback": "પ્રતિસાદ",
+      "overall satisfaction": "સમગ્ર સંતોષ",
+      "yes": "હા",
+      "no": "ના",
+      "submit": "સબમિટ કરો"
+    };
+
+    const cleanTitle = (formObj.title || "").toLowerCase().trim();
+    const translatedTitle = dictionary[cleanTitle] || formObj.title;
+
+    const translatedQuestions = (formObj.questions || []).map((q: any) => {
+      const cleanLabel = (q.label || "").toLowerCase().trim();
+      const translatedLabel = dictionary[cleanLabel] || q.label;
+      const translatedOptions = (q.options || []).map((opt: string) => {
+        const cleanOpt = opt.toLowerCase().trim();
+        return dictionary[cleanOpt] || opt;
+      });
+      return {
+        ...q,
+        label: translatedLabel,
+        options: translatedOptions
+      };
+    });
+
+    return {
+      ...formObj,
+      title: translatedTitle,
+      questions: translatedQuestions,
+      targetLanguage: targetLang
+    };
+  }
+
   return {
     ...formObj,
     targetLanguage: targetLang

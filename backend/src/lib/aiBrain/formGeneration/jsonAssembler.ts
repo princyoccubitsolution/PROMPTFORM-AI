@@ -121,18 +121,22 @@ export class JsonAssembler {
       }
     }
 
+    if (plan.industry && typeof plan.industry === 'string' && !formTitle.toLowerCase().includes(plan.industry.toLowerCase())) {
+      formTitle = `${plan.industry} ${formTitle}`;
+    }
+
     // Always sanitize formTitle to guarantee smart, sleek 2-4 word human title
     formTitle = sanitizeFormTitle(formTitle, plan.normalizedPrompt);
 
     // Determine Topic-Specific Niche Theme (Matching HSL / Brand niche rules)
     let themeName = "royal-blue-education";
-    let layoutType = "compact-grid";
+    let layoutType = layout.type || "stepper";
     let primaryColor = "#2563eb"; // Royal Blue default
     let backgroundColor = "#eff6ff";
 
     if (isMedical || text.includes("dental") || text.includes("dentistry") || text.includes("health")) {
       themeName = "emerald-medical";
-      layoutType = "wizard-steps";
+      layoutType = "stepper";
       primaryColor = "#059669"; // Emerald Green
       backgroundColor = "#ecfdf5";
     } else if (isReview || text.includes("coffee") || text.includes("cafe") || text.includes("food") || text.includes("restaurant") || text.includes("bakery")) {
@@ -184,7 +188,7 @@ export class JsonAssembler {
         anti_cheat_detection: plan.domain === 'quiz'
       },
       layoutConfig: {
-        type: layout.type,
+        type: layoutType,
         columns: layout.columns
       }
     };

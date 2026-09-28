@@ -12,12 +12,9 @@ export class LayoutGenerator {
     const totalFields = plan.sections.reduce((sum, s) => sum + s.fields.length, 0);
 
     let layoutType = "compact-grid";
-    if (totalFields > 8) {
+    if (totalFields > 8 || isMedical) {
       layoutType = "stepper";
     } else if (plan.domain === 'invoice' || plan.domain === 'complaint') {
-      layoutType = "card";
-    } else if (isMedical) {
-      layoutType = "wizard-steps";
     } else if (isEducation) {
       layoutType = "compact-grid";
     } else if (isTech) {

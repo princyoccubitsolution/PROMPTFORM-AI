@@ -6,7 +6,7 @@ export class FieldGrouping {
 
     if (fields.length >= 5) {
       const contactFields = fields.filter(f => 
-        /name|email|phone|address|dob|birth|gender|patient|student|guest|client|reporter|donor|buyer/i.test(f.label)
+        /name|email|phone|address|dob|birth|age|gender|patient|student|guest|client|reporter|donor|buyer/i.test(f.label)
       );
       const fileFields = fields.filter(f => 
         /upload|resume|cv|photo|image|passport|blueprint|screenshot|file|document/i.test(f.label) && !contactFields.includes(f)

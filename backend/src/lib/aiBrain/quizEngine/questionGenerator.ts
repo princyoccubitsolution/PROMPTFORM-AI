@@ -60,6 +60,9 @@ export class QuestionGenerator {
       if (isIdentity) {
         (q as any).isIdentityField = true;
         (q as any).points = 0;
+        q.correctAnswer = field.correctAnswer || "Identity Input";
+        q.explanation = field.explanation || "Student / Candidate Identification Field";
+        q.bloomsTaxonomy = "understanding";
       } else if (isQuiz) {
         q.correctAnswer = field.correctAnswer || (q.options.length > 0 ? q.options[0] : (type === "long_text" ? "Algorithm / Code Implementation" : "Expected Answer"));
         q.explanation = field.explanation || `Verified explanation and analysis for "${label}".`;
