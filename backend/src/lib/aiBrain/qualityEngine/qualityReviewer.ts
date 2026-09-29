@@ -83,6 +83,31 @@ export class EnterpriseQualityReviewer {
       autoFixesApplied.push("Deduplicated duplicate question labels.");
     }
 
+    // 5.4 Semantics-Based Field Type Coercion & Quality Rules
+    config.questions = config.questions.map((q: any) => {
+      const lowerLabel = (q.label || '').toLowerCase();
+      if (q.type === 'short_text' || q.type === 'long_text' || q.type === 'text' || !q.type) {
+        if (lowerLabel.includes('rating') || lowerLabel.includes('satisfaction') || lowerLabel.includes('net promoter') || lowerLabel.includes('nps') || lowerLabel.includes('rate our') || lowerLabel.includes('rate your')) {
+          q.type = lowerLabel.includes('emoji') ? 'emoji-satisfaction-scale' : 'rating';
+        } else if (lowerLabel.includes('full name') || lowerLabel.includes('your name') || lowerLabel.includes('patient name') || lowerLabel.includes('student name') || lowerLabel.includes('applicant name')) {
+          q.type = 'name';
+        } else if (lowerLabel.includes('email') || lowerLabel.includes('e-mail')) {
+          q.type = 'email';
+        } else if (lowerLabel.includes('phone') || lowerLabel.includes('mobile') || lowerLabel.includes('contact number')) {
+          q.type = 'phone';
+        } else if (lowerLabel.includes('agree') || lowerLabel.includes('terms') || lowerLabel.includes('consent')) {
+          q.type = 'agreement';
+        } else if (lowerLabel.includes('feedback') || lowerLabel.includes('comment') || lowerLabel.includes('suggestion')) {
+          q.type = 'feedback';
+        } else if (lowerLabel.includes('resume') || lowerLabel.includes('cv')) {
+          q.type = 'resume';
+        } else if (lowerLabel.includes('photo') || lowerLabel.includes('avatar')) {
+          q.type = 'photo';
+        }
+      }
+      return q;
+    });
+
     // 5.5 Audit and enforce Quiz MCQ completeness & 4-option requirement
     const isQuizForm = config.isQuiz || 
                        config.settings?.leaderboardReady || 
@@ -91,6 +116,9 @@ export class EnterpriseQualityReviewer {
 
     if (isQuizForm) {
       config.isQuiz = true;
+      if (!config.settings) config.settings = {};
+      config.settings.anti_cheat_detection = true;
+      config.settings.shuffle_questions = true;
       let quizHealedCount = 0;
 
       config.questions = config.questions.map((q: any) => {

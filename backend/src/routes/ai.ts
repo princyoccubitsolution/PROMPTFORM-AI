@@ -52,11 +52,11 @@ async function queryGemini(
   }
 
   const candidateModels = [
-    'gemini-2.0-flash',
-    'gemini-1.5-flash',
-    'gemini-1.5-pro',
-    'gemini-2.0-flash-exp',
-    'gemini-flash-latest'
+    'gemini-3.5-flash-lite',
+    'gemini-3.1-flash-lite',
+    'gemini-2.5-flash',
+    'gemini-flash-latest',
+    'gemini-2.5-pro'
   ];
 
   const contents: any[] = [];
@@ -69,11 +69,11 @@ async function queryGemini(
     });
   }
 
-  const parts: any[] = [{ text: prompt }];
+  const baseParts: any[] = [{ text: prompt }];
 
   const cleanMime = mimeType ? normalizeMimeType(mimeType) : "";
   if (fileBuffer && cleanMime && (cleanMime.startsWith('image/') || cleanMime === 'application/pdf')) {
-    parts.push({
+    baseParts.push({
       inlineData: {
         mimeType: cleanMime,
         data: fileBuffer.toString('base64')
@@ -81,33 +81,41 @@ async function queryGemini(
     });
   }
 
-  contents.push({
-    role: 'user',
-    parts
-  });
-
-  const payload: any = {
-    contents,
-    generationConfig: {
-      ...(isJson ? { responseMimeType: "application/json" } : {}),
-      ...(responseSchema ? { responseSchema } : {})
-    }
-  };
-
-  if (systemInstruction) {
-    payload.systemInstruction = {
-      parts: [
-        {
-          text: systemInstruction
-        }
-      ]
-    };
-  }
-
   let textResponse: string | undefined;
   let lastError: Error | null = null;
+  let includeInlineData = true;
 
   for (const model of candidateModels) {
+    const currentParts = includeInlineData 
+      ? [...baseParts] 
+      : [{ text: prompt }];
+
+    const currentContents = [
+      ...contents,
+      {
+        role: 'user',
+        parts: currentParts
+      }
+    ];
+
+    const payload: any = {
+      contents: currentContents,
+      generationConfig: {
+        ...(isJson ? { responseMimeType: "application/json" } : {}),
+        ...(responseSchema ? { responseSchema } : {})
+      }
+    };
+
+    if (systemInstruction) {
+      payload.systemInstruction = {
+        parts: [
+          {
+            text: systemInstruction
+          }
+        ]
+      };
+    }
+
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 45000);
@@ -141,12 +149,12 @@ async function queryGemini(
 
         if (res.status === 503 || res.status === 404 || res.status === 429) {
           console.warn(`Model ${model} returned ${res.status}, retrying with fallback model after brief delay...`);
-          await new Promise(r => setTimeout(r, 1500));
+          await new Promise(r => setTimeout(r, 500));
           continue;
         }
-        if (res.status === 400 && fileBuffer && parts.length > 1 && !parsedErrMsg.toLowerCase().includes('key')) {
+        if (res.status === 400 && fileBuffer && includeInlineData && !parsedErrMsg.toLowerCase().includes('key')) {
           console.warn(`Model ${model} rejected binary inlineData with 400, retrying with text-only prompt...`);
-          parts.splice(1, 1);
+          includeInlineData = false;
           await new Promise(r => setTimeout(r, 500));
           continue;
         }
@@ -743,6 +751,15 @@ router.post(['/generate', '/generate-from-file'], optionalAuthMiddleware, upload
       if (user && user.credits < 5) {
         return res.status(403).json({ error: 'Insufficient credits. AI generation requires at least 5 credits.' });
       }
+      if (!formId && user && user.subscriptionPlan === 'free') {
+        const existingFormsCount = await db.form.count({ where: { ownerId: user.id } });
+        if (existingFormsCount >= 5) {
+          return res.status(403).json({
+            error: 'Free plan limit reached. Free accounts are limited to 5 active forms.',
+            status: 'restricted'
+          });
+        }
+      }
     }
 
     let formConfig;
@@ -852,6 +869,29 @@ router.post(['/generate', '/generate-from-file'], optionalAuthMiddleware, upload
       formConfig.understandingSummary = intent.understandingSummary;
     }
     formConfig = EnterpriseQualityReviewer.reviewAndImprove(formConfig);
+
+    const sanitizedSettings = (formConfig.settings && typeof formConfig.settings === 'object') ? formConfig.settings : {
+      collect_emails: true,
+      limit_responses: false,
+      timer_limit: intent.relevanceRules.requireQuizValidation ? 15 : 0,
+      shuffle_questions: intent.relevanceRules.requireQuizValidation,
+      anti_cheat_detection: intent.relevanceRules.requireQuizValidation
+    };
+
+    if (intent.relevanceRules.requireQuizValidation) {
+      sanitizedSettings.anti_cheat_detection = true;
+      sanitizedSettings.shuffle_questions = true;
+    }
+
+    const sanitizedTheme = (formConfig.theme && typeof formConfig.theme === 'object') ? formConfig.theme : {
+      primary_color: typeof formConfig.theme === 'string' ? "#22C55E" : "#059669",
+      background_color: "#FFFFFF",
+      font_family: "Inter",
+      theme_name: typeof formConfig.theme === 'string' ? formConfig.theme : "default"
+    };
+
+    formConfig.settings = sanitizedSettings;
+    formConfig.theme = sanitizedTheme;
 
     let form: any;
     if (formId) {
@@ -986,10 +1026,17 @@ router.post(['/generate', '/generate-from-file'], optionalAuthMiddleware, upload
       });
     }
 
+    let creditsRemaining: number | undefined;
+    if (req.user) {
+      const updatedUser = await db.user.findUnique({ where: { id: req.user.id } });
+      creditsRemaining = updatedUser?.credits;
+    }
+
     return res.json({
       message: "Form generated successfully using PromptForm AI engine.",
       understandingSummary: formConfig.understandingSummary || intent.understandingSummary,
-      form: fullForm
+      form: fullForm,
+      creditsRemaining
     });
   } catch (error: any) {
     console.error('[AI Generate Route Error]:', error);
@@ -1879,8 +1926,8 @@ Strict Rules for form_data structure if response_type is FORM_GEN:
           "date", "time", "color", "location", "location-selector", "otp", "payment"
         ];
         if (validTypes.includes(lowerType)) {
-          if (lowerType === "short_text" || lowerType === "standard-input") return "name";
-          if (lowerType === "long_text") return "feedback";
+          if (lowerType === "short_text" || lowerType === "standard-input") return "short_text";
+          if (lowerType === "long_text") return "long_text";
           if (lowerType === "file_upload" || lowerType === "file-uploader") {
             if (lowerLabel.includes("resume") || lowerLabel.includes("cv")) return "resume";
             if (lowerLabel.includes("photo") || lowerLabel.includes("avatar") || lowerLabel.includes("image") || lowerLabel.includes("pic")) return "photo";
@@ -1901,9 +1948,9 @@ Strict Rules for form_data structure if response_type is FORM_GEN:
         if (lowerType.includes("datetime") || lowerType.includes("date-time")) return "date";
         if (lowerType.includes("tag") || lowerType.includes("cloud")) return "multiple_options";
         if (lowerType.includes("pain") || lowerType.includes("body")) return "feedback";
-        if (lowerType.includes("text") || lowerType.includes("input")) return "name";
+        if (lowerType.includes("text") || lowerType.includes("input")) return "short_text";
 
-        return "name";
+        return "short_text";
       };
 
       if (formConfig.formTitle && !formConfig.title) {

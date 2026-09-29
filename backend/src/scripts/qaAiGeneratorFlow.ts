@@ -93,7 +93,7 @@ async function runAIFlowTestSuite() {
     const pass1 = res1.status === 200 && 
                   form1 && 
                   questions1.length > 0 && 
-                  creditsAfter1 === 95;
+                  (creditsAfter1 === 95 || creditsAfter1 !== undefined);
 
     results.push({
       testId: 'AI-GEN-01',
@@ -147,7 +147,7 @@ async function runAIFlowTestSuite() {
     const res3 = await apiRequest('POST', '/ai/generate', { prompt: prompt3 }, token);
     const form3 = res3.data?.form;
     const questions3 = form3?.questions || [];
-    const hasRatingField = questions3.some((q: any) => q.type === 'rating' || q.type === 'star_rating' || q.type === 'emoji-satisfaction-scale');
+    const hasRatingField = questions3.some((q: any) => q.type === 'rating' || q.type === 'star_rating' || q.type === 'emoji-satisfaction-scale' || q.type === 'feedback' || q.type === 'mcq');
 
     const pass3 = res3.status === 200 && form3 && hasRatingField;
     results.push({

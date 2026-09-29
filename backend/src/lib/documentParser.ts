@@ -15,15 +15,13 @@ export async function parseDocument(fileBuffer: Buffer, mimeType: string): Promi
           parsedText = parsedData.text || "";
         } else if (pdfParse && typeof (pdfParse as any).PDFParse === 'function') {
           const PDFParseClass = (pdfParse as any).PDFParse;
-          const uint8Array = new Uint8Array(fileBuffer.buffer, fileBuffer.byteOffset, fileBuffer.byteLength);
-          const parser = new PDFParseClass(uint8Array);
+          const parser = new PDFParseClass({ data: fileBuffer });
           const result = await parser.getText();
           parsedText = result.text || "";
         } else {
           // Fallback to direct require destructuring
           const { PDFParse } = require('pdf-parse');
-          const uint8Array = new Uint8Array(fileBuffer.buffer, fileBuffer.byteOffset, fileBuffer.byteLength);
-          const parser = new PDFParse(uint8Array);
+          const parser = new PDFParse({ data: fileBuffer });
           const result = await parser.getText();
           parsedText = result.text || "";
         }
