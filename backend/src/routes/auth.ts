@@ -413,6 +413,39 @@ router.post('/login', async (req: Request, res: Response) => {
   }
 });
 
+// Reset Password Route
+router.post('/reset-password', async (req: Request, res: Response) => {
+  try {
+    const { email, newPassword } = req.body;
+    if (!email || !newPassword) {
+      return res.status(400).json({ error: 'Email and new password are required' });
+    }
+    if (typeof newPassword !== 'string' || newPassword.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters long' });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const user = await db.user.findUnique({
+      where: { email: normalizedEmail }
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: 'User with this email was not found' });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await db.user.update({
+      where: { id: user.id },
+      data: { password: hashedPassword }
+    });
+
+    return res.json({ message: 'Password updated successfully. You can now log in.' });
+  } catch (error) {
+    logger.error('Reset password error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Profile / Current User Profile endpoint handler
 const profileHandler = async (req: AuthenticatedRequest, res: Response) => {
   try {
