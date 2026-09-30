@@ -194,13 +194,23 @@ export function DashboardLayout({ children, activeTab }: DashboardLayoutProps) {
           </button>
 
           <div className="relative" ref={notificationsRef}>
-            <button 
-              onClick={() => setNotificationsOpen(!notificationsOpen)}
-              className="w-9 h-9 sm:w-8 sm:h-8 rounded-xl border border-border/80 dark:border-zinc-800 bg-card/60 dark:bg-zinc-900/60 hover:bg-muted dark:hover:bg-zinc-800 text-muted-foreground transition-all flex items-center justify-center relative cursor-pointer shadow-2xs"
-            >
-              <Bell className="w-4 h-4 text-foreground/80" />
-              <span className="w-2 h-2 rounded-full bg-primary absolute right-1.5 top-1.5 ring-2 ring-background" />
-            </button>
+            {(() => {
+              const unreadCount = notifications.filter(n => !n.read).length;
+              return (
+                <button 
+                  onClick={() => setNotificationsOpen(!notificationsOpen)}
+                  className="w-9 h-9 sm:w-8 sm:h-8 rounded-xl border border-border/80 dark:border-zinc-800 bg-card/60 dark:bg-zinc-900/60 hover:bg-muted dark:hover:bg-zinc-800 text-muted-foreground transition-all flex items-center justify-center relative cursor-pointer shadow-2xs"
+                  aria-label="View notifications"
+                >
+                  <Bell className="w-4 h-4 text-foreground/80" />
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 bg-primary text-[10px] font-bold text-primary-foreground rounded-full flex items-center justify-center ring-2 ring-background shadow-xs">
+                      {unreadCount > 9 ? '9+' : unreadCount}
+                    </span>
+                  )}
+                </button>
+              );
+            })()}
             
             <AnimatePresence>
               {notificationsOpen && (
@@ -212,25 +222,35 @@ export function DashboardLayout({ children, activeTab }: DashboardLayoutProps) {
                 >
                   <div className="flex justify-between items-center mb-3">
                     <span className="font-bold text-sm text-foreground dark:text-foreground">Recent Alerts</span>
-                    <button 
-                      onClick={async () => {
-                        try {
-                          await api.post('/forms/notifications/live/read-all');
-                          setNotifications(prev => prev.map(n => ({...n, read: true})));
-                        } catch (err) {}
-                      }}
-                      className="text-xs text-primary font-semibold hover:underline"
-                    >
-                      Mark all read
-                    </button>
+                    {notifications.length > 0 && (
+                      <button 
+                        onClick={async () => {
+                          try {
+                            await api.post('/forms/notifications/live/read-all');
+                            setNotifications(prev => prev.map(n => ({...n, read: true})));
+                          } catch (err) {}
+                        }}
+                        className="text-xs text-primary font-semibold hover:underline cursor-pointer"
+                      >
+                        Mark all read
+                      </button>
+                    )}
                   </div>
-                  <div className="space-y-2">
-                    {notifications.map(n => (
-                      <div key={n.id} className={`p-2.5 rounded-lg text-xs transition-colors border ${n.read ? 'bg-transparent border-transparent text-muted-foreground dark:text-muted-foreground' : 'bg-muted dark:bg-muted border-border dark:border-border text-foreground dark:text-foreground'}`}>
-                        <p className="leading-normal font-medium">{n.text}</p>
-                        <span className="text-xs text-muted-foreground dark:text-muted-foreground mt-1 block">{n.time}</span>
+                  <div className="space-y-2 max-h-72 overflow-y-auto scrollbar-thin pr-0.5">
+                    {notifications.length === 0 ? (
+                      <div className="text-center py-6 text-xs text-muted-foreground">
+                        <Bell className="w-8 h-8 mx-auto mb-2 opacity-30 text-muted-foreground" />
+                        <p className="font-semibold text-foreground">No new notifications</p>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">You're all caught up! ✨</p>
                       </div>
-                    ))}
+                    ) : (
+                      notifications.map(n => (
+                        <div key={n.id} className={`p-2.5 rounded-xl text-xs transition-all border ${n.read ? 'bg-transparent border-transparent text-muted-foreground dark:text-muted-foreground' : 'bg-muted/80 dark:bg-zinc-900 border-border dark:border-border/80 text-foreground dark:text-foreground font-semibold shadow-2xs'}`}>
+                          <p className="leading-normal">{n.text}</p>
+                          <span className="text-[10px] text-muted-foreground/80 dark:text-zinc-400 mt-1 block font-medium">{n.time}</span>
+                        </div>
+                      ))
+                    )}
                   </div>
                 </motion.div>
               )}

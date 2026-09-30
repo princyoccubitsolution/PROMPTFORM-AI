@@ -124,7 +124,7 @@ export class AnalyticsService {
 
     const totalViews = views.length;
     const totalSubmissions = submissions.length;
-    const completionRate = totalViews > 0 ? parseFloat(((totalSubmissions / totalViews) * 100).toFixed(1)) : 0;
+    const completionRate = totalViews > 0 ? Math.min(100, parseFloat(((totalSubmissions / totalViews) * 100).toFixed(1))) : 0;
 
     // 2. Fetch responses for completing time calculations
     const responses = await db.response.findMany({

@@ -40,7 +40,7 @@ export const Modal = ({ isOpen, onClose, title, children, footer, size = "md" }:
       <div className={`w-full ${sizes[size]} bg-card border border-border rounded-2xl shadow-xl overflow-hidden animate-scale-in`}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <h3 className="text-base font-semibold text-card-foreground">{title}</h3>
-          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" onClick={onClose}>
+          <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 rounded-full hover:bg-muted" onClick={onClose} aria-label="Close modal">
             <X className="w-4 h-4 text-muted-foreground" />
           </Button>
         </div>

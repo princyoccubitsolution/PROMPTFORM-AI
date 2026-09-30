@@ -4,12 +4,12 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { 
   ArrowLeft, Save, Share2, Plus, Trash2, Settings, Palette, GitFork, 
-  Copy, Check, Eye, HelpCircle, ArrowRight, Zap, RefreshCw, FileText, 
+  Copy, Check, Eye, HelpCircle, ArrowRight, Zap, FileText, 
   Sparkles, LayoutGrid, CheckSquare, ListPlus, Star, Signature, FileUp, CopyCheck,
   ExternalLink, Globe, Code, Download, Shield, BarChart3, AlertTriangle, CheckCircle2,
   QrCode, Mail, ArrowUp, ArrowDown, GripVertical, Calendar, Clock, CreditCard,
   Undo2, Redo2, History, Search, ChevronRight, ChevronDown, Bell, Moon, Sun, 
-  Smartphone, Monitor, Tablet, MoreHorizontal, User, Sparkle,
+  MoreHorizontal, User, Sparkle,
   Phone, MapPin, Lock, Link, Hash, DollarSign, Image
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
@@ -24,17 +24,20 @@ import { ShareModal } from '@/components/ShareModal';
 import { UpgradeModal } from '@/components/UpgradeModal';
 
 
+import { CustomSelect } from '@/components/ui/CustomSelect';
+import { motion, AnimatePresence } from 'framer-motion';
+
 const FONT_FAMILY_MAP: Record<string, string> = {
   'Manrope': "'Manrope', sans-serif",
-  'Inter': 'var(--font-sans), Inter, sans-serif',
+  'Inter': "'Inter', sans-serif",
   'Plus Jakarta Sans': "'Plus Jakarta Sans', sans-serif",
-  'Poppins': 'var(--font-poppins), Poppins, sans-serif',
-  'Roboto': 'var(--font-roboto), Roboto, sans-serif',
-  'Outfit': 'var(--font-outfit), Outfit, sans-serif',
-  'Playfair Display': 'var(--font-playfair), "Playfair Display", serif',
-  'Space Grotesk': 'var(--font-space-grotesk), "Space Grotesk", sans-serif',
-  'Georgia': 'Georgia, serif',
-  'Courier New': '"Courier New", monospace',
+  'Poppins': "'Poppins', sans-serif",
+  'Roboto': "'Roboto', sans-serif",
+  'Outfit': "'Outfit', sans-serif",
+  'Playfair Display': "'Playfair Display', serif",
+  'Space Grotesk': "'Space Grotesk', sans-serif",
+  'Georgia': "Georgia, serif",
+  'Courier New': "'Courier New', monospace",
 };
 
 export default function BuilderPage() {
@@ -111,6 +114,35 @@ export default function BuilderPage() {
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
   const [isResponseModalOpen, setIsResponseModalOpen] = useState(false);
   const [selectedResponse, setSelectedResponse] = useState<any>(null);
+  // Live Notifications state
+  const [liveNotifications, setLiveNotifications] = useState<any[]>([]);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const notificationsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const fetchNotifications = async () => {
+      const token = localStorage.getItem('promptform_access_token');
+      if (!token) return;
+      try {
+        const data = await api.get('/forms/notifications/live');
+        setLiveNotifications(data || []);
+      } catch (err) {}
+    };
+
+    fetchNotifications();
+    const interval = setInterval(fetchNotifications, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (notificationsRef.current && !notificationsRef.current.contains(e.target as Node)) {
+        setNotificationsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   // AI Response review details states
   const [aiAnalysisLoading, setAiAnalysisLoading] = useState(false);
@@ -559,7 +591,20 @@ export default function BuilderPage() {
 
   // Custom Live theme calculations based on Right Panel settings
   const selectedFontKey = store.theme.font_family || 'Inter';
-  const resolvedFontFamily = FONT_FAMILY_MAP[selectedFontKey] || `${selectedFontKey}, sans-serif`;
+  const resolvedFontFamily = FONT_FAMILY_MAP[selectedFontKey] || `'${selectedFontKey}', sans-serif`;
+
+  useEffect(() => {
+    if (!selectedFontKey || typeof document === 'undefined') return;
+    const fontId = `dynamic-font-${selectedFontKey.replace(/\s+/g, '-').toLowerCase()}`;
+    if (!document.getElementById(fontId)) {
+      const link = document.createElement('link');
+      link.id = fontId;
+      link.rel = 'stylesheet';
+      link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(selectedFontKey)}:ital,wght@0,300..900;1,300..900&display=swap`;
+      document.head.appendChild(link);
+    }
+  }, [selectedFontKey]);
+
   const canvasThemeStyle = {
     '--accent-color': store.theme.primary_color || '#8B6B55',
     '--border-radius': store.theme.border_radius || '24px',
@@ -627,30 +672,20 @@ export default function BuilderPage() {
           
           <div className="h-6 w-[1px] bg-zinc-200 dark:bg-card" />
           
-          <div className="flex items-center space-x-2">
-            <span className="text-xs sm:text-sm font-bold tracking-wider text-primary uppercase select-none">PROMPTFORM AI</span>
-            <span className="hidden sm:inline-block text-xs px-2 py-0.5 rounded-md font-bold uppercase tracking-wider bg-zinc-200 dark:bg-card text-zinc-700 dark:text-muted-foreground border border-border dark:border-border select-none">v2.1</span>
-            
-            <div className="flex items-center space-x-1.5 ml-1 sm:ml-2">
-              <input
-                type="text"
-                value={store.title}
-                onChange={(e) => store.updateFormFields({ title: e.target.value })}
-                className="text-xs sm:text-sm font-semibold bg-transparent border-b border-transparent hover:border-border focus:border-primary focus-visible:outline-none focus:ring-0 px-1 py-0.5 text-foreground transition-all w-28 sm:w-48"
-              />
-              <span className={`text-xs font-semibold px-2 py-0.5 rounded ${
-                store.status === 'PUBLISHED' ? 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-404' : 'bg-amber-100 dark:bg-amber-950/30 text-amber-700 dark:text-amber-404'
-              }`}>
-                {store.status}
-              </span>
-            </div>
+          <div className="flex items-center">
+            <input
+              type="text"
+              value={store.title}
+              onChange={(e) => store.updateFormFields({ title: e.target.value })}
+              className="text-xs sm:text-sm font-semibold bg-transparent border-b border-transparent hover:border-border focus:border-primary focus-visible:outline-none focus:ring-0 px-1 py-0.5 text-foreground transition-all w-28 sm:w-48"
+            />
           </div>
         </div>
 
-        {/* Center Section: Undo/Redo & Viewport Simulator */}
-        <div className="hidden lg:flex items-center space-x-4">
+        {/* Right Section */}
+        <div className="flex items-center space-x-3">
           {/* Undo / Redo */}
-          <div className="flex items-center bg-accent dark:bg-background/60 rounded-lg p-1.5 border border-border dark:border-border/60">
+          <div className="flex items-center bg-accent dark:bg-background/60 rounded-lg p-1 border border-border dark:border-border/60">
             <button
               onClick={handleUndo}
               disabled={undoStack.length === 0}
@@ -669,39 +704,6 @@ export default function BuilderPage() {
             </button>
           </div>
 
-          {/* Viewport controls */}
-          <div className="flex items-center bg-accent dark:bg-background/60 rounded-lg p-1.5 border border-border dark:border-border/60">
-            <button
-              onClick={() => setViewport("desktop")}
-              className={`p-1.5 rounded-lg transition-colors border-none bg-transparent cursor-pointer ${viewport === "desktop" ? "text-primary bg-card dark:bg-card font-bold" : "text-muted-foreground"}`}
-              title="Desktop View"
-            >
-              <Monitor className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => setViewport("tablet")}
-              className={`p-1.5 rounded-lg transition-colors border-none bg-transparent cursor-pointer ${viewport === "tablet" ? "text-primary bg-card dark:bg-card font-bold" : "text-muted-foreground"}`}
-              title="Tablet View"
-            >
-              <Tablet className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => setViewport("mobile")}
-              className={`p-1.5 rounded-lg transition-colors border-none bg-transparent cursor-pointer ${viewport === "mobile" ? "text-primary bg-card dark:bg-card font-bold" : "text-muted-foreground"}`}
-              title="Mobile View"
-            >
-              <Smartphone className="w-4 h-4" />
-            </button>
-          </div>
-          
-          <div className="flex items-center space-x-1.5 text-xs text-zinc-605 dark:text-muted-foreground font-bold">
-            <RefreshCw className={`w-4 h-4 ${store.isSaving ? 'animate-spin text-primary' : ''}`} />
-            <span>{store.isSaving ? 'Autosaving...' : 'Saved to Cloud'}</span>
-          </div>
-        </div>
-
-        {/* Right Section */}
-        <div className="flex items-center space-x-3">
           <div className="flex items-center space-x-1">
             <button
               onClick={() => setDarkMode(!darkMode)}
@@ -710,10 +712,70 @@ export default function BuilderPage() {
             >
               {darkMode ? <Sun className="w-5 h-5 text-zinc-305" /> : <Moon className="w-5 h-5 text-zinc-700" />}
             </button>
-            <button className="p-2.5 rounded-lg text-muted-foreground hover:text-foreground dark:hover:text-zinc-100 transition-colors border-none bg-transparent cursor-pointer relative">
-              <Bell className="w-5 h-5" />
-              <span className="absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-primary" />
-            </button>
+
+            <div className="relative" ref={notificationsRef}>
+              {(() => {
+                const unreadCount = liveNotifications.filter(n => !n.read).length;
+                return (
+                  <button
+                    onClick={() => setNotificationsOpen(!notificationsOpen)}
+                    className="p-2.5 rounded-lg text-muted-foreground hover:text-foreground dark:hover:text-zinc-100 transition-colors border-none bg-transparent cursor-pointer relative"
+                    title="Notifications"
+                  >
+                    <Bell className="w-5 h-5 text-muted-foreground hover:text-foreground" />
+                    {unreadCount > 0 && (
+                      <span className="absolute top-1.5 right-1.5 min-w-[16px] h-[16px] px-1 bg-primary text-[9px] font-bold text-primary-foreground rounded-full flex items-center justify-center ring-2 ring-background shadow-xs">
+                        {unreadCount > 9 ? '9+' : unreadCount}
+                      </span>
+                    )}
+                  </button>
+                );
+              })()}
+
+              <AnimatePresence>
+                {notificationsOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 10 }}
+                    className="absolute right-0 mt-2 w-80 bg-card dark:bg-card rounded-2xl border border-border dark:border-border shadow-xl z-50 p-4 select-none"
+                  >
+                    <div className="flex justify-between items-center mb-3">
+                      <span className="font-bold text-xs uppercase tracking-wider text-foreground dark:text-foreground">Recent Alerts</span>
+                      {liveNotifications.length > 0 && (
+                        <button
+                          onClick={async () => {
+                            try {
+                              await api.post('/forms/notifications/live/read-all');
+                              setLiveNotifications(prev => prev.map(n => ({...n, read: true})));
+                            } catch (err) {}
+                          }}
+                          className="text-xs text-primary font-semibold hover:underline cursor-pointer"
+                        >
+                          Mark all read
+                        </button>
+                      )}
+                    </div>
+                    <div className="space-y-2 max-h-72 overflow-y-auto scrollbar-thin pr-0.5">
+                      {liveNotifications.length === 0 ? (
+                        <div className="text-center py-6 text-xs text-muted-foreground">
+                          <Bell className="w-8 h-8 mx-auto mb-2 opacity-30 text-muted-foreground" />
+                          <p className="font-semibold text-foreground">No new notifications</p>
+                          <p className="text-[11px] text-muted-foreground mt-0.5">You're all caught up! ✨</p>
+                        </div>
+                      ) : (
+                        liveNotifications.map(n => (
+                          <div key={n.id} className={`p-2.5 rounded-xl text-xs transition-all border ${n.read ? 'bg-transparent border-transparent text-muted-foreground dark:text-muted-foreground' : 'bg-muted/80 dark:bg-zinc-900 border-border dark:border-border/80 text-foreground dark:text-foreground font-semibold shadow-2xs'}`}>
+                            <p className="leading-normal">{n.text}</p>
+                            <span className="text-[10px] text-muted-foreground/80 dark:text-zinc-400 mt-1 block font-medium">{n.time}</span>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
           </div>
 
           <div className="h-6 w-[1px] bg-zinc-200 dark:bg-card" />
@@ -765,15 +827,6 @@ export default function BuilderPage() {
               <span className="hidden sm:inline">{isPublishing ? 'Updating...' : store.status === 'PUBLISHED' ? 'Close Form' : 'Publish'}</span>
               <span className="sm:hidden">{isPublishing ? '...' : store.status === 'PUBLISHED' ? 'Close' : 'Publish'}</span>
             </button>
-          </div>
-
-          <div className="h-6 w-[1px] bg-zinc-200 dark:bg-card" />
-
-          {/* User Profile */}
-          <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 p-0.5 select-none">
-              <div className="w-full h-full rounded-full bg-zinc-900 flex items-center justify-center text-xs font-semibold text-white">PF</div>
-            </div>
           </div>
         </div>
       </header>
@@ -991,7 +1044,7 @@ export default function BuilderPage() {
           {/* CENTER CANVAS: Working space (max-width 900px, responsive simulator) */}
           <main 
             ref={canvasContainerRef}
-            className={`flex-1 bg-muted dark:bg-background p-6 overflow-y-auto flex flex-col items-center canvas-grid relative ${
+            className={`flex-1 bg-muted dark:bg-background p-6 overflow-y-auto overflow-x-hidden min-w-0 flex flex-col items-center canvas-grid relative ${
               mobileTab === 'canvas' ? 'flex' : 'hidden lg:flex'
             }`}
           >
@@ -1705,48 +1758,48 @@ export default function BuilderPage() {
 
                   <div>
                     <label className="block text-xs font-medium text-muted-foreground dark:text-zinc-355 uppercase tracking-wide mb-1.5">Typography Font</label>
-                    <select
-                      value={store.theme.font_family}
-                      onChange={(e) => store.updateTheme({ font_family: e.target.value })}
-                      className="w-full px-3 py-2 border bg-muted dark:bg-background border-border dark:border-border rounded-lg text-xs outline-none focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/50 font-semibold text-foreground dark:text-zinc-200"
-                    >
-                      <option value="Manrope">Manrope (⭐ Premium + modern + AI)</option>
-                      <option value="Inter">Inter (⭐ Clean + professional + highly readable)</option>
-                      <option value="Plus Jakarta Sans">Plus Jakarta Sans (⭐ Stylish + friendly + modern)</option>
-                      <option value="Poppins">Poppins (Modern Geometric)</option>
-                      <option value="Roboto">Roboto (Clean Material)</option>
-                      <option value="Outfit">Outfit (Sleek Contemporary)</option>
-                      <option value="Georgia">Georgia (Serif Classy)</option>
-                      <option value="Playfair Display">Playfair Display (Elegant Serif)</option>
-                      <option value="Space Grotesk">Space Grotesk (Tech Minimal)</option>
-                      <option value="Courier New">Courier New (Sleek Monospace)</option>
-                    </select>
+                    <CustomSelect
+                      value={store.theme.font_family || 'Inter'}
+                      onChange={(val) => store.updateTheme({ font_family: val })}
+                      options={[
+                        { value: "Manrope", label: "Manrope (⭐ Premium + modern + AI)" },
+                        { value: "Inter", label: "Inter (⭐ Clean + professional + highly readable)" },
+                        { value: "Plus Jakarta Sans", label: "Plus Jakarta Sans (⭐ Stylish + friendly + modern)" },
+                        { value: "Poppins", label: "Poppins (Modern Geometric)" },
+                        { value: "Roboto", label: "Roboto (Clean Material)" },
+                        { value: "Outfit", label: "Outfit (Sleek Contemporary)" },
+                        { value: "Georgia", label: "Georgia (Serif Classy)" },
+                        { value: "Playfair Display", label: "Playfair Display (Elegant Serif)" },
+                        { value: "Space Grotesk", label: "Space Grotesk (Tech Minimal)" },
+                        { value: "Courier New", label: "Courier New (Sleek Monospace)" },
+                      ]}
+                    />
                   </div>
 
                   <div>
                     <label className="block text-xs font-medium text-muted-foreground dark:text-zinc-350 uppercase tracking-wide mb-1.5">Border Corner Radius</label>
-                    <select
+                    <CustomSelect
                       value={store.theme.border_radius || '24px'}
-                      onChange={(e) => store.updateTheme({ border_radius: e.target.value })}
-                      className="w-full px-3 py-2 border bg-muted dark:bg-background border-border dark:border-border rounded-lg text-xs outline-none focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/50 font-semibold text-foreground dark:text-zinc-200"
-                    >
-                      <option value="24px">Modern (24px radius)</option>
-                      <option value="8px">Sleek (8px radius)</option>
-                      <option value="0px">Sharp (0px radius)</option>
-                    </select>
+                      onChange={(val) => store.updateTheme({ border_radius: val })}
+                      options={[
+                        { value: "24px", label: "Modern (24px radius)" },
+                        { value: "8px", label: "Sleek (8px radius)" },
+                        { value: "0px", label: "Sharp (0px radius)" },
+                      ]}
+                    />
                   </div>
 
                   <div>
                     <label className="block text-xs font-medium text-muted-foreground dark:text-zinc-350 uppercase tracking-wide mb-1.5">Form Display Mode (Shared Respondent View)</label>
-                    <select
+                    <CustomSelect
                       value={store.settings.display_mode || 'full'}
-                      onChange={(e) => store.updateSettings({ display_mode: e.target.value as 'full' | 'wizard' | 'chat' })}
-                      className="w-full px-3 py-2 border bg-muted dark:bg-background border-border dark:border-border rounded-lg text-xs outline-none focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/50 font-semibold text-foreground dark:text-zinc-200"
-                    >
-                      <option value="full">📄 Full Form (Show all questions on one page)</option>
-                      <option value="wizard">🃏 Card Wizard (Show one question at a time)</option>
-                      <option value="chat">💬 Chat Mode (Conversational AI style flow)</option>
-                    </select>
+                      onChange={(val) => store.updateSettings({ display_mode: val as 'full' | 'wizard' | 'chat' })}
+                      options={[
+                        { value: "full", label: "📄 Full Form (Show all questions on one page)" },
+                        { value: "wizard", label: "🃏 Card Wizard (Show one question at a time)" },
+                        { value: "chat", label: "💬 Chat Mode (Conversational AI style flow)" },
+                      ]}
+                    />
                   </div>
 
                   <div>

@@ -213,15 +213,15 @@ export default function LandingPage() {
             {/* Ambient Glow behind input */}
             <div className="absolute -inset-1 bg-primary/20 rounded-[2rem] blur-xl opacity-30" />
             
-            <div className="relative flex flex-col sm:flex-row items-center gap-2 bg-card/90 backdrop-blur-xl border border-border p-2 rounded-2xl shadow-xl focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-primary/20 focus-within:bg-card transition-all duration-300">
+            <div className="relative flex flex-col sm:flex-row items-center gap-2 bg-card/90 dark:bg-card/90 backdrop-blur-xl border border-border p-2 rounded-2xl shadow-xl focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-primary/20 transition-all duration-300">
               <div className="flex items-center space-x-3 flex-1 w-full px-4">
-                <Sparkles className="w-5 h-5 text-primary" />
+                <Sparkles className="w-5 h-5 text-primary shrink-0" />
                 <input
                   type="text"
                   value={promptText}
                   onChange={(e) => setPromptText(e.target.value)}
                   placeholder="e.g. Create a patient registration form with satisfaction stars..."
-                  className="w-full bg-transparent border-none outline-none text-base text-foreground placeholder-muted-foreground focus:ring-0 py-3 font-normal"
+                  className="w-full bg-transparent border-none outline-none text-base text-foreground dark:text-foreground placeholder-muted-foreground focus:ring-0 focus:outline-none py-3 font-normal shadow-none ring-0"
                 />
               </div>
               <Button 

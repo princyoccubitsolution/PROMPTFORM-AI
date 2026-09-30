@@ -445,27 +445,32 @@ export default function AIPage() {
           await api.patch(`/forms/${targetId}`, { settings: { display_mode: displayMode } }).catch(() => {});
         }
         const sanitizeTitle = (rawTitle: string, userPromptText: string) => {
-          if (rawTitle && typeof rawTitle === 'string') {
-            const trimmed = rawTitle.trim();
-            if (trimmed.length > 0 && trimmed.length < 120) {
-              const lower = trimmed.toLowerCase();
-              const isBad = [
-                "create a form with id", 
-                "system prompt", 
-                "json format", 
-                "options with field remove", 
-                "analysis this pdf", 
-                "analysis this", 
-                "analysis pdf"
-              ].some(bad => lower.includes(bad));
-              if (!isBad) return trimmed;
+          let cleanTitle = (rawTitle && typeof rawTitle === 'string') ? rawTitle.trim() : "";
+          
+          if (cleanTitle) {
+            cleanTitle = cleanTitle.replace(/\b(analysis|analyze|analysing|create|make|generate|build|give\s+me|with\s+each\s+question|carrying|worth|marks?|points?|this\s+pdf|uploaded\s+pdf|pdf|document)\b/gi, '').trim();
+            cleanTitle = cleanTitle.replace(/\s+/g, ' ').trim();
+            if (cleanTitle.length > 2 && cleanTitle.length < 90) {
+              const lower = cleanTitle.toLowerCase();
+              const isBad = ["system prompt", "json format", "options with field", "create a form"].some(bad => lower.includes(bad));
+              if (!isBad) {
+                return cleanTitle.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+              }
             }
           }
+
           const lowerPrompt = (userPromptText || "").toLowerCase();
+          if (lowerPrompt.includes("data structure") || lowerPrompt.includes("data structures") || lowerPrompt.includes("dsa")) {
+            return "Data Structures Quiz";
+          }
           if (lowerPrompt.length > 3) {
-            const clean = userPromptText.replace(/\b(create|make|generate|build|a|an|the|form|quiz|test|exam|survey|for|about|with|questions|please|me)\b/gi, "").trim();
+            const clean = userPromptText
+              .replace(/\b(analysis|analyze|analysing|give\s+me|create|make|generate|build|a|an|the|form|quiz|test|exam|survey|for|about|with|each|question|questions|marks?|points?|2|10|please|me|this|pdf|document|file)\b/gi, "")
+              .replace(/\s+/g, " ")
+              .trim();
             if (clean.length > 2) {
-              return clean.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') + (lowerPrompt.includes("quiz") || lowerPrompt.includes("exam") ? " Quiz" : " Form");
+              const capitalized = clean.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+              return capitalized + (lowerPrompt.includes("quiz") || lowerPrompt.includes("exam") ? " Quiz" : " Form");
             }
           }
           return "AI Generated Form";

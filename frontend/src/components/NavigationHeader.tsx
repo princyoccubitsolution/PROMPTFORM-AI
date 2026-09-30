@@ -95,28 +95,30 @@ export const NavigationHeader = ({ title, subtitle, leftAction, rightActions, sh
         </div>
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 shrink-0">
         {rightActions}
 
+        {/* Button 1: Quick Search */}
         <button
           onClick={() => setSearchModalOpen(true)}
-          className="flex items-center space-x-2 px-3 py-1.5 rounded-lg border border-border/80 dark:border-border bg-card dark:bg-card hover:bg-muted dark:hover:bg-zinc-800 text-muted-foreground text-xs font-medium transition-all cursor-pointer shadow-xs hover:border-primary/50"
+          className="flex items-center gap-2.5 px-4 h-10 rounded-full border border-border bg-card hover:bg-secondary text-foreground text-xs sm:text-sm font-semibold transition-all duration-200 cursor-pointer shadow-2xs hover:border-primary/50 active:scale-[0.98] shrink-0"
           aria-label="Open search command palette"
         >
-          <Search className="w-3.5 h-3.5 text-primary" />
+          <Search className="w-4 h-4 text-primary shrink-0" />
           <span className="hidden sm:inline">Search...</span>
-          <kbd className="text-[10px] font-bold bg-muted/60 dark:bg-zinc-800 px-1.5 py-0.5 rounded border border-border/50 select-none">⌘K</kbd>
+          <kbd className="text-[11px] font-bold bg-muted/80 px-2 py-0.5 rounded-full border border-border/80 select-none leading-none text-muted-foreground">⌘K</kbd>
         </button>
 
+        {/* Button 2: Theme Toggle */}
         <button
           onClick={toggleTheme}
-          className="w-10 h-10 rounded-2xl border border-border/80 dark:border-zinc-800 bg-card/60 dark:bg-zinc-900/60 hover:bg-muted dark:hover:bg-zinc-800 text-muted-foreground transition-all flex items-center justify-center cursor-pointer shadow-2xs"
+          className="w-10 h-10 shrink-0 rounded-full border border-border bg-card hover:bg-secondary text-foreground transition-all duration-200 flex items-center justify-center cursor-pointer shadow-2xs hover:border-primary/50 active:scale-95"
           aria-label="Toggle theme mode"
         >
           {mounted && theme === "dark" ? (
-            <Sun className="w-4.5 h-4.5 text-amber-500" />
+            <Sun className="w-4 h-4 text-amber-500" />
           ) : (
-            <Moon className="w-4.5 h-4.5 text-foreground/80" />
+            <Moon className="w-4 h-4 text-foreground" />
           )}
         </button>
       </div>

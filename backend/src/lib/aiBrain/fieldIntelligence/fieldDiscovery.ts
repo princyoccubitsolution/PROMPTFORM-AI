@@ -139,6 +139,88 @@ export class FieldDiscovery {
           // Core domain distractor banks based on document keywords
           const isComm = documentContext.toLowerCase().includes("communicat") || documentContext.toLowerCase().includes("environment");
 
+          // Data Structures domain check for authentic topic fallbacks
+          const isDataStructures = text.includes("data structure") || text.includes("data structures") || text.includes("dsa") || (documentContext && documentContext.toLowerCase().includes("data structure"));
+
+          if (isDataStructures) {
+            const dsBank = [
+              {
+                label: "What is the worst-case time complexity of searching an element in an unsorted Array of size N?",
+                options: ["O(n)", "O(1)", "O(log n)", "O(n log n)"],
+                correctAnswer: "O(n)",
+                explanation: "In an unsorted array, every element must be checked sequentially in the worst case."
+              },
+              {
+                label: "Which data structure follows the Last-In, First-Out (LIFO) principle?",
+                options: ["Stack", "Queue", "Binary Tree", "Singly Linked List"],
+                correctAnswer: "Stack",
+                explanation: "A Stack stores elements in LIFO order where the last inserted element is removed first."
+              },
+              {
+                label: "What is the time complexity of accessing an element in an Array by its index?",
+                options: ["O(1)", "O(n)", "O(log n)", "O(n^2)"],
+                correctAnswer: "O(1)",
+                explanation: "Arrays allow random constant-time access via memory index calculation."
+              },
+              {
+                label: "Which data structure allows insertion and deletion operations at both the front and rear ends?",
+                options: ["Deque (Double-ended queue)", "Simple Queue", "Stack", "Priority Queue"],
+                correctAnswer: "Deque (Double-ended queue)",
+                explanation: "A Deque (double-ended queue) permits adding and removing elements from both ends."
+              },
+              {
+                label: "In a Singly Linked List, what information does each node contain?",
+                options: ["Data value and pointer to the next node", "Data value and pointer to the previous node", "Data value and memory size", "Array index and hash key"],
+                correctAnswer: "Data value and pointer to the next node",
+                explanation: "Each node in a singly linked list stores data and a reference pointer to the next node."
+              },
+              {
+                label: "What is the worst-case time complexity of searching an element in a balanced Binary Search Tree (BST)?",
+                options: ["O(log n)", "O(n)", "O(1)", "O(n log n)"],
+                correctAnswer: "O(log n)",
+                explanation: "Searching in a balanced BST halves the search space at each step, taking O(log n) time."
+              },
+              {
+                label: "Which graph traversal algorithm utilizes a Queue data structure for its implementation?",
+                options: ["Breadth-First Search (BFS)", "Depth-First Search (DFS)", "Dijkstra's Algorithm", "Kruskal's Algorithm"],
+                correctAnswer: "Breadth-First Search (BFS)",
+                explanation: "BFS explores graph nodes level-by-level using a Queue (FIFO)."
+              },
+              {
+                label: "Which algorithm design technique is primarily utilized in Merge Sort?",
+                options: ["Divide and Conquer", "Greedy Method", "Dynamic Programming", "Backtracking"],
+                correctAnswer: "Divide and Conquer",
+                explanation: "Merge Sort recursively divides the array into halves, sorts them, and merges the sorted halves."
+              },
+              {
+                label: "What error condition occurs when attempting to pop an element from an empty Stack?",
+                options: ["Stack Underflow", "Stack Overflow", "NullPointerException", "Segmentation Fault"],
+                correctAnswer: "Stack Underflow",
+                explanation: "Popping or accessing an empty stack triggers a Stack Underflow error."
+              },
+              {
+                label: "Which collision resolution technique in Hashing stores overflow items in an external linked list?",
+                options: ["Separate Chaining", "Linear Probing", "Quadratic Probing", "Double Hashing"],
+                correctAnswer: "Separate Chaining",
+                explanation: "Separate Chaining maintains a linked list of records for keys that hash to the same index."
+              }
+            ];
+
+            dsBank.forEach(q => {
+              if (quizFields.length < targetCount && !quizFields.some(existing => existing.label === q.label)) {
+                quizFields.push({
+                  type: "mcq",
+                  label: q.label,
+                  required: true,
+                  options: q.options,
+                  points: 2,
+                  correctAnswer: q.correctAnswer,
+                  explanation: q.explanation
+                });
+              }
+            });
+          }
+
           candidateLines.forEach(cl => {
             if (quizFields.length >= targetCount) return;
             let qLabel = "";
@@ -148,48 +230,47 @@ export class FieldDiscovery {
               const lectureTopic = cl.replace(/lecture\s*\d*[:\-–]?\s*/i, '').trim();
               qLabel = `What is the core focus of "${lectureTopic}"?`;
               options = [
-                `Understanding communicative environment dynamics and shared codes`,
-                `Database normalization and schema indexing techniques`,
-                `Network routing protocols and packet switching rates`,
-                `Financial ledger auditing and accounting reconciliations`
-              ];
-            } else if (/^where\s+/i.test(cl)) {
-              const body = cl.replace(/^where\s+/i, '').replace(/[\.\,\;]+$/, '').trim();
-              qLabel = `According to the document, where do breakdowns primarily occur?`;
-              options = [
-                `Where ${body}`,
-                `When network transmission frequency exceeds capacity limits`,
-                `During standard cryptographic encryption cycles`,
-                `When redundant backup servers are synchronized`
+                `Core principles and fundamentals of ${lectureTopic}`,
+                `Secondary experimental implementation`,
+                `Legacy hardware protocol specifications`,
+                `Unrelated system parameters`
               ];
             } else if (cl.includes(":") && cl.split(":")[0].length < 40) {
               const [heading, detail] = cl.split(":");
-              qLabel = `What key concept is described under "${heading.trim()}"?`;
-              options = [
-                detail.trim().length > 5 ? detail.trim() : `Foundational principles of ${heading.trim()}`,
-                `Hardware interrupt controller handling`,
-                `Linear regression optimization for cost reduction`,
-                `Automated unit test execution pipelines`
-              ];
-            } else if (cl.length >= 25 && cl.length <= 160) {
+              const cleanHeading = heading.replace(/^[\-\*\•\d\.\)\s]+/, '').trim();
+              const cleanDetail = detail.trim();
+              if (cleanHeading.length > 2 && !cleanHeading.toLowerCase().includes("course name") && !cleanHeading.toLowerCase().includes("department")) {
+                qLabel = `What primary concept is covered under "${cleanHeading}"?`;
+                options = [
+                  cleanDetail.length > 5 ? cleanDetail : `Key principles of ${cleanHeading}`,
+                  `Secondary alternative methodology`,
+                  `Legacy hardware constraint`,
+                  `Unrelated domain parameter`
+                ];
+              }
+            } else if (cl.length >= 25 && cl.length <= 160 && !cl.includes("?")) {
               const cleanSentence = cl.replace(/^[\-\*\•\d\.\)\s]+/, '').trim();
-              qLabel = `Which statement accurately reflects the principles outlined in the text?`;
-              options = [
-                cleanSentence,
-                `System throughput is exclusively constrained by mechanical storage latency`,
-                `Shared semantic codes are unnecessary for contextual comprehension`,
-                `Communication signals operate independently of physical channel medium`
-              ];
+              if (cleanSentence.length > 20) {
+                qLabel = `Which statement accurately reflects the principles regarding "${cleanSentence.slice(0, 50)}..."?`;
+                options = [
+                  cleanSentence,
+                  `Opposing secondary hypothesis`,
+                  `Legacy system limitation`,
+                  `Unrelated operational parameter`
+                ];
+              }
             }
 
             if (qLabel && options.length === 4) {
-              // Avoid duplicate questions
               if (!quizFields.some(existing => existing.label === qLabel)) {
                 quizFields.push({
                   type: "mcq",
                   label: qLabel,
                   required: true,
-                  options
+                  options,
+                  points: 2,
+                  correctAnswer: options[0],
+                  explanation: `Referenced directly from document concept.`
                 });
               }
             }
@@ -214,54 +295,13 @@ export class FieldDiscovery {
                     required: true,
                     options: [
                       `Foundational principles of ${topicStr}`,
-                      `Hardware interrupt latency optimization`,
-                      `Linear regression cost function minimization`,
-                      `Network routing protocol packet analysis`
+                      `Secondary experimental architecture`,
+                      `Legacy system constraint`,
+                      `Unrelated domain parameter`
                     ],
                     points: 2,
                     correctAnswer: `Foundational principles of ${topicStr}`,
                     explanation: `The document details foundational principles and core concepts under ${topicStr}.`
-                  });
-                }
-              } else if (cleanLine.includes(":") && cleanLine.split(":")[0].length < 50) {
-                const [heading, detail] = cleanLine.split(":");
-                const headingStr = heading.trim();
-                const detailStr = detail.trim();
-                if (headingStr.length > 3) {
-                  const qLabel = `What key concept is described under "${headingStr}"?`;
-                  if (!quizFields.some(q => q.label === qLabel)) {
-                    quizFields.push({
-                      type: "mcq",
-                      label: qLabel,
-                      required: true,
-                      options: [
-                        detailStr.length > 5 ? detailStr : `Key principles of ${headingStr}`,
-                        `Mechanical disk head seek time`,
-                        `Hardware bus arbitration rules`,
-                        `Asymmetric encryption key length`
-                      ],
-                      points: 2,
-                      correctAnswer: detailStr.length > 5 ? detailStr : `Key principles of ${headingStr}`,
-                      explanation: `As specified in the uploaded document, ${headingStr} covers ${detailStr}.`
-                    });
-                  }
-                }
-              } else if (cleanLine.length >= 20 && cleanLine.length <= 160 && !cleanLine.includes("?")) {
-                const qLabel = `Which statement accurately reflects the principles outlined regarding "${cleanLine.slice(0, 45)}..."?`;
-                if (!quizFields.some(q => q.label === qLabel)) {
-                  quizFields.push({
-                    type: "mcq",
-                    label: qLabel,
-                    required: true,
-                    options: [
-                      cleanLine,
-                      `System throughput is exclusively constrained by mechanical storage latency`,
-                      `Shared semantic codes are unnecessary for contextual comprehension`,
-                      `Communication signals operate independently of physical channel medium`
-                    ],
-                    points: 2,
-                    correctAnswer: cleanLine,
-                    explanation: `Directly referenced from document text: "${cleanLine}".`
                   });
                 }
               }
@@ -274,7 +314,7 @@ export class FieldDiscovery {
 
           let fillIdx = 1;
           while (quizFields.length < targetCount) {
-            const qLabel = `Key Assessment Question #${quizFields.length + 1}: Topic ${topicKey} (Item ${fillIdx})`;
+            const qLabel = `Key Concept Question #${quizFields.length + 1}: ${topicKey} (Topic ${fillIdx})`;
             if (!quizFields.some(q => q.label === qLabel)) {
               quizFields.push({
                 type: "mcq",

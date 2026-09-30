@@ -258,6 +258,30 @@ router.get('/:id', async (req: Request, res: Response) => {
       });
     }
 
+    // Guard: mask questions if form is password-protected and correct password not provided
+    const formPassword = (form.settings as any)?.password;
+    if (formPassword) {
+      const providedPassword = req.headers['x-form-password'] || req.query.password;
+      let isOwner = false;
+      try {
+        const authHeader = req.headers.authorization;
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+          const jwt = require('jsonwebtoken');
+          const decoded = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET!) as any;
+          if (decoded.id === form.ownerId) isOwner = true;
+        }
+      } catch (_) {}
+
+      if (!isOwner && providedPassword !== formPassword) {
+        return res.json({
+          ...form,
+          questions: [],
+          passwordRequired: true,
+          isLocked: true
+        });
+      }
+    }
+
     return res.json(form);
   } catch (error) {
     return res.status(500).json({ error: 'Internal server error' });
@@ -347,26 +371,37 @@ router.put('/:id/questions', authMiddleware, validateUuidMiddleware, async (req:
       return res.status(403).json({ error: 'Forbidden. You do not have permission to modify questions.' });
     }
 
-    // Transaction to safely update questions lists while preserving question IDs
+    // Differential upsert: update existing, create new, delete removed — preserves question UUIDs & foreign key references
     await db.$transaction(async (tx: any) => {
-      // Delete old questions
-      await tx.question.deleteMany({ where: { formId: id } });
-      
-      // Bulk insert new questions preserving provided valid UUIDs
-      if (questionsList.length > 0) {
-        await tx.question.createMany({
-          data: questionsList.map((q, idx) => ({
-            ...(q.id && isUUID(q.id) ? { id: q.id } : {}),
-            formId: id,
-            type: q.type,
-            label: q.label,
-            required: q.required,
-            orderIndex: idx,
-            options: q.options,
-            validations: q.validations,
-            logic: q.logic
-          }))
-        });
+      const existingQuestions = await tx.question.findMany({ where: { formId: id }, select: { id: true } });
+      const existingIds = new Set<string>(existingQuestions.map((q: any) => q.id));
+      const incomingIds = new Set<string>(questionsList.filter(q => q.id && isUUID(q.id)).map(q => q.id!));
+
+      // 1. Delete questions that are no longer in the incoming list
+      const idsToDelete = [...existingIds].filter((eid: string) => !incomingIds.has(eid));
+      if (idsToDelete.length > 0) {
+        await tx.question.deleteMany({ where: { id: { in: idsToDelete }, formId: id } });
+      }
+
+      // 2. Upsert each question: update if exists, create if new
+      for (let idx = 0; idx < questionsList.length; idx++) {
+        const q = questionsList[idx];
+        const qId = q.id && isUUID(q.id) ? q.id : undefined;
+        const data = {
+          formId: id,
+          type: q.type,
+          label: q.label,
+          required: q.required,
+          orderIndex: idx,
+          options: q.options,
+          validations: q.validations,
+          logic: q.logic
+        };
+        if (qId && existingIds.has(qId)) {
+          await tx.question.update({ where: { id: qId }, data });
+        } else {
+          await tx.question.create({ data: { ...(qId ? { id: qId } : {}), ...data } });
+        }
       }
     });
 
@@ -752,7 +787,8 @@ router.post('/:id/submit', async (req: Request, res: Response) => {
     const rawIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() || req.ip || req.socket.remoteAddress || '';
     const finalBrowserMetadata = {
       ...browserMetadata,
-      ip_address: browserMetadata?.ip_address && browserMetadata.ip_address !== '127.0.0.1' ? browserMetadata.ip_address : rawIp
+      ip_address: browserMetadata?.ip_address && browserMetadata.ip_address !== '127.0.0.1' ? browserMetadata.ip_address : rawIp,
+      ...(isForceSubmit ? { auto_submitted: true, auto_submit_reason: req.body.isTimeExpired ? 'timer_expired' : 'anti_cheat_violation' } : {})
     };
 
     // Save user response with guaranteed student identity mapping
@@ -798,37 +834,53 @@ router.post('/:id/submit', async (req: Request, res: Response) => {
       }
     });
 
-    // Execute active workflows for on_submit trigger
+    // Execute active workflows for on_submit trigger with retry logic
+    const executeWebhookWithRetry = async (url: string, payload: any, workflowId: string, maxRetries: number = 3) => {
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 10000);
+          const webhookRes = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+            signal: controller.signal
+          });
+          clearTimeout(timeoutId);
+          if (webhookRes.ok || webhookRes.status < 500) return; // Success or client error (no retry)
+          console.warn(`Workflow ${workflowId} webhook attempt ${attempt}/${maxRetries} returned HTTP ${webhookRes.status}`);
+        } catch (e: any) {
+          console.warn(`Workflow ${workflowId} webhook attempt ${attempt}/${maxRetries} failed: ${e.message}`);
+        }
+        if (attempt < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000)); // Exponential backoff
+        }
+      }
+      console.error(`Workflow ${workflowId} webhook exhausted all ${maxRetries} retries for URL: ${url}`);
+    };
+
     (async () => {
       try {
         const workflows = await db.workflow.findMany({
           where: { formId: form.id, active: true, trigger: 'on_submit' }
         });
-        for (const wf of workflows) {
+        const webhookPromises = workflows.map((wf) => {
           if (wf.action === 'send_webhook' && (wf.config as any)?.webhook_url) {
-            const webhookUrl = (wf.config as any).webhook_url;
-            fetch(webhookUrl, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                event: 'form_submission',
-                formId: form.id,
-                responseId: response.id,
-                answers,
-                submittedAt: response.completedAt
-              })
-            }).catch(e => console.error(`Workflow ${wf.id} webhook failed:`, e.message));
+            return executeWebhookWithRetry(
+              (wf.config as any).webhook_url,
+              { event: 'form_submission', formId: form.id, responseId: response.id, answers, submittedAt: response.completedAt },
+              wf.id
+            );
           } else if (wf.action === 'slack_notify' && (wf.config as any)?.webhook_url) {
-            const slackUrl = (wf.config as any).webhook_url;
-            fetch(slackUrl, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                text: `New submission received for form "${form.title}" (Response ID: ${response.id})`
-              })
-            }).catch(e => console.error(`Workflow ${wf.id} Slack notification failed:`, e.message));
+            return executeWebhookWithRetry(
+              (wf.config as any).webhook_url,
+              { text: `New submission received for form "${form.title}" (Response ID: ${response.id})` },
+              wf.id
+            );
           }
-        }
+          return Promise.resolve();
+        });
+        await Promise.allSettled(webhookPromises);
       } catch (wfErr: any) {
         console.error('Workflow dispatch error:', wfErr.message);
       }
@@ -921,10 +973,19 @@ router.get('/:id/export', authMiddleware, validateUuidMiddleware, async (req: Au
       return res.status(403).json({ error: 'Forbidden' });
     }
 
-    const responses = await db.response.findMany({
-      where: { formId: id },
-      orderBy: { completedAt: 'desc' }
-    });
+    // Stream-safe: paginated fetch to avoid memory overflow on large datasets
+    const BATCH_SIZE = 500;
+    const totalResponseCount = await db.response.count({ where: { formId: id } });
+    let responses: any[] = [];
+    for (let skip = 0; skip < totalResponseCount; skip += BATCH_SIZE) {
+      const batch = await db.response.findMany({
+        where: { formId: id },
+        orderBy: { completedAt: 'desc' },
+        skip,
+        take: BATCH_SIZE
+      });
+      responses = responses.concat(batch);
+    }
 
     // Score calculation helper
     const calculateAnswerScore = (type: string, value: any): number => {

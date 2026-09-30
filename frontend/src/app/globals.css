@@ -221,11 +221,9 @@
   input[type="time"],
   input[type="datetime-local"],
   textarea,
-  select,
-  .form-input-high-contrast {
-    color: #000000 !important;
-    background-color: #ffffff !important;
-    -webkit-text-fill-color: #000000 !important;
+  select {
+    color: #0f172a;
+    -webkit-text-fill-color: #0f172a;
   }
 
   .dark input[type="text"],
@@ -239,21 +237,33 @@
   .dark input[type="time"],
   .dark input[type="datetime-local"],
   .dark textarea,
-  .dark select,
-  .dark .form-input-high-contrast {
-    color: #000000 !important;
-    background-color: #ffffff !important;
-    -webkit-text-fill-color: #000000 !important;
+  .dark select {
+    color: #f8fafc !important;
+    -webkit-text-fill-color: #f8fafc !important;
+  }
+
+  /* Explicit transparent background support for inputs */
+  input.bg-transparent,
+  textarea.bg-transparent,
+  .dark input.bg-transparent,
+  .dark textarea.bg-transparent {
+    background-color: transparent !important;
+    background: transparent !important;
   }
 
   ::placeholder,
   input::placeholder,
-  textarea::placeholder,
+  textarea::placeholder {
+    color: #94a3b8 !important;
+    -webkit-text-fill-color: #94a3b8 !important;
+    opacity: 1 !important;
+  }
+
   .dark ::placeholder,
   .dark input::placeholder,
   .dark textarea::placeholder {
-    color: #64748B !important;
-    -webkit-text-fill-color: #64748B !important;
+    color: #64748b !important;
+    -webkit-text-fill-color: #64748b !important;
     opacity: 1 !important;
   }
 
@@ -269,7 +279,15 @@
   select:-webkit-autofill,
   select:-webkit-autofill:hover,
   select:-webkit-autofill:focus,
-  select:-webkit-autofill:active,
+  select:-webkit-autofill:active {
+    -webkit-text-fill-color: #0f172a !important;
+    -webkit-box-shadow: 0 0 0px 1000px #ffffff inset !important;
+    box-shadow: 0 0 0px 1000px #ffffff inset !important;
+    transition: background-color 50000s ease-in-out 0s !important;
+    color: #0f172a !important;
+    caret-color: #0f172a !important;
+  }
+
   .dark input:-webkit-autofill,
   .dark input:-webkit-autofill:hover,
   .dark input:-webkit-autofill:focus,
@@ -282,19 +300,23 @@
   .dark select:-webkit-autofill:hover,
   .dark select:-webkit-autofill:focus,
   .dark select:-webkit-autofill:active {
-    -webkit-text-fill-color: #000000 !important;
-    -webkit-box-shadow: 0 0 0px 1000px #ffffff inset !important;
-    box-shadow: 0 0 0px 1000px #ffffff inset !important;
+    -webkit-text-fill-color: #f8fafc !important;
+    -webkit-box-shadow: 0 0 0px 1000px #18181b inset !important;
+    box-shadow: 0 0 0px 1000px #18181b inset !important;
     transition: background-color 50000s ease-in-out 0s !important;
-    color: #000000 !important;
-    caret-color: #000000 !important;
+    color: #f8fafc !important;
+    caret-color: #f8fafc !important;
   }
 
   /* Select Option Visibility in Dark Mode */
-  select option,
-  .dark select option {
+  select option {
     background-color: #ffffff !important;
     color: #000000 !important;
+  }
+
+  .dark select option {
+    background-color: #18181b !important;
+    color: #f8fafc !important;
   }
 }
 

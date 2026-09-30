@@ -266,14 +266,15 @@ export function GlobalSearchModal({ isOpen, onClose, initialQuery = "" }: Global
             {query && (
               <button 
                 onClick={() => setQuery("")}
-                className="p-1 text-muted-foreground hover:text-foreground rounded-md mr-1"
+                className="w-7 h-7 shrink-0 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-all mr-1"
+                aria-label="Clear search"
               >
                 <X className="w-4 h-4" />
               </button>
             )}
             <button 
               onClick={onClose}
-              className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg bg-muted/60 dark:bg-zinc-800 text-xs font-semibold"
+              className="px-2.5 py-1 rounded-full bg-muted/80 dark:bg-zinc-800 hover:bg-muted text-muted-foreground hover:text-foreground text-xs font-semibold border border-border/50 transition-all cursor-pointer"
             >
               ESC
             </button>

@@ -29,6 +29,8 @@ export function spellingRecovery(text: string): string {
   let cleaned = text.toLowerCase().replace(/\s+/g, " ").trim();
 
   // Phonetic/slang corrections
+  cleaned = cleaned.replace(/\b(sturcture|structur|strcture|stucture|datastructure)\b/g, "structure");
+  cleaned = cleaned.replace(/\b(analysis|analysys|analiz)\b/g, "analyze");
   cleaned = cleaned.replace(/\b(clg|colg|colleg)\b/g, "college");
   cleaned = cleaned.replace(/\b(valu|walu|valoo)\b/g, "form");
   cleaned = cleaned.replace(/\b(from|fom|fram|porm|formm)\b/g, "form");

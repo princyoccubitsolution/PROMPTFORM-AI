@@ -1081,17 +1081,29 @@ export default function PublicFormPage() {
   const rawFontFamily = form?.theme?.font_family || 'Inter';
   const FONT_MAP: Record<string, string> = {
     'Manrope': "'Manrope', sans-serif",
-    'Inter': 'var(--font-sans), Inter, sans-serif',
+    'Inter': "'Inter', sans-serif",
     'Plus Jakarta Sans': "'Plus Jakarta Sans', sans-serif",
-    'Poppins': 'var(--font-poppins), Poppins, sans-serif',
-    'Roboto': 'var(--font-roboto), Roboto, sans-serif',
-    'Outfit': 'var(--font-outfit), Outfit, sans-serif',
-    'Playfair Display': 'var(--font-playfair), "Playfair Display", serif',
-    'Space Grotesk': 'var(--font-space-grotesk), "Space Grotesk", sans-serif',
-    'Georgia': 'Georgia, serif',
-    'Courier New': '"Courier New", monospace',
+    'Poppins': "'Poppins', sans-serif",
+    'Roboto': "'Roboto', sans-serif",
+    'Outfit': "'Outfit', sans-serif",
+    'Playfair Display': "'Playfair Display', serif",
+    'Space Grotesk': "'Space Grotesk', sans-serif",
+    'Georgia': "Georgia, serif",
+    'Courier New': "'Courier New', monospace",
   };
-  const resolvedFont = FONT_MAP[rawFontFamily] || `${rawFontFamily}, sans-serif`;
+  const resolvedFont = FONT_MAP[rawFontFamily] || `'${rawFontFamily}', sans-serif`;
+
+  useEffect(() => {
+    if (!rawFontFamily || typeof document === 'undefined') return;
+    const fontId = `dynamic-font-${rawFontFamily.replace(/\s+/g, '-').toLowerCase()}`;
+    if (!document.getElementById(fontId)) {
+      const link = document.createElement('link');
+      link.id = fontId;
+      link.rel = 'stylesheet';
+      link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(rawFontFamily)}:ital,wght@0,300..900;1,300..900&display=swap`;
+      document.head.appendChild(link);
+    }
+  }, [rawFontFamily]);
 
   /* -------------------------------------------------------------------------- */
   /* LOADING STATE                                                              */

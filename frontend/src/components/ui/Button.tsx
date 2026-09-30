@@ -1,14 +1,17 @@
+"use client";
+
 import * as React from "react";
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: "primary" | "secondary" | "outline" | "ghost" | "danger";
   size?: "sm" | "md" | "lg" | "icon";
+  shape?: "default" | "pill" | "rounded";
   isLoading?: boolean;
 }
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className = "", variant = "primary", size = "md", isLoading = false, children, disabled, ...props }, ref) => {
-    const base = "inline-flex items-center justify-center font-semibold transition-all duration-200 outline-none focus:outline-none focus-visible:outline-none focus:ring-2 focus:ring-primary/20 focus-visible:ring-2 focus-visible:ring-primary/20 disabled:opacity-50 disabled:pointer-events-none active:scale-[0.98] cursor-pointer select-none";
+  ({ className = "", variant = "primary", size = "md", shape = "default", isLoading = false, children, disabled, ...props }, ref) => {
+    const base = "inline-flex items-center justify-center font-semibold transition-all duration-200 outline-none focus:outline-none focus-visible:outline-none focus:ring-2 focus:ring-primary/20 focus-visible:ring-2 focus-visible:ring-primary/20 disabled:opacity-50 disabled:pointer-events-none active:scale-[0.97] cursor-pointer select-none shrink-0";
     
     const variants: Record<string, string> = {
       primary: "bg-primary text-primary-foreground font-bold shadow-sm hover:opacity-90 active:opacity-100",
@@ -18,11 +21,17 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       danger: "bg-destructive text-destructive-foreground font-bold shadow-sm hover:opacity-90",
     };
 
+    const getRadius = (defaultRadius: string) => {
+      if (shape === "pill") return "rounded-full";
+      if (shape === "rounded") return "rounded-xl";
+      return defaultRadius;
+    };
+
     const sizes: Record<string, string> = {
-      sm: "h-8 px-3 text-xs rounded-lg gap-1.5",
-      md: "h-10 px-4 text-sm rounded-xl gap-2",
-      lg: "h-12 px-6 text-base rounded-xl gap-2.5",
-      icon: "h-10 w-10 rounded-xl",
+      sm: `h-8 px-3 text-xs ${getRadius("rounded-lg")} gap-1.5`,
+      md: `h-10 px-4 text-sm ${getRadius("rounded-xl")} gap-2`,
+      lg: `h-12 px-6 text-base ${getRadius("rounded-xl")} gap-2.5`,
+      icon: `h-10 w-10 aspect-square p-0 ${getRadius("rounded-full")} flex items-center justify-center`,
     };
 
     return (
@@ -44,3 +53,4 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   }
 );
 Button.displayName = "Button";
+export default Button;

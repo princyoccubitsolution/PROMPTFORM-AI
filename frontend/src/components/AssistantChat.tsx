@@ -602,7 +602,7 @@ export function AssistantChat({ formId, onFormGenerated, onRestrictionTriggered 
             type="button"
             disabled={isGenerating || isListening}
             onClick={() => fileInputRef.current?.click()}
-            className="p-3 rounded-lg border border-zinc-300 dark:border-border hover:bg-muted dark:hover:bg-zinc-800 text-muted-foreground hover:text-foreground dark:hover:text-zinc-200 transition-all cursor-pointer hover:border-zinc-400"
+            className="w-10 h-10 aspect-square shrink-0 rounded-xl border border-zinc-300 dark:border-border hover:bg-muted dark:hover:bg-zinc-800 text-muted-foreground hover:text-foreground dark:hover:text-zinc-200 transition-all cursor-pointer hover:border-zinc-400 flex items-center justify-center p-0"
             title="Attach structure documents (PDF, CSV, Image)"
           >
             <Paperclip className="w-4.5 h-4.5" />
@@ -640,7 +640,7 @@ export function AssistantChat({ formId, onFormGenerated, onRestrictionTriggered 
             type="button"
             disabled={isGenerating}
             onClick={toggleVoiceInput}
-            className={`p-3 rounded-lg border transition-all cursor-pointer ${
+            className={`w-10 h-10 aspect-square shrink-0 rounded-xl border transition-all cursor-pointer flex items-center justify-center p-0 ${
               isListening 
                 ? 'bg-rose-50 border-rose-250 dark:bg-rose-950/30 dark:border-rose-900 text-rose-600 animate-pulse' 
                 : 'border-zinc-300 dark:border-border hover:bg-muted dark:hover:bg-zinc-800 text-muted-foreground hover:text-foreground hover:border-zinc-400'
@@ -655,7 +655,7 @@ export function AssistantChat({ formId, onFormGenerated, onRestrictionTriggered 
             <Button
               type="button"
               onClick={handleStop}
-              className="p-3 rounded-lg bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center transition-all cursor-pointer border-none h-11 w-11"
+              className="w-10 h-10 aspect-square shrink-0 rounded-xl bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center transition-all cursor-pointer border-none p-0"
             >
               <StopCircle className="w-4.5 h-4.5 animate-pulse" />
             </Button>
@@ -663,7 +663,7 @@ export function AssistantChat({ formId, onFormGenerated, onRestrictionTriggered 
             <Button
               type="submit"
               disabled={(!input.trim() && !attachedFile) || isListening}
-              className="p-3 rounded-lg bg-primary hover:opacity-90 text-primary-foreground flex items-center justify-center transition-all cursor-pointer border-none h-11 w-11 shadow-sm"
+              className="w-10 h-10 aspect-square shrink-0 rounded-xl bg-primary hover:opacity-90 text-primary-foreground flex items-center justify-center transition-all cursor-pointer border-none p-0 shadow-sm"
             >
               <Send className="w-4.5 h-4.5" />
             </Button>
