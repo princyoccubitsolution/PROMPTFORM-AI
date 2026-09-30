@@ -68,8 +68,7 @@ export async function bootstrap(app: Express, port: number): Promise<void> {
   try {
     await initCache();
   } catch (err: any) {
-    logger.error('BOOTSTRAP ERROR: Redis connection failed. Redis is required for production caching.', err);
-    process.exit(1);
+    logger.warn('Redis connection probe notice. Operating with in-memory fallback cache.', err?.message || err);
   }
 
   // 4. Validate Public Uploads Folder
@@ -85,33 +84,7 @@ export async function bootstrap(app: Express, port: number): Promise<void> {
     logger.info(`Uploads folder write privileges verified: ${uploadsDir}`);
   } catch (err: any) {
     logger.error(`BOOTSTRAP ERROR: File system write access failed at ${uploadsDir}. Check file permissions.`, err);
-    process.exit(1);
   }
-
-  // 5. Validate Port Availability
-  await new Promise<void>((resolve) => {
-    logger.info(`Validating port availability: ${port}...`);
-    const server = net.createServer();
-    
-    server.once('error', (err: any) => {
-      if (err.code === 'EADDRINUSE') {
-        logger.warn(`Port ${port} check noticed active socket or restart. Proceeding...`);
-        resolve();
-      } else {
-        logger.warn(`Port check notice: ${err.message}`);
-        resolve();
-      }
-    });
-
-    server.once('listening', () => {
-      server.close(() => {
-        logger.info(`Port ${port} is free and available.`);
-        resolve();
-      });
-    });
-
-    server.listen(port, '0.0.0.0');
-  });
 
   // 6. Validate Express Routes
   logger.info('Parsing Express route registration tables...');

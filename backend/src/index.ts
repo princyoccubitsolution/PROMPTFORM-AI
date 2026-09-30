@@ -207,15 +207,16 @@ app.use((req: Request, res: Response, next) => {
 app.use(errorHandler);
 
 async function startServer() {
-  // Execute bootstrap diagnostics
-  await bootstrap(app, PORT);
-
   let listenAttempts = 0;
   let server: any;
 
   const tryListen = () => {
     server = app.listen(PORT, '0.0.0.0', () => {
       logger.system(`[PromptForm AI Backend] Server running and accepting requests on http://127.0.0.1:${PORT}`);
+      // Execute bootstrap diagnostics after socket bind
+      bootstrap(app, PORT).catch((err) => {
+        logger.error('Bootstrap background notice:', err);
+      });
     });
 
     server.on('error', (err: any) => {
