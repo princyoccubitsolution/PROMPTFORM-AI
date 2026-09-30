@@ -55,12 +55,19 @@ const allowedOrigins = [
 ].filter(Boolean);
 
 const isLocalOrigin = (origin: string): boolean => {
+  if (!origin) return true;
   const cleanOrigin = sanitizeOrigin(origin);
   if (process.env.NODE_ENV === 'production') {
-    return allowedOrigins.includes(cleanOrigin) || cleanOrigin.endsWith('.vercel.app');
+    return (
+      allowedOrigins.includes(cleanOrigin) ||
+      cleanOrigin.endsWith('.vercel.app') ||
+      cleanOrigin.endsWith('.onrender.com') ||
+      cleanOrigin.endsWith('.netlify.app') ||
+      cleanOrigin.endsWith('.pages.dev') ||
+      cleanOrigin.includes('promptform')
+    );
   }
   return (
-    !cleanOrigin ||
     cleanOrigin.includes('localhost') ||
     cleanOrigin.includes('127.0.0.1') ||
     allowedOrigins.includes(cleanOrigin)

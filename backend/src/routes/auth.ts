@@ -10,8 +10,8 @@ import { registerSchema, loginSchema } from '../lib/validations';
 
 const router = Router();
 
-const jwtSecret = process.env.JWT_SECRET!;
-const jwtRefreshSecret = process.env.JWT_REFRESH_SECRET!;
+const jwtSecret = process.env.JWT_SECRET || 'promptform_jwt_secret_key_2026_default';
+const jwtRefreshSecret = process.env.JWT_REFRESH_SECRET || 'promptform_jwt_refresh_secret_key_2026_default';
 
 // Helper to determine the production or local frontend URL
 export const getFrontendUrl = (req?: Request): string => {
@@ -50,8 +50,10 @@ const generateTokens = (user: { id: string; email: string; role: string; subscri
     subscriptionPlan: user.subscriptionPlan,
     sessionToken: user.activeSessionToken || null,
   };
-  const accessToken = jwt.sign(payload, jwtSecret, { expiresIn: '1h' });
-  const refreshToken = jwt.sign({ id: user.id, sessionToken: user.activeSessionToken || null }, jwtRefreshSecret, { expiresIn: '7d' });
+  const secret = process.env.JWT_SECRET || 'promptform_jwt_secret_key_2026_default';
+  const refreshSecret = process.env.JWT_REFRESH_SECRET || 'promptform_jwt_refresh_secret_key_2026_default';
+  const accessToken = jwt.sign(payload, secret, { expiresIn: '1h' });
+  const refreshToken = jwt.sign({ id: user.id, sessionToken: user.activeSessionToken || null }, refreshSecret, { expiresIn: '7d' });
   return { accessToken, refreshToken };
 };
 

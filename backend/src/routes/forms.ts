@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { db } from '../lib/db';
+import { cache } from '../lib/cache';
 import { authMiddleware, AuthenticatedRequest } from '../middlewares/auth';
 import { subscriptionMiddleware } from '../middlewares/subscription';
 import { isUUID, generateUniqueShareId, hasFormAccess } from '../lib/utils';
@@ -8,6 +9,18 @@ import { FormsService } from '../services/formsService';
 import { AnalyticsService } from '../services/analyticsService';
 
 const router = Router();
+
+const getFormCacheKey = (id: string) => `form:${id}`;
+const getShareFormCacheKey = (shareId: string) => `form_share:${shareId}`;
+
+export const invalidateFormCache = async (formId?: string | null, shareId?: string | null) => {
+  try {
+    if (formId) await cache.del(getFormCacheKey(formId));
+    if (shareId) await cache.del(getShareFormCacheKey(shareId));
+  } catch (err) {
+    // silent fallback
+  }
+};
 
 interface LiveNotification {
   id: string;
@@ -204,11 +217,47 @@ router.post('/notifications/live/read-all', authMiddleware, async (req: Authenti
   }
 });
 
-// 2. GET FORM BY ID (Public details vs Authenticated editor details)
+// 2. GET FORM BY ID (Public details vs Authenticated editor details with Redis Caching)
 router.get('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const isFormUUID = isUUID(id);
+
+    // 1. Check Redis Cache first for sub-millisecond response to handle 100+ concurrent requests
+    const cacheKey = isFormUUID ? getFormCacheKey(id) : getShareFormCacheKey(id);
+    const cachedFormStr = await cache.get(cacheKey);
+
+    if (cachedFormStr) {
+      try {
+        const cachedForm = JSON.parse(cachedFormStr);
+        // Guard: mask questions if form is password-protected and correct password not provided
+        const formPassword = cachedForm.settings?.password;
+        if (formPassword) {
+          const providedPassword = req.headers['x-form-password'] || req.query.password;
+          let isOwner = false;
+          try {
+            const authHeader = req.headers.authorization;
+            if (authHeader && authHeader.startsWith('Bearer ')) {
+              const jwt = require('jsonwebtoken');
+              const decoded = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET!) as any;
+              if (decoded.id === cachedForm.ownerId) isOwner = true;
+            }
+          } catch (_) {}
+
+          if (!isOwner && providedPassword !== formPassword) {
+            return res.json({
+              ...cachedForm,
+              questions: [],
+              passwordRequired: true,
+              isLocked: true
+            });
+          }
+        }
+        return res.json(cachedForm);
+      } catch (_) {
+        // Cache parse error, fall through to database
+      }
+    }
 
     let form = null;
     if (isFormUUID) {
@@ -256,6 +305,13 @@ router.get('/:id', async (req: Request, res: Response) => {
           }
         }
       });
+    }
+
+    // Store in Redis Cache for 300 seconds (5 minutes)
+    const cacheTTL = 300;
+    await cache.set(getFormCacheKey(form.id), JSON.stringify(form), cacheTTL);
+    if (form.uniqueShareId) {
+      await cache.set(getShareFormCacheKey(form.uniqueShareId), JSON.stringify(form), cacheTTL);
     }
 
     // Guard: mask questions if form is password-protected and correct password not provided
@@ -344,6 +400,8 @@ const updateFormHandler = async (req: AuthenticatedRequest, res: Response) => {
       }
     });
 
+    await invalidateFormCache(updatedForm.id, updatedForm.uniqueShareId);
+
     return res.json(updatedForm);
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -410,6 +468,8 @@ router.put('/:id/questions', authMiddleware, validateUuidMiddleware, async (req:
       orderBy: { orderIndex: 'asc' }
     });
 
+    await invalidateFormCache(id, form.uniqueShareId);
+
     return res.json(updatedQuestions);
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -432,6 +492,7 @@ router.delete('/:id', authMiddleware, validateUuidMiddleware, async (req: Authen
       return res.status(403).json({ error: 'Forbidden. Admin rights required to delete team forms.' });
     }
 
+    await invalidateFormCache(id, form.uniqueShareId);
     await db.form.delete({ where: { id } });
     return res.json({ message: 'Form deleted successfully' });
   } catch (error) {
