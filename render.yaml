@@ -4,7 +4,7 @@ services:
     name: promptform-api
     runtime: node
     plan: starter
-    buildCommand: npm install --include=dev && npm run build:shared && npx prisma generate --schema=backend/prisma/schema.prisma && npx prisma db push --schema=backend/prisma/schema.prisma --accept-data-loss && npm run build:backend
+    buildCommand: npm install --include=dev && npm run build:shared && npx prisma generate --schema=backend/prisma/schema.prisma && npm run build:backend
     startCommand: npm run start:backend
     healthCheckPath: /health/liveness
     envVars:
