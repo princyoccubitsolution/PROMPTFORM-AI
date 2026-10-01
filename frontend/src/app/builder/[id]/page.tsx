@@ -22,8 +22,6 @@ import { api, getBaseUrl } from '@/lib/api';
 import { Modal } from '@/components/ui/Modal';
 import { ShareModal } from '@/components/ShareModal';
 import { UpgradeModal } from '@/components/UpgradeModal';
-
-
 import { CustomSelect } from '@/components/ui/CustomSelect';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -349,9 +347,13 @@ export default function BuilderPage() {
   const handleSaveForm = async () => {
     store.setSaving(true);
     try {
+      const expiresAtRaw = store.settings.expires_at;
+      const validExpiresAt = (expiresAtRaw && typeof expiresAtRaw === 'string' && !isNaN(new Date(expiresAtRaw).getTime()))
+        ? expiresAtRaw
+        : null;
       const normalizedSettings = {
         ...store.settings,
-        expires_at: store.settings.expires_at || null,
+        expires_at: validExpiresAt,
         expiration_message: store.settings.expiration_message || null,
         timer_limit: Number(store.settings.timer_limit) || 0
       };
@@ -368,6 +370,7 @@ export default function BuilderPage() {
       
       store.setForm({
         ...updatedForm,
+        settings: updatedForm?.settings || normalizedSettings,
         questions: updatedQuestions
       });
 
@@ -383,9 +386,13 @@ export default function BuilderPage() {
     setIsPublishing(true);
     const newStatus = store.status === 'PUBLISHED' ? 'CLOSED' : 'PUBLISHED';
     try {
+      const pubExpiresAtRaw = store.settings.expires_at;
+      const pubValidExpiresAt = (pubExpiresAtRaw && typeof pubExpiresAtRaw === 'string' && !isNaN(new Date(pubExpiresAtRaw).getTime()))
+        ? pubExpiresAtRaw
+        : null;
       const normalizedSettings = {
         ...store.settings,
-        expires_at: store.settings.expires_at || null,
+        expires_at: pubValidExpiresAt,
         expiration_message: store.settings.expiration_message || null,
         timer_limit: Number(store.settings.timer_limit) || 0
       };
@@ -400,7 +407,10 @@ export default function BuilderPage() {
       });
       await api.put(`/forms/${formId}/questions`, store.questions);
       
-      store.setForm(updatedForm);
+      store.setForm({
+        ...updatedForm,
+        settings: updatedForm?.settings || normalizedSettings
+      });
       if (newStatus === 'PUBLISHED') {
         setIsSuccessModalOpen(true);
       } else {
@@ -1541,44 +1551,45 @@ export default function BuilderPage() {
                     <div className="space-y-3.5 text-xs font-semibold">
                       <div>
                         <label className="block text-xs font-medium text-muted-foreground dark:text-muted-foreground uppercase tracking-wide mb-1.5">Input Field Type</label>
-                        <select
+                        <CustomSelect
                           value={selectedQuestion.type}
-                          onChange={(e) => {
+                          onChange={(val) => {
                             saveStateForUndo(store.questions);
-                            store.updateQuestion(selectedQuestion.id, { type: e.target.value });
+                            store.updateQuestion(selectedQuestion.id, { type: val });
                           }}
-                          className="w-full px-3 py-2 border bg-muted dark:bg-background border-border dark:border-border rounded-lg text-xs outline-none focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/50 font-semibold text-foreground dark:text-zinc-200"
-                        >
-                          <option value="short_text">Short Answer</option>
-                          <option value="long_text">Paragraph</option>
-                          <option value="mcq">MCQ Choice</option>
-                          <option value="checkbox">Checkbox list</option>
-                          <option value="dropdown">Dropdown Select</option>
-                          <option value="name">Name Field</option>
-                          <option value="email">Email Field</option>
-                          <option value="phone">Phone Field</option>
-                          <option value="address">Address Field</option>
-                          <option value="country">Country Dropdown</option>
-                          <option value="date">Date Picker</option>
-                          <option value="time">Time Picker</option>
-                          <option value="rating">Star Rating</option>
-                          <option value="feedback">Paragraph Feedback</option>
-                          <option value="gender">Gender Radios</option>
-                          <option value="multiple_options">Checkboxes (Multiple)</option>
-                          <option value="one_option">Radio Buttons (One)</option>
-                          <option value="agreement">Agreement Checkbox</option>
-                          <option value="signature">Signature Pad</option>
-                          <option value="resume">Resume Upload</option>
-                          <option value="photo">Photo Upload</option>
-                          <option value="amount">Amount Number</option>
-                          <option value="price">Price Currency</option>
-                          <option value="website">Website URL</option>
-                          <option value="password">Password Field</option>
-                          <option value="color">Color Picker</option>
-                          <option value="location">Map Picker</option>
-                          <option value="otp">OTP Field</option>
-                          <option value="payment">Payment Block</option>
-                        </select>
+                          options={[
+                            { value: "short_text", label: "Short Answer" },
+                            { value: "long_text", label: "Paragraph" },
+                            { value: "mcq", label: "MCQ Choice" },
+                            { value: "checkbox", label: "Checkbox list" },
+                            { value: "dropdown", label: "Dropdown Select" },
+                            { value: "name", label: "Name Field" },
+                            { value: "email", label: "Email Field" },
+                            { value: "phone", label: "Phone Field" },
+                            { value: "address", label: "Address Field" },
+                            { value: "country", label: "Country Dropdown" },
+                            { value: "date", label: "Date Picker" },
+                            { value: "time", label: "Time Picker" },
+                            { value: "rating", label: "Star Rating" },
+                            { value: "feedback", label: "Paragraph Feedback" },
+                            { value: "gender", label: "Gender Radios" },
+                            { value: "multiple_options", label: "Checkboxes (Multiple)" },
+                            { value: "one_option", label: "Radio Buttons (One)" },
+                            { value: "agreement", label: "Agreement Checkbox" },
+                            { value: "signature", label: "Signature Pad" },
+                            { value: "resume", label: "Resume Upload" },
+                            { value: "photo", label: "Photo Upload" },
+                            { value: "amount", label: "Amount Number" },
+                            { value: "price", label: "Price Currency" },
+                            { value: "website", label: "Website URL" },
+                            { value: "password", label: "Password Field" },
+                            { value: "color", label: "Color Picker" },
+                            { value: "location", label: "Map Picker" },
+                            { value: "otp", label: "OTP Field" },
+                            { value: "payment", label: "Payment Block" }
+                          ]}
+                          size="sm"
+                        />
                       </div>
 
                       <div>
@@ -1610,17 +1621,19 @@ export default function BuilderPage() {
                           <div className="flex items-center justify-between">
                             <label className="block text-xs font-medium text-muted-foreground dark:text-zinc-305 uppercase tracking-wide">Edit Choices list</label>
                             {['mcq', 'checkbox', 'gender', 'multiple_options', 'one_option'].includes(selectedQuestion.type) && (
-                              <select
+                              <CustomSelect
                                 value={selectedQuestion.option_layout || 'vertical'}
-                                onChange={(e) => {
+                                onChange={(val) => {
                                   saveStateForUndo(store.questions);
-                                  store.updateQuestion(selectedQuestion.id, { option_layout: e.target.value as 'vertical' | 'horizontal' });
+                                  store.updateQuestion(selectedQuestion.id, { option_layout: val as 'vertical' | 'horizontal' });
                                 }}
-                                className="text-[11px] font-bold px-2 py-1 border rounded-md bg-muted dark:bg-background dark:border-border text-foreground cursor-pointer"
-                              >
-                                <option value="vertical">Stacked (Vertical)</option>
-                                <option value="horizontal">Same Line (Inline)</option>
-                              </select>
+                                options={[
+                                  { value: "vertical", label: "Stacked (Vertical)" },
+                                  { value: "horizontal", label: "Same Line (Inline)" }
+                                ]}
+                                size="sm"
+                                buttonClassName="py-1 px-2.5 text-[11px]"
+                              />
                             )}
                           </div>
                           <div className="space-y-1.5">
@@ -1692,22 +1705,19 @@ export default function BuilderPage() {
                           <div>
                             <label className="block text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">Correct Answer</label>
                             {['mcq', 'dropdown'].includes(selectedQuestion.type) ? (
-                              <select
+                              <CustomSelect
                                 value={selectedQuestion.validations?.correct_answer ?? selectedQuestion.validations?.correctAnswer ?? ''}
-                                onChange={(e) => {
+                                onChange={(val) => {
                                   saveStateForUndo(store.questions);
                                   const currentVals = selectedQuestion.validations || {};
                                   store.updateQuestion(selectedQuestion.id, {
-                                    validations: { ...currentVals, correct_answer: e.target.value, correctAnswer: e.target.value }
+                                    validations: { ...currentVals, correct_answer: val, correctAnswer: val }
                                   });
                                 }}
-                                className="w-full px-2.5 py-1.5 border bg-muted dark:bg-background border-border dark:border-border rounded-lg text-xs outline-none focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/50 font-bold text-foreground dark:text-zinc-200"
-                              >
-                                <option value="">-- Select Correct Option --</option>
-                                {selectedQuestion.options.map((opt, oIdx) => (
-                                  <option key={oIdx} value={opt}>{opt}</option>
-                                ))}
-                              </select>
+                                placeholder="-- Select Correct Option --"
+                                options={selectedQuestion.options.map((opt) => ({ value: opt, label: opt }))}
+                                size="sm"
+                              />
                             ) : (
                               <Input
                                 type="text"
@@ -1923,10 +1933,9 @@ export default function BuilderPage() {
                 <div className="p-4 space-y-4 bg-card dark:bg-background text-xs font-semibold">
                   <div>
                     <label className="block text-xs font-medium text-muted-foreground dark:text-zinc-355 uppercase tracking-wide mb-1.5">Access Limit Level</label>
-                    <select
+                    <CustomSelect
                       value={store.isPublic ? "public" : (store.settings.invited_only ? "invited" : "team")}
-                      onChange={(e) => {
-                        const val = e.target.value;
+                      onChange={(val) => {
                         if (val === "public") {
                           store.updateFormFields({ isPublic: true });
                           store.updateSettings({ invited_only: false, team_members_only: false });
@@ -1938,12 +1947,13 @@ export default function BuilderPage() {
                           store.updateSettings({ invited_only: false, team_members_only: true });
                         }
                       }}
-                      className="w-full px-3 py-2 border bg-muted dark:bg-background border-border dark:border-border rounded-lg text-xs outline-none focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/50 font-semibold text-foreground dark:text-zinc-200"
-                    >
-                      <option value="public">Anyone with link (Public)</option>
-                      <option value="invited">Invited emails only (Private)</option>
-                      <option value="team">Team workspace members only</option>
-                    </select>
+                      options={[
+                        { value: "public", label: "Anyone with link (Public)" },
+                        { value: "invited", label: "Invited emails only (Private)" },
+                        { value: "team", label: "Team workspace members only" }
+                      ]}
+                      size="sm"
+                    />
                   </div>
 
                   {!store.isPublic && store.settings.invited_only && (

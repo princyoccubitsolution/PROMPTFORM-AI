@@ -1,32 +1,60 @@
 import * as React from "react";
+import { CustomSelect, SelectOption } from "./CustomSelect";
 
-export interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
+export interface SelectProps extends Omit<React.SelectHTMLAttributes<HTMLSelectElement>, "onChange" | "size"> {
   error?: string;
   label?: string;
+  options?: (SelectOption | string)[];
+  onChange?: (e: any) => void;
+  size?: 'sm' | 'md' | 'lg';
+  buttonClassName?: string;
+  placeholder?: string;
 }
 
 export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
-  ({ className = "", error, label, children, ...props }, ref) => {
+  ({ className = "", buttonClassName = "", error, label, children, value, onChange, disabled, placeholder, size = 'md', id, name, ...props }, ref) => {
+    // Parse <option> tags from children if options prop is not passed directly
+    const parsedOptions: SelectOption[] = React.useMemo(() => {
+      if (props.options) return props.options as any;
+      const extracted: SelectOption[] = [];
+      React.Children.forEach(children, (child) => {
+        if (React.isValidElement(child) && (child.type === "option" || (child as any).type?.name === "option")) {
+          const optProps = child.props as any;
+          extracted.push({
+            value: String(optProps.value ?? optProps.children ?? ""),
+            label: String(optProps.children ?? optProps.value ?? ""),
+            disabled: Boolean(optProps.disabled)
+          });
+        }
+      });
+      return extracted;
+    }, [children, props.options]);
+
+    const handleCustomChange = (val: string) => {
+      if (onChange) {
+        // Create synthetic event for backward compatibility with standard form handlers
+        const syntheticEvent = {
+          target: { value: val, name: name || "" },
+          currentTarget: { value: val, name: name || "" }
+        };
+        onChange(syntheticEvent as any);
+      }
+    };
+
     return (
-      <div className="w-full">
-        {label && (
-          <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
-            {label}
-          </label>
-        )}
-        <select
-          ref={ref}
-          className={`w-full h-10 px-3.5 pr-10 text-sm border rounded-xl bg-card dark:bg-zinc-900 text-slate-900 dark:text-zinc-100 border-border dark:border-zinc-800 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary cursor-pointer shadow-2xs ${
-            error ? "border-destructive focus:ring-destructive/20 focus:border-destructive" : "hover:border-primary/40"
-          } ${className}`}
-          {...props}
-        >
-          {children}
-        </select>
-        {error && (
-          <p className="mt-1.5 text-xs text-destructive">{error}</p>
-        )}
-      </div>
+      <CustomSelect
+        id={id}
+        label={label}
+        error={error}
+        options={parsedOptions}
+        value={value as string}
+        onChange={handleCustomChange}
+        disabled={disabled}
+        placeholder={placeholder || (parsedOptions[0]?.value === "" ? parsedOptions[0]?.label : undefined)}
+        className={className}
+        buttonClassName={buttonClassName}
+        size={size}
+      />
     );
   }
 );

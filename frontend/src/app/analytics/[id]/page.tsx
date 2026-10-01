@@ -7,6 +7,7 @@ import {
   Smartphone, Monitor, Tablet, RefreshCw, Globe, Calendar, ArrowRight
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
+import { CustomSelect } from '@/components/ui/CustomSelect';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
 import { api } from '@/lib/api';
 import {
@@ -63,8 +64,8 @@ export default function AnalyticsPage() {
     }
   };
 
-  const handleRangeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const days = parseInt(e.target.value);
+  const handleRangeChange = (daysVal: string | number) => {
+    const days = typeof daysVal === 'number' ? daysVal : parseInt(daysVal);
     setRangeDays(days);
     loadData(days);
   };
@@ -132,17 +133,17 @@ export default function AnalyticsPage() {
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="flex items-center space-x-2 bg-card border border-border rounded-lg px-3 py-1.5 text-sm">
-              <Calendar className="w-4 h-4 text-muted-foreground" />
-              <select 
-                value={rangeDays} 
-                onChange={handleRangeChange}
-                className="bg-transparent border-none focus:ring-0 outline-none pr-6 cursor-pointer font-medium"
-              >
-                <option value={7}>Last 7 Days</option>
-                <option value={30}>Last 30 Days</option>
-                <option value={90}>Last 90 Days</option>
-              </select>
+            <div className="w-[160px]">
+              <CustomSelect
+                value={String(rangeDays)}
+                onChange={(val) => handleRangeChange(val)}
+                options={[
+                  { value: "7", label: "Last 7 Days" },
+                  { value: "30", label: "Last 30 Days" },
+                  { value: "90", label: "Last 90 Days" }
+                ]}
+                size="sm"
+              />
             </div>
 
             <Button variant="outline" size="sm" onClick={() => loadData(rangeDays)} className="space-x-1">

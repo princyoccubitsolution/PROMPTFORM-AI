@@ -14,6 +14,7 @@ import { BrandedLogo } from "@/components/NavigationHeader";
 import { SiteHeader } from "@/components/SiteHeader";
 import { GlobalSearchModal } from "@/components/GlobalSearchModal";
 import { Footer } from "@/components/Footer";
+import { CustomSelect } from "@/components/ui/CustomSelect";
 import { motion } from "framer-motion";
 
 export default function PricingPage() {
@@ -173,20 +174,19 @@ export default function PricingPage() {
             </div>
 
             {/* Currency Selector */}
-            <div className="relative">
-              <select
+            <div className="min-w-[170px]">
+              <CustomSelect
                 value={currency}
-                onChange={(e) => setCurrency(e.target.value as any)}
-                className="px-4 py-2.5 pr-8 rounded-full text-xs font-extrabold bg-muted/80 dark:bg-card border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer appearance-none shadow-sm"
-              >
-                <option value="USD">USD ($) - US Dollar</option>
-                <option value="INR">INR (₹) - Indian Rupee</option>
-                <option value="EUR">EUR (€) - Euro</option>
-                <option value="GBP">GBP (£) - British Pound</option>
-              </select>
-              <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-muted-foreground">
-                <ChevronDown className="w-3.5 h-3.5" />
-              </div>
+                onChange={(val) => setCurrency(val as any)}
+                options={[
+                  { value: "USD", label: "USD ($) - US Dollar" },
+                  { value: "INR", label: "INR (₹) - Indian Rupee" },
+                  { value: "EUR", label: "EUR (€) - Euro" },
+                  { value: "GBP", label: "GBP (£) - British Pound" }
+                ]}
+                size="sm"
+                buttonClassName="rounded-full font-bold px-4"
+              />
             </div>
 
             {/* Plan Finder Assistant button */}

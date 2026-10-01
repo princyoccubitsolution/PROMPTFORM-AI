@@ -19,6 +19,7 @@ import { Switch } from '@/components/ui/Switch';
 import { api } from '@/lib/api';
 import { BrandedLogo } from '@/components/NavigationHeader';
 import { UpgradeModal } from '@/components/UpgradeModal';
+import { CustomSelect } from '@/components/ui/CustomSelect';
 import { AssistantChat } from '@/components/AssistantChat';
 import {
   ResponsiveContainer,
@@ -1318,22 +1319,23 @@ function DashboardContent() {
                             {/* Full Typography Dropdown Select */}
                             <div className="space-y-1.5 pt-1">
                               <label className="block text-xs font-semibold text-muted-foreground">Or Pick From All Typography Fonts</label>
-                              <select
+                              <CustomSelect
                                 value={themeFont}
-                                onChange={(e) => setThemeFont(e.target.value)}
-                                className="w-full px-4 py-2.5 border border-border bg-card rounded-xl text-xs font-semibold text-foreground focus:ring-2 focus:ring-primary/25 focus:border-primary focus:outline-none shadow-xs cursor-pointer"
-                              >
-                                <option value="Manrope">Manrope — ⭐ Premium + modern + AI</option>
-                                <option value="Inter">Inter — ⭐ Clean + professional + highly readable</option>
-                                <option value="Plus Jakarta Sans">Plus Jakarta Sans — ⭐ Stylish + friendly + modern</option>
-                                <option value="Poppins">Poppins — Modern Geometric & Smooth</option>
-                                <option value="Outfit">Outfit — Contemporary & Sleek</option>
-                                <option value="Roboto">Roboto — Clean Material Design</option>
-                                <option value="Space Grotesk">Space Grotesk — Tech & Monospace Grotesque</option>
-                                <option value="Playfair Display">Playfair Display — Elegant Serif</option>
-                                <option value="Georgia">Georgia — Classic Serif</option>
-                                <option value="Courier New">Courier New — Monospace Code</option>
-                              </select>
+                                onChange={(val) => setThemeFont(val)}
+                                options={[
+                                  { value: "Manrope", label: "Manrope — ⭐ Premium + modern + AI" },
+                                  { value: "Inter", label: "Inter — ⭐ Clean + professional + highly readable" },
+                                  { value: "Plus Jakarta Sans", label: "Plus Jakarta Sans — ⭐ Stylish + friendly + modern" },
+                                  { value: "Poppins", label: "Poppins — Modern Geometric & Smooth" },
+                                  { value: "Outfit", label: "Outfit — Contemporary & Sleek" },
+                                  { value: "Roboto", label: "Roboto — Clean Material Design" },
+                                  { value: "Space Grotesk", label: "Space Grotesk — Tech & Monospace Grotesque" },
+                                  { value: "Playfair Display", label: "Playfair Display — Elegant Serif" },
+                                  { value: "Georgia", label: "Georgia — Classic Serif" },
+                                  { value: "Courier New", label: "Courier New — Monospace Code" }
+                                ]}
+                                size="md"
+                              />
                             </div>
                           </CardContent>
                         </Card>
@@ -1377,15 +1379,16 @@ function DashboardContent() {
                             {/* Layout Border Style */}
                             <div className="space-y-1.5">
                               <label className="block text-xs font-semibold text-muted-foreground">Component Corner Style</label>
-                              <select
+                              <CustomSelect
                                 value={themeStyle}
-                                onChange={(e) => setThemeStyle(e.target.value)}
-                                className="w-full px-4 py-2.5 border border-border bg-card rounded-xl text-xs font-semibold text-foreground focus:ring-2 focus:ring-primary/25 focus:border-primary focus:outline-none shadow-xs cursor-pointer"
-                              >
-                                <option value="rounded">Rounded Corners (Modern SaaS design)</option>
-                                <option value="sharp">Sharp Edges (Formal & Minimalist)</option>
-                                <option value="glass">Glassmorphism Card Backgrounds</option>
-                              </select>
+                                onChange={(val) => setThemeStyle(val)}
+                                options={[
+                                  { value: "rounded", label: "Rounded Corners (Modern SaaS design)" },
+                                  { value: "sharp", label: "Sharp Edges (Formal & Minimalist)" },
+                                  { value: "glass", label: "Glassmorphism Card Backgrounds" }
+                                ]}
+                                size="md"
+                              />
                             </div>
 
                             <Button 
@@ -1693,15 +1696,16 @@ function DashboardContent() {
           />
           <div>
             <label className="block text-sm font-medium text-foreground dark:text-slate-305 mb-1">Collaborator Role</label>
-            <select
+            <CustomSelect
               value={inviteRole}
-              onChange={(e) => setInviteRole(e.target.value)}
-              className="w-full px-3 py-2 border border-border dark:border-border bg-card dark:bg-background rounded-lg text-sm focus-visible:ring-ring focus:outline-none"
-            >
-              <option value="editor">Editor (Can edit questions/settings)</option>
-              <option value="admin">Admin (Can invite members and delete forms)</option>
-              <option value="viewer">Viewer (Can view response tables only)</option>
-            </select>
+              onChange={(val) => setInviteRole(val)}
+              options={[
+                { value: "editor", label: "Editor (Can edit questions/settings)" },
+                { value: "admin", label: "Admin (Can invite members and delete forms)" },
+                { value: "viewer", label: "Viewer (Can view response tables only)" }
+              ]}
+              size="md"
+            />
           </div>
           <div className="flex justify-end space-x-2 pt-2">
             <Button type="button" variant="outline" onClick={() => setIsInviteOpen(false)}>Cancel</Button>

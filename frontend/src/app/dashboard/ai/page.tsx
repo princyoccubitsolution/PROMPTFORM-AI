@@ -262,15 +262,12 @@ export default function AIPage() {
           {/* Dropdown / Select */}
           {(fieldType === 'dropdown' || fieldType === 'select' || fieldType === 'country') && (
             <div className="relative w-full">
-              <select
-                defaultValue=""
-                className="h-10 md:h-11 w-full bg-card border border-border rounded-xl px-3.5 text-xs font-medium text-foreground cursor-pointer outline-none focus:ring-2 focus:ring-primary/25 shadow-xs appearance-none pr-8"
-              >
-                <option value="" disabled>Select an option for {q.label.toLowerCase()}...</option>
-                {(q.options && q.options.length > 0 ? q.options : ["Option 1", "Option 2", "Option 3"]).map((opt: string, oIdx: number) => (
-                  <option key={oIdx} value={opt}>{opt}</option>
-                ))}
-              </select>
+              <CustomSelect
+                placeholder={`Select an option for ${q.label.toLowerCase()}...`}
+                options={q.options && q.options.length > 0 ? q.options : ["Option 1", "Option 2", "Option 3"]}
+                onChange={() => {}}
+                size="md"
+              />
             </div>
           )}
 

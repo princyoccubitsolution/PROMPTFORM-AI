@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Input } from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
 import { api } from '@/lib/api';
+import { CustomSelect } from '@/components/ui/CustomSelect';
 
 export default function AdminPage() {
   const router = useRouter();
@@ -269,19 +270,18 @@ export default function AdminPage() {
                     onChange={(e) => setNewDesc(e.target.value)}
                   />
 
-                  <div>
-                    <label className="block text-sm font-medium text-foreground mb-1.5">Marketplace Category</label>
-                    <select
+                    <CustomSelect
+                      label="Marketplace Category"
                       value={newCategory}
-                      onChange={(e) => setNewCategory(e.target.value)}
-                      className="w-full h-10 px-3.5 pr-10 text-sm border border-border rounded-lg bg-card text-foreground transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 cursor-pointer"
-                    >
-                      <option value="education">Education / Testing</option>
-                      <option value="business">Business / HR</option>
-                      <option value="feedback">CSAT Feedback</option>
-                      <option value="personal">Personal / RSVP</option>
-                    </select>
-                  </div>
+                      onChange={(val) => setNewCategory(val)}
+                      options={[
+                        { value: "education", label: "Education / Testing" },
+                        { value: "business", label: "Business / HR" },
+                        { value: "feedback", label: "CSAT Feedback" },
+                        { value: "personal", label: "Personal / RSVP" }
+                      ]}
+                      size="md"
+                    />
 
                   <Button type="submit" className="w-full">
                     Deploy Template

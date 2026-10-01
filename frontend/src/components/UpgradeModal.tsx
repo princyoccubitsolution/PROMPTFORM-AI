@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Sparkles, AlertTriangle, Clock, CheckCircle2, X, ShieldAlert, CreditCard, Lock, ShieldCheck, FileText, Check, ArrowRight, Smartphone, ChevronDown } from 'lucide-react';
 import { Button } from './ui/Button';
+import { CustomSelect } from './ui/CustomSelect';
 import { api } from '@/lib/api';
 
 interface UpgradeModalProps {
@@ -709,20 +710,18 @@ export function UpgradeModal({ isOpen, onClose, onSuccess, restriction, currency
 
               <div className="flex items-center justify-between sm:justify-start gap-4 border-t sm:border-t-0 border-border/50 dark:border-border/80 pt-2 sm:pt-0">
                 <span className="text-xs font-bold text-muted-foreground dark:text-muted-foreground">Currency</span>
-                <div className="relative">
-                  <select
+                <div className="min-w-[120px]">
+                  <CustomSelect
                     value={activeCurrency}
-                    onChange={(e) => setActiveCurrency(e.target.value as any)}
-                    className="px-3 py-1 pr-6 rounded-lg text-xs font-bold bg-zinc-200/50 dark:bg-zinc-800 border border-border/50 dark:border-border text-zinc-700 dark:text-foreground focus:outline-none cursor-pointer appearance-none shadow-xs"
-                  >
-                    <option value="USD">USD ($)</option>
-                    <option value="INR">INR (₹)</option>
-                    <option value="EUR">EUR (€)</option>
-                    <option value="GBP">GBP (£)</option>
-                  </select>
-                  <div className="absolute inset-y-0 right-1.5 flex items-center pointer-events-none text-muted-foreground">
-                    <ChevronDown className="w-2.5 h-2.5" />
-                  </div>
+                    onChange={(val) => setActiveCurrency(val as any)}
+                    options={[
+                      { value: "USD", label: "USD ($)" },
+                      { value: "INR", label: "INR (₹)" },
+                      { value: "EUR", label: "EUR (€)" },
+                      { value: "GBP", label: "GBP (£)" }
+                    ]}
+                    size="sm"
+                  />
                 </div>
               </div>
             </div>

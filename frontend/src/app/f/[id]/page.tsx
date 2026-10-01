@@ -12,6 +12,7 @@ import {
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
+import { CustomSelect } from '@/components/ui/CustomSelect';
 import { api } from '@/lib/api';
 
 /* -------------------------------------------------------------------------- */
@@ -1102,6 +1103,17 @@ export default function PublicFormPage() {
     return false;
   };
 
+  const isQuizForm = Boolean(
+    (form as any)?.formType === 'QUIZ' ||
+    (form as any)?.isGraded === true ||
+    (form as any)?.settings?.formType === 'QUIZ' ||
+    (form as any)?.settings?.isGraded === true ||
+    (form as any)?.isQuiz === true ||
+    (form as any)?.settings?.isQuiz === true ||
+    String(form?.category || '').toUpperCase().includes('QUIZ') ||
+    String((form?.settings as any)?.category || '').toUpperCase().includes('QUIZ')
+  );
+
   /* -------------------------------------------------------------------------- */
   /* QUIZ SCORING CALCULATION                                                   */
   /* -------------------------------------------------------------------------- */
@@ -1109,12 +1121,21 @@ export default function PublicFormPage() {
     let totalPossiblePoints = 0;
     let earnedPoints = 0;
 
+    if (!isQuizForm) {
+      return {
+        totalPossiblePoints: 0,
+        earnedPoints: 0,
+        totalGradedQuestions: 0,
+        questionsBreakdown: []
+      };
+    }
+
     const gradedQuestions = questions.filter((q: any) => !isStudentIdentityField(q));
 
     const questionsBreakdown = gradedQuestions.map((q: any) => {
       const correctAns = q.validations?.correct_answer ?? q.validations?.correctAnswer ?? q.correctAnswer;
       const explanation = q.validations?.explanation || q.explanation;
-      const pts = Number(q.validations?.points ?? q.points ?? 2);
+      const pts = Number(q.validations?.points ?? q.points ?? 1);
       const isGraded = pts > 0 || Boolean(correctAns);
       const points = isGraded ? pts : 0;
       
@@ -1430,7 +1451,7 @@ export default function PublicFormPage() {
   /* -------------------------------------------------------------------------- */
   if (submitted) {
     const quizResults = calculateQuizResults();
-    const hasQuiz = quizResults.totalPossiblePoints > 0;
+    const hasQuiz = isQuizForm && quizResults.totalPossiblePoints > 0;
     const scorePct = hasQuiz ? Math.round((quizResults.earnedPoints / quizResults.totalPossiblePoints) * 100) : 0;
 
     return (
@@ -1744,25 +1765,17 @@ export default function PublicFormPage() {
 
       return (
         <div className="relative w-full">
-          <select
+          <CustomSelect
+            placeholder="Choose an option..."
             value={answers[q.id] || ""}
-            onChange={(e) => {
-              setAnswers({ ...answers, [q.id]: e.target.value });
+            onChange={(val) => {
+              setAnswers({ ...answers, [q.id]: val });
               if (validationErrors[q.id]) setValidationErrors(prev => ({ ...prev, [q.id]: "" }));
             }}
-            required={q.required}
-            className="w-full h-12 px-4 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 hover:border-slate-300 dark:hover:border-zinc-600 rounded-xl text-sm font-medium text-slate-900 dark:text-zinc-100 transition-all focus:outline-none focus:border-indigo-600 focus:ring-4 focus:ring-indigo-50 dark:focus:ring-indigo-950/40 cursor-pointer appearance-none"
-          >
-            <option value="" disabled>Choose an option...</option>
-            {options.map((opt: string, oIdx: number) => (
-              <option key={oIdx} value={opt}>{opt}</option>
-            ))}
-          </select>
-          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-400">
-            <svg className="w-4 h-4 fill-current" viewBox="0 0 20 20">
-              <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" fillRule="evenodd" />
-            </svg>
-          </div>
+            options={options}
+            size="lg"
+            error={validationErrors[q.id]}
+          />
         </div>
       );
     }

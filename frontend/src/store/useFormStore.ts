@@ -112,43 +112,58 @@ export const useFormStore = create<FormState>((set) => ({
   questions: [],
   isSaving: false,
 
-  setForm: (form) => set({
-    id: form.id,
-    title: form.title,
-    description: form.description || '',
-    status: form.status,
-    uniqueShareId: form.uniqueShareId || null,
-    publicUrl: form.publicUrl || null,
-    isPublic: form.isPublic !== undefined ? form.isPublic : true,
-    responseLimit: form.responseLimit || null,
-    settings: {
-      collect_emails: false,
-      limit_responses: false,
-      password: null,
-      allow_editing: false,
-      shuffle_questions: false,
-      shuffle_options: false,
-      expires_at: null,
-      expiration_message: null,
-      anti_cheat_detection: false,
-      team_members_only: false,
-      invited_only: false,
-      invited_emails: [],
-      display_mode: 'full',
-      ...form.settings,
-      timer_limit: Number(form.settings?.timer_limit) || 0
-    },
-    theme: {
-      primary_color: '#8B6B55',
-      background_color: '#FAF6EF',
-      font_family: 'Inter',
-      border_radius: '24px',
-      logo_url: null,
-      banner_url: null,
-      ...form.theme
-    },
-    questions: form.questions || []
-  }),
+  setForm: (form) => {
+    const rawSettings = typeof form.settings === 'string' 
+      ? (() => { try { return JSON.parse(form.settings); } catch (_) { return {}; } })() 
+      : (form.settings || {});
+    const rawTheme = typeof form.theme === 'string' 
+      ? (() => { try { return JSON.parse(form.theme); } catch (_) { return {}; } })() 
+      : (form.theme || {});
+
+    set({
+      id: form.id,
+      title: form.title,
+      description: form.description || '',
+      status: form.status,
+      uniqueShareId: form.uniqueShareId || null,
+      publicUrl: form.publicUrl || null,
+      isPublic: form.isPublic !== undefined ? form.isPublic : true,
+      responseLimit: form.responseLimit || null,
+      settings: {
+        collect_emails: false,
+        limit_responses: false,
+        password: null,
+        allow_editing: false,
+        shuffle_questions: false,
+        shuffle_options: false,
+        expiration_message: null,
+        anti_cheat_detection: false,
+        team_members_only: false,
+        invited_only: false,
+        invited_emails: [],
+        display_mode: 'full',
+        ...rawSettings,
+        timer_limit: Number(rawSettings?.timer_limit) || 0,
+        // Validate expires_at: only accept valid ISO date strings, otherwise null
+        expires_at: (() => {
+          const val = rawSettings?.expires_at;
+          if (!val || typeof val !== 'string') return null;
+          const d = new Date(val);
+          return isNaN(d.getTime()) ? null : val;
+        })()
+      },
+      theme: {
+        primary_color: '#8B6B55',
+        background_color: '#FAF6EF',
+        font_family: 'Inter',
+        border_radius: '24px',
+        logo_url: null,
+        banner_url: null,
+        ...rawTheme
+      },
+      questions: form.questions || []
+    });
+  },
 
   updateFormFields: (fields) => set((state) => ({ ...state, ...fields })),
 

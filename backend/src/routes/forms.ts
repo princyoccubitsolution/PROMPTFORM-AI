@@ -58,7 +58,7 @@ const formSettingsSchema = z.object({
   invited_emails: z.array(z.string()).default([]),
   display_mode: z.enum(["full", "wizard", "chat"]).default("full"),
   displayMode: z.enum(["full", "wizard", "chat"]).optional()
-});
+}).passthrough(); // preserve unknown fields so future settings aren't silently stripped
 
 const formThemeSchema = z.object({
   primary_color: z.string().default("#8B6B55"),
@@ -66,10 +66,11 @@ const formThemeSchema = z.object({
   font_family: z.string().default("Inter"),
   logo_url: z.string().nullable().default(null),
   banner_url: z.string().nullable().optional(),
+  border_radius: z.string().optional(),
   theme_name: z.string().optional(),
   layoutType: z.string().optional(),
   rtl: z.boolean().optional()
-});
+}).passthrough(); // preserve unknown fields so future theme props aren't silently stripped
 
 const createFormSchema = z.object({
   title: z.string().min(1),
@@ -460,14 +461,35 @@ const updateFormHandler = async (req: AuthenticatedRequest, res: Response) => {
       publicUrl = `${frontendBaseUrl}/f/${code}`;
     }
 
+    const existingSettings = typeof form.settings === 'string' 
+      ? (() => { try { return JSON.parse(form.settings); } catch (_) { return {}; } })() 
+      : (form.settings && typeof form.settings === 'object' ? form.settings : {});
+
+    const existingTheme = typeof form.theme === 'string' 
+      ? (() => { try { return JSON.parse(form.theme); } catch (_) { return {}; } })() 
+      : (form.theme && typeof form.theme === 'object' ? form.theme : {});
+
+    // Build merged settings — explicitly preserve expires_at even when sent as null (toggle off)
+    let mergedSettings: Record<string, any> | undefined = undefined;
+    if (body.settings) {
+      mergedSettings = { ...existingSettings, ...body.settings };
+      // Explicitly handle expires_at: if the frontend sends it (including null), honour it;
+      // if the frontend didn't send it at all, keep the existing DB value.
+      if (body.settings.expires_at !== undefined) {
+        mergedSettings.expires_at = body.settings.expires_at;
+      } else if (existingSettings.expires_at !== undefined) {
+        mergedSettings.expires_at = existingSettings.expires_at;
+      }
+    }
+
     const updatedForm = await db.form.update({
       where: { id },
       data: {
         title: body.title,
         description: body.description,
         status: body.status,
-        settings: body.settings ? { ...(typeof form.settings === 'object' && form.settings ? (form.settings as any) : {}), ...body.settings } : undefined,
-        theme: body.theme ? { ...(typeof form.theme === 'object' && form.theme ? (form.theme as any) : {}), ...body.theme } : undefined,
+        settings: mergedSettings,
+        theme: body.theme ? { ...existingTheme, ...body.theme } : undefined,
         teamId: body.teamId,
         isPublic: body.isPublic !== undefined ? body.isPublic : undefined,
         responseLimit: body.responseLimit !== undefined ? body.responseLimit : undefined,
@@ -476,7 +498,9 @@ const updateFormHandler = async (req: AuthenticatedRequest, res: Response) => {
       }
     });
 
+    // Force-invalidate Redis cache so the live site never serves stale form data
     await invalidateFormCache(updatedForm.id, updatedForm.uniqueShareId);
+    console.log(`[forms] Cache invalidated for form ${updatedForm.id} (share: ${updatedForm.uniqueShareId})`);
 
     return res.json(updatedForm);
   } catch (error) {
@@ -1200,11 +1224,9 @@ router.get('/:id/export', authMiddleware, validateUuidMiddleware, async (req: Au
       return ans;
     };
 
-    const isQuiz = form.category === 'quiz' || 
-                   form.title.toLowerCase().includes('quiz') || 
-                   form.title.toLowerCase().includes('test') || 
-                   form.title.toLowerCase().includes('exam') || 
-                   form.questions.some((q: any) => getCorrectAnswer(q.validations) !== undefined);
+    const rawCategory = (form.category || (form.settings as any)?.category || '').toString().trim().toUpperCase();
+    const isQuizCategory = ['QUIZ', 'ASSESSMENT'].includes(rawCategory);
+    const isQuiz = isQuizCategory;
 
     const getEnrollmentNumber = (r: any) => extractEnrollmentNumber((r.answers as Record<string, any>) || {}, form.questions);
     const getStudentName = (r: any) => extractStudentName((r.answers as Record<string, any>) || {}, form.questions, r.submittedBy);
@@ -1216,19 +1238,39 @@ router.get('/:id/export', authMiddleware, validateUuidMiddleware, async (req: Au
       let earnedPoints = 0;
       let maxPoints = 0;
 
+      // Skip scoring calculation entirely if form category is not set to QUIZ or ASSESSMENT
+      if (!isQuizCategory) {
+        return {
+          correctCount: 0,
+          totalGraded: 0,
+          earnedPoints: 0,
+          maxPoints: 0,
+          percentageClamped: 0
+        };
+      }
+
       form.questions.forEach((q: any) => {
         const validations = q.validations || {};
+        
+        // Skip if isGraded is explicitly set to false
+        if (q.isGraded === false || validations.isGraded === false) {
+          return;
+        }
+
         const correctAns = getCorrectAnswer(validations);
-        if (correctAns !== undefined) {
-          totalGraded++;
-          const pts = Number(validations.points || 5);
-          maxPoints += pts;
-          const userAns = answersMap[q.id];
-          const isCorrect = userAns !== undefined && userAns !== null && String(userAns).trim().toLowerCase() === String(correctAns).trim().toLowerCase();
-          if (isCorrect) {
-            correctCount++;
-            earnedPoints += pts;
-          }
+        // Skip if a question does not have a correctAnswer defined
+        if (correctAns === undefined) {
+          return;
+        }
+
+        totalGraded++;
+        const pts = Number(validations.points ?? q.points ?? 1);
+        maxPoints += pts;
+        const userAns = answersMap[q.id];
+        const isCorrect = userAns !== undefined && userAns !== null && String(userAns).trim().toLowerCase() === String(correctAns).trim().toLowerCase();
+        if (isCorrect) {
+          correctCount++;
+          earnedPoints += pts;
         }
       });
 

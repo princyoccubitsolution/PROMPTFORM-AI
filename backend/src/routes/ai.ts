@@ -945,81 +945,82 @@ router.post(['/generate', '/generate-from-file'], optionalAuthMiddleware, upload
     formConfig.theme = sanitizedTheme;
 
     let form: any;
-    if (formId) {
-      form = await db.form.update({
-        where: { id: formId },
-        data: {
-          title: formConfig.title,
-          description: formConfig.description,
-          settings: formConfig.settings,
-          theme: formConfig.theme
-        }
-      });
-      await db.question.deleteMany({ where: { formId } });
-      await db.question.createMany({
-        data: formConfig.questions.map((q: any, idx: number) => ({
-          formId: formId,
-          type: q.type,
-          label: q.label,
-          required: q.required || false,
-          orderIndex: idx,
-          options: q.options || [],
-          validations: {
-            ...(q.validations || {}),
-            points: q.points !== undefined ? Number(q.points) : (q.validations?.points !== undefined ? Number(q.validations.points) : (intent.pointsPerQuestion || 2)),
-            correctAnswer: q.correctAnswer || q.validations?.correctAnswer || q.validations?.correct_answer || q.correct_answer,
-            correct_answer: q.correctAnswer || q.validations?.correctAnswer || q.validations?.correct_answer || q.correct_answer,
-            explanation: q.explanation,
-            difficulty: q.difficulty,
-            negativePoints: q.negativePoints,
-            bloomsTaxonomy: q.bloomsTaxonomy,
-            accessibilityLabel: q.accessibilityLabel
-          },
-          logic: q.logic || {}
-        }))
-      });
-    } else {
-      const shareCode = await generateUniqueShareId();
-      const frontendBaseUrl = process.env.FRONTEND_URL || 'http://127.0.0.1:4500';
-      const publicUrl = `${frontendBaseUrl}/f/${shareCode}`;
+      const isQuizCategoryForm = ['QUIZ', 'ASSESSMENT'].includes(String(formConfig.category || formConfig.understandingSummary?.formType || intent.formType || '').trim().toUpperCase()) || Boolean(intent.relevanceRules.requireQuizValidation);
 
-      if (req.user) {
-        form = await db.form.create({
+      const mapQuestionValidations = (q: any) => {
+        const rawAns = q.correctAnswer || q.validations?.correctAnswer || q.validations?.correct_answer || q.correct_answer;
+        const hasAns = rawAns !== undefined && rawAns !== null && String(rawAns).trim() !== '';
+        const isGraded = isQuizCategoryForm && q.isGraded !== false && q.validations?.isGraded !== false && hasAns;
+
+        return {
+          ...(q.validations || {}),
+          isGraded,
+          points: isGraded ? (q.points !== undefined ? Number(q.points) : (q.validations?.points !== undefined ? Number(q.validations.points) : (intent.pointsPerQuestion || 1))) : 0,
+          correctAnswer: isGraded ? rawAns : undefined,
+          correct_answer: isGraded ? rawAns : undefined,
+          explanation: isGraded ? (q.explanation || q.validations?.explanation) : undefined,
+          difficulty: q.difficulty || q.validations?.difficulty,
+          negativePoints: isGraded ? (q.negativePoints || q.validations?.negativePoints || 0) : 0,
+          bloomsTaxonomy: q.bloomsTaxonomy || q.validations?.bloomsTaxonomy,
+          accessibilityLabel: q.accessibilityLabel || q.validations?.accessibilityLabel
+        };
+      };
+
+      if (formId) {
+        form = await db.form.update({
+          where: { id: formId },
           data: {
             title: formConfig.title,
             description: formConfig.description,
-            status: "PUBLISHED",
-            uniqueShareId: shareCode,
-            publicUrl: publicUrl,
-            isPublic: true,
-            ownerId: req.user.id,
             settings: formConfig.settings,
             theme: formConfig.theme
           }
         });
-
+        await db.question.deleteMany({ where: { formId } });
         await db.question.createMany({
           data: formConfig.questions.map((q: any, idx: number) => ({
-            formId: form.id,
+            formId: formId,
             type: q.type,
             label: q.label,
             required: q.required || false,
             orderIndex: idx,
             options: q.options || [],
-            validations: {
-              ...(q.validations || {}),
-              points: q.points !== undefined ? Number(q.points) : (q.validations?.points !== undefined ? Number(q.validations.points) : (intent.pointsPerQuestion || 2)),
-              correctAnswer: q.correctAnswer || q.validations?.correctAnswer || q.validations?.correct_answer || q.correct_answer,
-              correct_answer: q.correctAnswer || q.validations?.correctAnswer || q.validations?.correct_answer || q.correct_answer,
-              explanation: q.explanation,
-              difficulty: q.difficulty,
-              negativePoints: q.negativePoints,
-              bloomsTaxonomy: q.bloomsTaxonomy,
-              accessibilityLabel: q.accessibilityLabel
-            },
+            validations: mapQuestionValidations(q),
             logic: q.logic || {}
           }))
         });
+      } else {
+        const shareCode = await generateUniqueShareId();
+        const frontendBaseUrl = process.env.FRONTEND_URL || 'http://127.0.0.1:4500';
+        const publicUrl = `${frontendBaseUrl}/f/${shareCode}`;
+
+        if (req.user) {
+          form = await db.form.create({
+            data: {
+              title: formConfig.title,
+              description: formConfig.description,
+              status: "PUBLISHED",
+              uniqueShareId: shareCode,
+              publicUrl: publicUrl,
+              isPublic: true,
+              ownerId: req.user.id,
+              settings: formConfig.settings,
+              theme: formConfig.theme
+            }
+          });
+
+          await db.question.createMany({
+            data: formConfig.questions.map((q: any, idx: number) => ({
+              formId: form.id,
+              type: q.type,
+              label: q.label,
+              required: q.required || false,
+              orderIndex: idx,
+              options: q.options || [],
+              validations: mapQuestionValidations(q),
+              logic: q.logic || {}
+            }))
+          });
 
         await db.analytics.create({
           data: {

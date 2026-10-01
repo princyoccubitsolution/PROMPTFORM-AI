@@ -7,6 +7,7 @@ import { ArrowLeft, Monitor, Smartphone, LayoutGrid, CheckCircle2, ShieldAlert }
 import { Button } from '@/components/ui/Button';
 import { api } from '@/lib/api';
 import { Card } from '@/components/ui/Card';
+import { CustomSelect } from '@/components/ui/CustomSelect';
 
 const templatesList = [
   {
@@ -261,17 +262,13 @@ function PreviewContent() {
                             )}
 
                             {q.type === 'select' && (
-                              <select
-                                required={q.required}
+                              <CustomSelect
+                                placeholder="Select option..."
                                 value={formData[q.label] || ""}
-                                onChange={(e) => setFormData({...formData, [q.label]: e.target.value})}
-                                className="w-full text-xs rounded-xl border border-border px-3.5 py-2.5 bg-background focus:outline-none focus:ring-2 focus:ring-primary"
-                              >
-                                <option value="">Select option...</option>
-                                {q.options.map((opt, i) => (
-                                  <option key={i} value={opt}>{opt}</option>
-                                ))}
-                              </select>
+                                onChange={(val) => setFormData({...formData, [q.label]: val})}
+                                options={q.options}
+                                size="md"
+                              />
                             )}
 
                             {q.type === 'radio' && (
