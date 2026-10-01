@@ -127,14 +127,16 @@ export const useFormStore = create<FormState>((set) => ({
       password: null,
       allow_editing: false,
       shuffle_questions: false,
-      timer_limit: 0,
+      shuffle_options: false,
       expires_at: null,
       expiration_message: null,
       anti_cheat_detection: false,
       team_members_only: false,
       invited_only: false,
       invited_emails: [],
-      ...form.settings
+      display_mode: 'full',
+      ...form.settings,
+      timer_limit: Number(form.settings?.timer_limit) || 0
     },
     theme: {
       primary_color: '#8B6B55',

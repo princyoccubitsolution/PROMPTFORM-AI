@@ -349,13 +349,17 @@ export default function BuilderPage() {
   const handleSaveForm = async () => {
     store.setSaving(true);
     try {
+      const normalizedSettings = {
+        ...store.settings,
+        timer_limit: Number(store.settings.timer_limit) || 0
+      };
       const updatedForm = await api.put(`/forms/${formId}`, {
         title: store.title,
         description: store.description,
         status: store.status || 'PUBLISHED',
         isPublic: store.isPublic,
         responseLimit: store.responseLimit,
-        settings: store.settings,
+        settings: normalizedSettings,
         theme: store.theme
       });
       const updatedQuestions = await api.put(`/forms/${formId}/questions`, store.questions);
@@ -377,13 +381,17 @@ export default function BuilderPage() {
     setIsPublishing(true);
     const newStatus = store.status === 'PUBLISHED' ? 'CLOSED' : 'PUBLISHED';
     try {
+      const normalizedSettings = {
+        ...store.settings,
+        timer_limit: Number(store.settings.timer_limit) || 0
+      };
       const updatedForm = await api.put(`/forms/${formId}`, { 
         status: newStatus,
         title: store.title,
         description: store.description,
         isPublic: store.isPublic,
         responseLimit: store.responseLimit,
-        settings: store.settings,
+        settings: normalizedSettings,
         theme: store.theme
       });
       await api.put(`/forms/${formId}/questions`, store.questions);
@@ -2007,7 +2015,7 @@ export default function BuilderPage() {
                 <div className="flex items-center space-x-2">
                   <Clock className="w-4 h-4 text-primary" />
                   <span>Time Limits & Form Expiration</span>
-                  {(store.settings.expires_at || (store.settings.timer_limit && store.settings.timer_limit > 0)) && (
+                  {Boolean(store.settings.expires_at || (Number(store.settings.timer_limit) || 0) > 0) && (
                     <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
                   )}
                 </div>
@@ -2172,7 +2180,7 @@ export default function BuilderPage() {
                               type="button"
                               onClick={() => store.updateSettings({ timer_limit: mins })}
                               className={`px-2.5 py-1 text-[11px] font-semibold rounded-md border transition-colors cursor-pointer ${
-                                store.settings.timer_limit === mins
+                                Number(store.settings.timer_limit) === mins
                                   ? 'bg-primary text-primary-foreground border-primary'
                                   : 'bg-accent hover:bg-zinc-200 dark:bg-muted dark:hover:bg-zinc-800 text-foreground dark:text-zinc-200 border-border'
                               }`}
