@@ -392,6 +392,145 @@ async function runTests() {
     results.push({ name: 'Unit Check: Multilingual Sifter Engine', passed: false, error: err.message });
   }
 
+  // ==========================================
+  // TIME FUNCTIONALITY & EXPIRATION TESTS
+  // ==========================================
+  try {
+    const testOwner = await db.user.findFirst({ where: { email: testEmail } });
+    if (testOwner) {
+      // Create an expired form
+      const expiredForm = await db.form.create({
+        data: {
+          title: "Integration Test Expired Form",
+          description: "Testing automatic expiration blocking",
+          status: "PUBLISHED",
+          ownerId: testOwner.id,
+          uniqueShareId: `exp_test_${Date.now()}`,
+          settings: {
+            collect_emails: false,
+            limit_responses: false,
+            timer_limit: 0,
+            expires_at: new Date(Date.now() - 3600000).toISOString(), // Expired 1 hour ago
+            expiration_message: "Custom deadline closed message."
+          },
+          theme: { primary_color: "#6366f1", background_color: "#ffffff", font_family: "Inter" }
+        }
+      });
+
+      // Add a sample question
+      const testQuestion = await db.question.create({
+        data: {
+          formId: expiredForm.id,
+          type: "short_text",
+          label: "Test Question 1",
+          required: false,
+          orderIndex: 0,
+          options: [],
+          validations: {},
+          logic: {}
+        }
+      });
+
+      // Test GET /forms/:id on expired form (Unauthenticated public responder)
+      const getExpiredRes = await request('GET', `/api/forms/${expiredForm.id}`);
+      const getExpiredJson = JSON.parse(getExpiredRes.body || '{}');
+      const getExpiredPassed = getExpiredRes.status === 200 && 
+                               getExpiredJson.isExpired === true && 
+                               Array.isArray(getExpiredJson.questions) && 
+                               getExpiredJson.questions.length === 0;
+      results.push({
+        name: 'Integration Check: Form Expiration Blocking (GET /:id)',
+        passed: getExpiredPassed,
+        status: getExpiredRes.status,
+        error: getExpiredPassed ? undefined : `Expected isExpired=true and 0 questions, got ${getExpiredRes.body}`
+      });
+
+      // Test POST /forms/:id/submit on expired form -> Must be rejected with HTTP 400
+      const submitExpiredRes = await request('POST', `/api/forms/${expiredForm.id}/submit`, {
+        answers: { [testQuestion.id]: "Answer after deadline" },
+        browserMetadata: { user_agent: "test-runner", tab_switches: 0, is_flagged: false },
+        timeTaken: 10
+      });
+      const submitExpiredJson = JSON.parse(submitExpiredRes.body || '{}');
+      const submitExpiredPassed = submitExpiredRes.status === 400 && submitExpiredJson.isExpired === true;
+      results.push({
+        name: 'Integration Check: Expired Form Submission Rejection (POST /:id/submit)',
+        passed: submitExpiredPassed,
+        status: submitExpiredRes.status,
+        error: submitExpiredPassed ? undefined : `Expected HTTP 400 with isExpired=true, got status ${submitExpiredRes.status}: ${submitExpiredRes.body}`
+      });
+
+      // Create a timed form (timer_limit = 5 minutes = 300 seconds)
+      const timedForm = await db.form.create({
+        data: {
+          title: "Customer Satisfaction Survey",
+          description: "Testing session timer limits",
+          status: "PUBLISHED",
+          ownerId: testOwner.id,
+          uniqueShareId: `timed_survey_${Date.now()}`,
+          settings: {
+            collect_emails: false,
+            limit_responses: false,
+            timer_limit: 5, // 5 minutes max
+            expires_at: null
+          },
+          theme: { primary_color: "#6366f1", background_color: "#ffffff", font_family: "Inter" }
+        }
+      });
+      const timedQ = await db.question.create({
+        data: {
+          formId: timedForm.id,
+          type: "short_text",
+          label: "Feedback Message",
+          required: false,
+          orderIndex: 0,
+          options: [],
+          validations: {},
+          logic: {}
+        }
+      });
+
+      // Test submission with timeTaken exceeding limit (e.g. 500 seconds > 300 + 120s buffer = 420s)
+      const submitOvertimeRes = await request('POST', `/api/forms/${timedForm.id}/submit`, {
+        answers: { [timedQ.id]: "Overtime answer" },
+        email: "customer@example.com",
+        browserMetadata: { user_agent: "test-runner", tab_switches: 0, is_flagged: false },
+        timeTaken: 500, // 500s > 420s
+        isForceSubmit: false
+      });
+      const submitOvertimeJson = JSON.parse(submitOvertimeRes.body || '{}');
+      const overtimePassed = submitOvertimeRes.status === 400 && submitOvertimeJson.isTimeExpired === true;
+      results.push({
+        name: 'Integration Check: Session Time Limit Overdue Rejection (POST /:id/submit)',
+        passed: overtimePassed,
+        status: submitOvertimeRes.status,
+        error: overtimePassed ? undefined : `Expected HTTP 400 with isTimeExpired=true, got ${submitOvertimeRes.status}: ${submitOvertimeRes.body}`
+      });
+
+      // Test valid submission within timer limit
+      const submitValidRes = await request('POST', `/api/forms/${timedForm.id}/submit`, {
+        answers: { [timedQ.id]: "Valid on-time answer" },
+        email: "customer@example.com",
+        browserMetadata: { user_agent: "test-runner", tab_switches: 0, is_flagged: false },
+        timeTaken: 120 // 2 minutes (within 5 mins)
+      });
+      const validTimePassed = submitValidRes.status === 200 || submitValidRes.status === 201;
+      results.push({
+        name: 'Integration Check: Session Submission Within Time Limit (POST /:id/submit)',
+        passed: validTimePassed,
+        status: submitValidRes.status,
+        error: validTimePassed ? undefined : `Expected HTTP 200/201, got ${submitValidRes.status}: ${submitValidRes.body}`
+      });
+
+      // Clean up test forms
+      await db.response.deleteMany({ where: { formId: { in: [expiredForm.id, timedForm.id] } } });
+      await db.question.deleteMany({ where: { formId: { in: [expiredForm.id, timedForm.id] } } });
+      await db.form.deleteMany({ where: { id: { in: [expiredForm.id, timedForm.id] } } });
+    }
+  } catch (err: any) {
+    results.push({ name: 'Integration Check: Time Limits & Expiration Engine', passed: false, error: err.message });
+  }
+
   // Cleanup Database Test Account
   try {
     await db.user.deleteMany({ where: { email: testEmail } });

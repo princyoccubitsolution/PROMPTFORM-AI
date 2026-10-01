@@ -39,6 +39,8 @@ export class FormsService {
           allow_editing: false,
           shuffle_questions: false,
           timer_limit: 0,
+          expires_at: null,
+          expiration_message: null,
           anti_cheat_detection: false,
           team_members_only: false,
           invited_only: false,

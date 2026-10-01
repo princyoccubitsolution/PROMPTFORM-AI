@@ -7,7 +7,7 @@ import { useTheme } from 'next-themes';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Sparkles, Plus, FileText, BarChart3, Trash2, Users, Settings, LogOut, 
-  MessageSquare, UserPlus, Folder, Calendar, ArrowRight, ShieldCheck, Mail, Sun, Moon,
+  MessageSquare, UserPlus, Folder, Calendar, ArrowRight, ShieldCheck, Mail, Sun, Moon, Clock,
   Search, Bell, ChevronLeft, ChevronRight, ChevronDown, Copy, Check, ExternalLink, Bot, Palette, Link as LinkIcon,
   CreditCard, Key, Send, CheckCircle2, AlertCircle, RefreshCw, BarChart2, Info, Activity, Globe, Monitor, Smartphone, Tablet, LayoutGrid, Menu, X
 } from 'lucide-react';
@@ -590,13 +590,25 @@ function DashboardContent() {
                                     {form.title}
                                   </td>
                                   <td className="py-3.5 px-4">
-                                    <span className={`px-2.5 py-0.5 rounded-md text-[11px] font-bold uppercase tracking-wide inline-flex items-center ${
-                                      form.status === 'PUBLISHED' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' :
-                                      form.status === 'CLOSED' ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20' :
-                                      'bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/25'
-                                    }`}>
-                                      {form.status}
-                                    </span>
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <span className={`px-2.5 py-0.5 rounded-md text-[11px] font-bold uppercase tracking-wide inline-flex items-center ${
+                                        form.status === 'PUBLISHED' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' :
+                                        form.status === 'CLOSED' ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20' :
+                                        'bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/25'
+                                      }`}>
+                                        {form.status}
+                                      </span>
+                                      {form.settings?.expires_at && (
+                                        <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold inline-flex items-center gap-1 ${
+                                          new Date(form.settings.expires_at).getTime() <= Date.now()
+                                            ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/25'
+                                            : 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/25'
+                                        }`}>
+                                          <Clock className="w-3 h-3" />
+                                          {new Date(form.settings.expires_at).getTime() <= Date.now() ? 'Expired' : 'Timed'}
+                                        </span>
+                                      )}
+                                    </div>
                                   </td>
                                   <td className="py-3.5 px-4 font-semibold text-foreground">{form._count?.responses || 0}</td>
                                   <td className="py-3.5 px-4 text-muted-foreground">{new Date(form.updatedAt).toLocaleDateString()}</td>
@@ -671,13 +683,25 @@ function DashboardContent() {
                           <CardHeader className="pb-3">
                             <div className="flex justify-between items-start space-x-2">
                               <CardTitle className="text-sm font-semibold truncate flex-1 min-w-0">{form.title}</CardTitle>
-                              <span className={`px-2 py-0.5 rounded text-xs font-semibold uppercase shrink-0 ${
-                                form.status === 'PUBLISHED' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300' :
-                                form.status === 'CLOSED' ? 'bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-300' :
-                                'bg-yellow-100 text-yellow-800 dark:bg-yellow-950/40 dark:text-yellow-350'
-                              }`}>
-                                {form.status}
-                              </span>
+                              <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
+                                <span className={`px-2 py-0.5 rounded text-xs font-semibold uppercase ${
+                                  form.status === 'PUBLISHED' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300' :
+                                  form.status === 'CLOSED' ? 'bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-300' :
+                                  'bg-yellow-100 text-yellow-800 dark:bg-yellow-950/40 dark:text-yellow-350'
+                                }`}>
+                                  {form.status}
+                                </span>
+                                {form.settings?.expires_at && (
+                                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 ${
+                                    new Date(form.settings.expires_at).getTime() <= Date.now()
+                                      ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/50 dark:text-rose-300'
+                                      : 'bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300'
+                                  }`}>
+                                    <Clock className="w-3 h-3" />
+                                    {new Date(form.settings.expires_at).getTime() <= Date.now() ? 'Expired' : 'Timed'}
+                                  </span>
+                                )}
+                              </div>
                             </div>
                             <CardDescription className="line-clamp-2 text-xs mt-1 leading-normal">{form.description || "No description provided."}</CardDescription>
                           </CardHeader>

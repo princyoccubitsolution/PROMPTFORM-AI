@@ -95,6 +95,7 @@ export default function BuilderPage() {
     validation: false,
     logic: false,
     permissions: false,
+    timeLimits: true,
     publishing: false,
     analytics: false,
     developer: false
@@ -102,6 +103,44 @@ export default function BuilderPage() {
 
   const toggleAccordion = (key: keyof typeof accordions) => {
     setAccordions(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  // Helper to format ISO string to datetime-local input string
+  const toDateTimeLocalValue = (isoString?: string | null) => {
+    if (!isoString) return '';
+    try {
+      const d = new Date(isoString);
+      if (isNaN(d.getTime())) return '';
+      const pad = (n: number) => n.toString().padStart(2, '0');
+      const year = d.getFullYear();
+      const month = pad(d.getMonth() + 1);
+      const day = pad(d.getDate());
+      const hours = pad(d.getHours());
+      const minutes = pad(d.getMinutes());
+      return `${year}-${month}-${day}T${hours}:${minutes}`;
+    } catch {
+      return '';
+    }
+  };
+
+  // Helper to get human-readable expiration time remaining
+  const getExpirationStatus = (isoString?: string | null) => {
+    if (!isoString) return null;
+    const expiry = new Date(isoString).getTime();
+    if (isNaN(expiry)) return null;
+    const now = Date.now();
+    const diff = expiry - now;
+    if (diff <= 0) {
+      return { isExpired: true, text: 'Expired' };
+    }
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    let text = '';
+    if (days > 0) text += `${days}d `;
+    if (hours > 0 || days > 0) text += `${hours}h `;
+    text += `${minutes}m remaining`;
+    return { isExpired: false, text };
   };
   
   // AI Assistant state
@@ -1955,16 +1994,199 @@ export default function BuilderPage() {
                       onChange={(chk) => store.updateSettings({ shuffle_options: chk })}
                     />
                   </div>
-                  
-                  <div className="space-y-1 mt-2.5">
-                    <label className="block text-xs font-medium text-muted-foreground dark:text-zinc-355 uppercase mb-1">Timer Constraint (Minutes)</label>
-                    <Input
-                      type="number"
-                      placeholder="0 (No limit)"
-                      value={store.settings.timer_limit || ""}
-                      onChange={(e) => store.updateSettings({ timer_limit: Number(e.target.value) })}
-                      className="h-9 text-xs rounded-lg font-bold bg-muted dark:bg-background dark:border-border"
-                    />
+                </div>
+              )}
+            </div>
+
+            {/* Accordion: Time Limits & Form Expiration */}
+            <div className="border border-border dark:border-border rounded-xl overflow-hidden bg-muted/20 dark:bg-background/10">
+              <button
+                onClick={() => toggleAccordion('timeLimits')}
+                className="w-full px-4 py-3 flex items-center justify-between font-semibold text-xs text-foreground dark:text-zinc-200 bg-accent/50 dark:bg-card/40 border-none cursor-pointer"
+              >
+                <div className="flex items-center space-x-2">
+                  <Clock className="w-4 h-4 text-primary" />
+                  <span>Time Limits & Form Expiration</span>
+                  {(store.settings.expires_at || (store.settings.timer_limit && store.settings.timer_limit > 0)) && (
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
+                  )}
+                </div>
+                <ChevronDown className={`w-4 h-4 transition-transform ${accordions.timeLimits ? 'rotate-180' : ''}`} />
+              </button>
+
+              {accordions.timeLimits && (
+                <div className="p-4 space-y-5 bg-card dark:bg-background text-xs font-semibold">
+                  {/* Part 1: Form Expiration Deadline */}
+                  <div className="space-y-3 pb-4 border-b border-zinc-100 dark:border-border">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <span className="text-xs font-semibold text-foreground dark:text-zinc-200 uppercase tracking-wide block">
+                          Form Expiration Deadline
+                        </span>
+                        <span className="text-[10px] text-muted-foreground font-normal block mt-0.5">
+                          Set a closing date and time. After this deadline, no one can open or fill out the form.
+                        </span>
+                      </div>
+                      <Switch
+                        checked={!!store.settings.expires_at}
+                        onChange={(chk) => {
+                          if (chk) {
+                            // Default to +24 hours from now
+                            const defaultExpiry = new Date(Date.now() + 24 * 3600 * 1000).toISOString();
+                            store.updateSettings({ expires_at: defaultExpiry });
+                          } else {
+                            store.updateSettings({ expires_at: null });
+                          }
+                        }}
+                      />
+                    </div>
+
+                    {store.settings.expires_at && (
+                      <div className="space-y-3 pt-1">
+                        <div>
+                          <label className="block text-[11px] font-medium text-muted-foreground uppercase mb-1">
+                            Closing Date & Time
+                          </label>
+                          <input
+                            type="datetime-local"
+                            value={toDateTimeLocalValue(store.settings.expires_at)}
+                            onChange={(e) => {
+                              const iso = e.target.value ? new Date(e.target.value).toISOString() : null;
+                              store.updateSettings({ expires_at: iso });
+                            }}
+                            className="w-full h-9 px-3 rounded-lg text-xs font-semibold bg-muted dark:bg-background border border-border text-foreground dark:text-zinc-200 outline-none focus:ring-1 focus:ring-primary/40"
+                          />
+                        </div>
+
+                        {/* Quick Presets */}
+                        <div className="flex flex-wrap gap-1.5 pt-0.5">
+                          {[
+                            { label: "+1 Hour", hours: 1 },
+                            { label: "+24 Hours", hours: 24 },
+                            { label: "+3 Days", hours: 72 },
+                            { label: "+7 Days", hours: 168 },
+                            { label: "+30 Days", hours: 720 },
+                          ].map((preset) => (
+                            <button
+                              key={preset.label}
+                              type="button"
+                              onClick={() => {
+                                const newDate = new Date(Date.now() + preset.hours * 3600 * 1000).toISOString();
+                                store.updateSettings({ expires_at: newDate });
+                              }}
+                              className="px-2.5 py-1 text-[11px] font-semibold bg-accent hover:bg-zinc-200 dark:bg-muted dark:hover:bg-zinc-800 text-foreground dark:text-zinc-200 rounded-md border border-border transition-colors cursor-pointer"
+                            >
+                              {preset.label}
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* Status indicator */}
+                        {(() => {
+                          const status = getExpirationStatus(store.settings.expires_at);
+                          if (!status) return null;
+                          return (
+                            <div className={`p-2.5 rounded-lg border flex items-center gap-2 text-xs ${
+                              status.isExpired 
+                                ? 'bg-destructive/10 border-destructive/20 text-destructive' 
+                                : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400'
+                            }`}>
+                              {status.isExpired ? (
+                                <>
+                                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                                  <span className="font-semibold">⚠️ Form has expired and is now closed to respondents.</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Clock className="w-4 h-4 shrink-0" />
+                                  <span className="font-semibold">⏳ Form is open — closes in {status.text}</span>
+                                </>
+                              )}
+                            </div>
+                          );
+                        })()}
+
+                        {/* Custom Expiration Message */}
+                        <div className="space-y-1 pt-1">
+                          <label className="block text-[11px] font-medium text-muted-foreground uppercase">
+                            Custom Closed / Expiry Message (Optional)
+                          </label>
+                          <Input
+                            placeholder="e.g. Submissions for this application are now closed. Contact us for inquiries."
+                            value={store.settings.expiration_message || ""}
+                            onChange={(e) => store.updateSettings({ expiration_message: e.target.value || null })}
+                            className="h-9 text-xs rounded-lg bg-muted dark:bg-background border-border text-foreground dark:text-zinc-200"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Part 2: Session Countdown Timer */}
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <span className="text-xs font-semibold text-foreground dark:text-zinc-200 uppercase tracking-wide block">
+                          Respondent Session Timer
+                        </span>
+                        <span className="text-[10px] text-muted-foreground font-normal block mt-0.5">
+                          Limit how long each respondent has to complete and submit the form once opened.
+                        </span>
+                      </div>
+                      <Switch
+                        checked={(store.settings.timer_limit || 0) > 0}
+                        onChange={(chk) => {
+                          store.updateSettings({ timer_limit: chk ? 15 : 0 });
+                        }}
+                      />
+                    </div>
+
+                    {(store.settings.timer_limit || 0) > 0 && (
+                      <div className="space-y-2.5 pt-1">
+                        <div>
+                          <label className="block text-[11px] font-medium text-muted-foreground uppercase mb-1">
+                            Time Limit (Minutes)
+                          </label>
+                          <div className="flex items-center space-x-2">
+                            <Input
+                              type="number"
+                              min="1"
+                              max="1440"
+                              placeholder="15"
+                              value={store.settings.timer_limit || ""}
+                              onChange={(e) => {
+                                const val = Math.max(0, parseInt(e.target.value) || 0);
+                                store.updateSettings({ timer_limit: val });
+                              }}
+                              className="h-9 text-xs rounded-lg font-bold bg-muted dark:bg-background border-border text-foreground dark:text-zinc-200"
+                            />
+                            <span className="text-xs text-muted-foreground font-bold shrink-0">Minutes</span>
+                          </div>
+                        </div>
+
+                        {/* Quick Presets */}
+                        <div className="flex flex-wrap gap-1.5">
+                          {[10, 15, 30, 45, 60, 90].map((mins) => (
+                            <button
+                              key={mins}
+                              type="button"
+                              onClick={() => store.updateSettings({ timer_limit: mins })}
+                              className={`px-2.5 py-1 text-[11px] font-semibold rounded-md border transition-colors cursor-pointer ${
+                                store.settings.timer_limit === mins
+                                  ? 'bg-primary text-primary-foreground border-primary'
+                                  : 'bg-accent hover:bg-zinc-200 dark:bg-muted dark:hover:bg-zinc-800 text-foreground dark:text-zinc-200 border-border'
+                              }`}
+                            >
+                              {mins} mins
+                            </button>
+                          ))}
+                        </div>
+
+                        <p className="text-[10px] text-muted-foreground font-normal leading-relaxed pt-1">
+                          ⏱️ Respondents will see a live countdown clock at the top of the form. When time expires, answers are automatically submitted and the form locks against further modifications.
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

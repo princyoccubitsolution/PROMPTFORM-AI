@@ -551,7 +551,28 @@ function modifyFormFallback(form: any, prompt: string) {
   let description = form.description;
   let questions = [...form.questions];
   let theme = form.theme || { primary_color: "#22C55E", background_color: "#F8FFFA", font_family: "Inter" };
-  let settings = form.settings || { collect_emails: true, limit_responses: false, timer_limit: 0, anti_cheat_detection: false };
+  let settings = form.settings || { collect_emails: true, limit_responses: false, timer_limit: 0, expires_at: null, expiration_message: null, anti_cheat_detection: false };
+
+  // Detect timer limit changes in prompt
+  const timerMatch = lowercasePrompt.match(/(?:time\s*limit|timer|timed|duration)\s*(?:of|is|to|:)?\s*(\d+)/i) || lowercasePrompt.match(/(\d+)\s*(?:mins?|minutes?)\s*(?:timer|limit|duration)/i);
+  if (timerMatch) {
+    settings.timer_limit = parseInt(timerMatch[1], 10);
+  }
+
+  // Detect expiration / closing deadline in prompt
+  const expireMatch = lowercasePrompt.match(/(?:expire|expires|close|closes|valid)\s*(?:in|after|for)?\s*(\d+)\s*(hour|hr|day|week|min|minute)s?/i);
+  if (expireMatch) {
+    const num = parseInt(expireMatch[1], 10);
+    const unit = expireMatch[2].toLowerCase();
+    let ms = 0;
+    if (unit.startsWith('min')) ms = num * 60 * 1000;
+    else if (unit.startsWith('h')) ms = num * 3600 * 1000;
+    else if (unit.startsWith('d')) ms = num * 86400 * 1000;
+    else if (unit.startsWith('w')) ms = num * 7 * 86400 * 1000;
+    if (ms > 0) {
+      settings.expires_at = new Date(Date.now() + ms).toISOString();
+    }
+  }
 
   const isRemoveBanner = /((remove|delete|hide|drop)\s+(the\s+)?(banner|image|photo|header|picture)s?(\s+section)?|(banner|image|photo|header|picture)s?(\s+section)?\s+(remove|delete|hide|drop))/i.test(lowercasePrompt);
   if (isRemoveBanner && theme) {
@@ -877,9 +898,36 @@ router.post(['/generate', '/generate-from-file'], optionalAuthMiddleware, upload
       collect_emails: true,
       limit_responses: false,
       timer_limit: intent.relevanceRules.requireQuizValidation ? 15 : 0,
+      expires_at: null,
+      expiration_message: null,
       shuffle_questions: intent.relevanceRules.requireQuizValidation,
       anti_cheat_detection: intent.relevanceRules.requireQuizValidation
     };
+
+    // Extract timer_limit if requested in prompt
+    const promptLower = userPrompt.toLowerCase();
+    const timerMatch = promptLower.match(/(?:time\s*limit|timer|timed|duration)\s*(?:of|is|to|:)?\s*(\d+)/i) || promptLower.match(/(\d+)\s*(?:mins?|minutes?)\s*(?:timer|limit|duration|quiz|exam|test)/i);
+    if (timerMatch && !sanitizedSettings.timer_limit) {
+      sanitizedSettings.timer_limit = parseInt(timerMatch[1], 10);
+    }
+
+    // Extract expiration deadline if requested in prompt
+    const expireMatch = promptLower.match(/(?:expire|expires|close|closes|valid)\s*(?:in|after|for)?\s*(\d+)\s*(hour|hr|day|week|min|minute)s?/i);
+    if (expireMatch && !sanitizedSettings.expires_at) {
+      const num = parseInt(expireMatch[1], 10);
+      const unit = expireMatch[2].toLowerCase();
+      let ms = 0;
+      if (unit.startsWith('min')) ms = num * 60 * 1000;
+      else if (unit.startsWith('h')) ms = num * 3600 * 1000;
+      else if (unit.startsWith('d')) ms = num * 86400 * 1000;
+      else if (unit.startsWith('w')) ms = num * 7 * 86400 * 1000;
+      if (ms > 0) {
+        sanitizedSettings.expires_at = new Date(Date.now() + ms).toISOString();
+      }
+    }
+
+    if (sanitizedSettings.expires_at === undefined) sanitizedSettings.expires_at = null;
+    if (sanitizedSettings.expiration_message === undefined) sanitizedSettings.expiration_message = null;
 
     if (intent.relevanceRules.requireQuizValidation) {
       sanitizedSettings.anti_cheat_detection = true;
@@ -1757,6 +1805,8 @@ You MUST respond with a JSON object containing:
       "allow_editing": boolean,
       "shuffle_questions": boolean,
       "timer_limit": number,
+      "expires_at": string | null,
+      "expiration_message": string | null,
       "anti_cheat_detection": boolean
     }
   } | null

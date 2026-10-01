@@ -50,6 +50,8 @@ const formSettingsSchema = z.object({
   shuffle_questions: z.boolean().default(false),
   shuffle_options: z.boolean().default(false),
   timer_limit: z.coerce.number().default(0), // 0 means no limit, otherwise minutes/seconds
+  expires_at: z.string().nullable().optional(), // ISO date string after which form is closed
+  expiration_message: z.string().nullable().optional(), // Custom message shown when expired
   anti_cheat_detection: z.boolean().default(false),
   team_members_only: z.boolean().default(false),
   invited_only: z.boolean().default(false),
@@ -230,6 +232,39 @@ router.get('/:id', async (req: Request, res: Response) => {
     if (cachedFormStr) {
       try {
         const cachedForm = JSON.parse(cachedFormStr);
+
+        // Guard: check if form has expired based on expires_at deadline
+        const cachedExpiresAt = cachedForm.settings?.expires_at;
+        let isCachedExpired = false;
+        if (cachedExpiresAt) {
+          const expiryDate = new Date(cachedExpiresAt);
+          if (!isNaN(expiryDate.getTime()) && Date.now() > expiryDate.getTime()) {
+            isCachedExpired = true;
+          }
+        }
+
+        if (isCachedExpired) {
+          let isOwner = false;
+          try {
+            const authHeader = req.headers.authorization;
+            if (authHeader && authHeader.startsWith('Bearer ')) {
+              const jwt = require('jsonwebtoken');
+              const decoded = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET!) as any;
+              if (decoded.id === cachedForm.ownerId) isOwner = true;
+            }
+          } catch (_) {}
+
+          if (!isOwner) {
+            return res.json({
+              ...cachedForm,
+              status: 'CLOSED',
+              isExpired: true,
+              questions: [],
+              message: cachedForm.settings?.expiration_message || 'This form has expired and is no longer accepting responses.'
+            });
+          }
+        }
+
         // Guard: mask questions if form is password-protected and correct password not provided
         const formPassword = cachedForm.settings?.password;
         if (formPassword) {
@@ -312,6 +347,47 @@ router.get('/:id', async (req: Request, res: Response) => {
     await cache.set(getFormCacheKey(form.id), JSON.stringify(form), cacheTTL);
     if (form.uniqueShareId) {
       await cache.set(getShareFormCacheKey(form.uniqueShareId), JSON.stringify(form), cacheTTL);
+    }
+
+    // Guard: check if form has expired based on expires_at deadline
+    const expiresAt = (form.settings as any)?.expires_at;
+    let isExpired = false;
+    if (expiresAt) {
+      const expiryDate = new Date(expiresAt);
+      if (!isNaN(expiryDate.getTime()) && Date.now() > expiryDate.getTime()) {
+        isExpired = true;
+      }
+    }
+
+    if (isExpired) {
+      let isOwner = false;
+      try {
+        const authHeader = req.headers.authorization;
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+          const jwt = require('jsonwebtoken');
+          const decoded = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET!) as any;
+          if (decoded.id === form.ownerId) isOwner = true;
+        }
+      } catch (_) {}
+
+      if (!isOwner) {
+        if (form.status === 'PUBLISHED') {
+          try {
+            await db.form.update({
+              where: { id: form.id },
+              data: { status: 'CLOSED' }
+            });
+            await invalidateFormCache(form.id, form.uniqueShareId);
+          } catch (_) {}
+        }
+        return res.json({
+          ...form,
+          status: 'CLOSED',
+          isExpired: true,
+          questions: [],
+          message: (form.settings as any)?.expiration_message || 'This form has expired and is no longer accepting responses.'
+        });
+      }
     }
 
     // Guard: mask questions if form is password-protected and correct password not provided
@@ -641,6 +717,27 @@ router.post('/:id/submit', async (req: Request, res: Response) => {
     }
     if (!form) return res.status(404).json({ error: 'Form not found' });
 
+    // Guard: check if form deadline has expired
+    const expiresAt = (form.settings as any)?.expires_at;
+    if (expiresAt) {
+      const expiryDate = new Date(expiresAt);
+      if (!isNaN(expiryDate.getTime()) && Date.now() > expiryDate.getTime()) {
+        if (form.status === 'PUBLISHED') {
+          try {
+            await db.form.update({
+              where: { id: form.id },
+              data: { status: 'CLOSED' }
+            });
+            await invalidateFormCache(form.id, form.uniqueShareId);
+          } catch (_) {}
+        }
+        return res.status(400).json({
+          error: (form.settings as any)?.expiration_message || 'This form has expired and is no longer accepting responses.',
+          isExpired: true
+        });
+      }
+    }
+
     if (form.status !== 'PUBLISHED') {
       if (form.status === 'DRAFT') {
         return res.status(400).json({ error: 'This form is currently a draft and cannot accept responses.' });
@@ -663,6 +760,18 @@ router.post('/:id/submit', async (req: Request, res: Response) => {
     // Fetch form questions
     const formQuestions = await db.question.findMany({ where: { formId: form.id } });
     const isForceSubmit = Boolean(req.body.isForceSubmit || req.body.isTimeExpired || (req.body.browserMetadata?.is_flagged && Number(req.body.browserMetadata?.tab_switches) >= 3));
+
+    // Enforce session timer limit (if configured)
+    const timerLimitMinutes = Number((form.settings as any)?.timer_limit) || 0;
+    if (timerLimitMinutes > 0 && !isForceSubmit) {
+      const maxAllowedSeconds = (timerLimitMinutes * 60) + 120; // 2 min grace period for network latency
+      if (timeTaken > maxAllowedSeconds) {
+        return res.status(400).json({
+          error: `Submission rejected: The time limit of ${timerLimitMinutes} minutes for this form has expired.`,
+          isTimeExpired: true
+        });
+      }
+    }
 
     // Extract normalized student identity data
     const answersMap = (answers as Record<string, any>) || {};

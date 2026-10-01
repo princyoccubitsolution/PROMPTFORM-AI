@@ -199,6 +199,9 @@ export default function PublicFormPage() {
   const [errorStatus, setErrorStatus] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
   const [isInactive, setIsInactive] = useState(false);
+  const [isExpiredState, setIsExpiredState] = useState(false);
+  const [deadlineTimeLeft, setDeadlineTimeLeft] = useState<number | null>(null);
+  const deadlineIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const [isAlreadySubmitted, setIsAlreadySubmitted] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
   const [isPreview, setIsPreview] = useState(false);
@@ -280,6 +283,27 @@ export default function PublicFormPage() {
           setIsLoading(false);
           return;
         }
+      }
+
+      // Check form expiration deadline
+      const formExpiresAt = data.settings?.expires_at;
+      const isFormExpired = Boolean(
+        data.isExpired || 
+        (formExpiresAt && new Date(formExpiresAt).getTime() <= Date.now())
+      );
+
+      if (isFormExpired && !isPreviewMode) {
+        setIsInactive(true);
+        setIsExpiredState(true);
+        setStatusMessage(
+          data.message || 
+          data.settings?.expiration_message || 
+          (formExpiresAt 
+            ? `This form reached its deadline on ${new Date(formExpiresAt).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })} and is no longer accepting responses.`
+            : "This form has expired and is no longer accepting responses.")
+        );
+        setIsLoading(false);
+        return;
       }
 
       // Check form status: only PUBLISHED forms can accept responses (unless preview mode)
@@ -694,8 +718,54 @@ export default function PublicFormPage() {
     };
   }, [form, submitted]);
 
-  const autoSubmitForm = () => {
-    setStatusMessage("Time limit expired! Your answers have been automatically submitted and the form is now closed.");
+  /* -------------------------------------------------------------------------- */
+  /* FORM EXPIRATION DEADLINE COUNTDOWN                                         */
+  /* -------------------------------------------------------------------------- */
+  useEffect(() => {
+    if (!form || submitted || isInactive) return;
+    const expiresAt = form.settings?.expires_at;
+    if (!expiresAt) {
+      setDeadlineTimeLeft(null);
+      return;
+    }
+
+    const expiryTime = new Date(expiresAt).getTime();
+    if (isNaN(expiryTime)) return;
+
+    const checkDeadline = () => {
+      const remainingSecs = Math.floor((expiryTime - Date.now()) / 1000);
+      if (remainingSecs <= 0) {
+        setDeadlineTimeLeft(0);
+        if (deadlineIntervalRef.current) clearInterval(deadlineIntervalRef.current);
+        if (Object.keys(answers).length > 0) {
+          autoSubmitForm("Form expiration deadline reached! Answers automatically submitted.");
+        } else {
+          setIsInactive(true);
+          setIsExpiredState(true);
+          setStatusMessage(
+            form.settings?.expiration_message || 
+            `This form has reached its deadline and is now closed.`
+          );
+        }
+        return 0;
+      }
+      setDeadlineTimeLeft(remainingSecs);
+      return remainingSecs;
+    };
+
+    const initial = checkDeadline();
+    if (initial <= 0) return;
+
+    if (deadlineIntervalRef.current) clearInterval(deadlineIntervalRef.current);
+    deadlineIntervalRef.current = setInterval(checkDeadline, 1000);
+
+    return () => {
+      if (deadlineIntervalRef.current) clearInterval(deadlineIntervalRef.current);
+    };
+  }, [form, submitted, isInactive, answers]);
+
+  const autoSubmitForm = (customMsg?: string) => {
+    setStatusMessage(customMsg || "Time limit expired! Your answers have been automatically submitted and the form is now closed.");
     setSubmitted(true);
     if (typeof window !== 'undefined') {
       localStorage.setItem(`promptform_submitted_${form?.id || formId}`, 'true');
@@ -707,6 +777,16 @@ export default function PublicFormPage() {
     const m = Math.floor(seconds / 60).toString().padStart(2, '0');
     const s = (seconds % 60).toString().padStart(2, '0');
     return `${m}:${s}`;
+  };
+
+  const formatDeadlineRemaining = (totalSecs: number) => {
+    const days = Math.floor(totalSecs / 86400);
+    const hours = Math.floor((totalSecs % 86400) / 3600);
+    const mins = Math.floor((totalSecs % 3600) / 60);
+    const secs = totalSecs % 60;
+    if (days > 0) return `${days}d ${hours}h ${mins}m`;
+    if (hours > 0) return `${hours}h ${mins}m ${secs}s`;
+    return `${mins}m ${secs}s`;
   };
 
   /* -------------------------------------------------------------------------- */
@@ -1209,17 +1289,51 @@ export default function PublicFormPage() {
   if (isInactive) {
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 flex items-center justify-center p-4 font-sans">
-        <Card className="w-full max-w-md text-center border-t-4 border-t-amber-500 shadow-xl bg-card dark:bg-zinc-900 rounded-3xl p-6 sm:p-8">
-          <div className="w-14 h-14 bg-amber-500/10 text-amber-600 rounded-2xl flex items-center justify-center mx-auto mb-3 border border-amber-500/20">
-            <AlertTriangle className="w-7 h-7" />
+        <Card className={`w-full max-w-md text-center border-t-4 shadow-xl bg-card dark:bg-zinc-900 rounded-3xl p-6 sm:p-8 ${
+          isExpiredState ? 'border-t-rose-500' : 'border-t-amber-500'
+        }`}>
+          <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-3 border ${
+            isExpiredState 
+              ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20' 
+              : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
+          }`}>
+            {isExpiredState ? <Clock className="w-7 h-7" /> : <AlertTriangle className="w-7 h-7" />}
           </div>
-          <CardTitle className="text-xl font-bold text-foreground">This form is no longer accepting responses.</CardTitle>
+          <CardTitle className="text-xl font-bold text-foreground">
+            {isExpiredState ? "Form Has Expired" : "This form is no longer accepting responses."}
+          </CardTitle>
           <CardDescription className="text-xs text-muted-foreground mt-2 leading-relaxed">
-            {statusMessage || "The author has paused or closed responses for this form. If you believe this is an error, please contact your instructor or administrator."}
+            {statusMessage || (
+              isExpiredState 
+                ? "The deadline for submitting responses to this form has passed. Access is now locked."
+                : "The author has paused or closed responses for this form. If you believe this is an error, please contact your instructor or administrator."
+            )}
           </CardDescription>
+
+          {isExpiredState && form?.settings?.expires_at && (
+            <div className="mt-5 p-3.5 bg-muted/40 rounded-xl border border-border/70 text-left text-xs space-y-1.5">
+              <div className="flex justify-between items-center text-muted-foreground font-semibold">
+                <span>Form Title:</span>
+                <span className="font-bold text-foreground truncate max-w-[190px]">{form.title}</span>
+              </div>
+              <div className="flex justify-between items-center text-muted-foreground font-semibold">
+                <span>Closed At:</span>
+                <span className="font-bold text-rose-600 dark:text-rose-400">
+                  {new Date(form.settings.expires_at).toLocaleString([], { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-muted-foreground font-semibold">
+                <span>Status:</span>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
+                  Expired & Locked
+                </span>
+              </div>
+            </div>
+          )}
+
           <div className="mt-6">
             <Button variant="outline" className="w-full h-10 text-xs font-semibold rounded-xl" onClick={() => router.push('/')}>
-              Go to Home Page
+              Return to Home Page
             </Button>
           </div>
         </Card>
@@ -2132,6 +2246,15 @@ export default function PublicFormPage() {
                   <Clock className="w-3.5 h-3.5 text-slate-500" />
                   ~{estimatedMinutes} min to complete
                 </span>
+                {form?.settings?.expires_at && (
+                  <span className="px-3 py-1.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5 text-amber-600" />
+                    Closes: {new Date(form.settings.expires_at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                    {deadlineTimeLeft !== null && deadlineTimeLeft > 0 && (
+                      <span className="font-bold text-amber-900">({formatDeadlineRemaining(deadlineTimeLeft)})</span>
+                    )}
+                  </span>
+                )}
                 {form?.settings?.timer_limit > 0 && (
                   <span className="px-3 py-1.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200 flex items-center gap-1.5">
                     <Clock className="w-3.5 h-3.5 text-rose-500" />
@@ -2208,14 +2331,49 @@ export default function PublicFormPage() {
         </div>
       )}
 
+      {/* Expiration Deadline Banner */}
+      {deadlineTimeLeft !== null && deadlineTimeLeft > 0 && deadlineTimeLeft <= 86400 && (
+        <div className={`py-2 px-4 text-center text-xs font-bold flex items-center justify-between shadow-xs sticky ${timeLeft !== null ? 'top-10' : 'top-0'} z-40 border-b ${
+          deadlineTimeLeft <= 3600
+            ? 'bg-rose-950 text-rose-200 border-rose-900'
+            : 'bg-amber-950 text-amber-200 border-amber-900'
+        }`}>
+          <div className="flex items-center space-x-2">
+            <Clock className={`w-4 h-4 ${deadlineTimeLeft <= 3600 ? 'text-rose-400 animate-pulse' : 'text-amber-400'}`} />
+            <span>Form Deadline Closing Soon:</span>
+          </div>
+          <div className={`font-mono text-xs tracking-wider px-2.5 py-0.5 rounded-lg border ${
+            deadlineTimeLeft <= 3600 
+              ? 'bg-rose-500/20 text-rose-300 border-rose-500/40' 
+              : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+          }`}>
+            ⏳ {formatDeadlineRemaining(deadlineTimeLeft)}
+          </div>
+        </div>
+      )}
+
       {/* Timer Bar if form has a timer limit */}
       {timeLeft !== null && (
-        <div className="bg-slate-900 text-white py-2.5 px-4 text-center text-xs font-bold flex items-center justify-between shadow-sm sticky top-0 z-40 border-b border-slate-800">
+        <div className={`py-2.5 px-4 text-center text-xs font-bold flex items-center justify-between shadow-sm sticky top-0 z-40 border-b ${
+          timeLeft <= 60 
+            ? 'bg-rose-950 text-rose-100 border-rose-800 animate-pulse' 
+            : timeLeft <= 300 
+            ? 'bg-amber-950 text-amber-100 border-amber-800' 
+            : 'bg-slate-900 text-white border-slate-800'
+        }`}>
           <div className="flex items-center space-x-2">
-            <Clock className="w-4 h-4 text-rose-400 animate-pulse" />
-            <span>Form Time Limit Active:</span>
+            <Clock className={`w-4 h-4 ${timeLeft <= 60 ? 'text-rose-400 animate-bounce' : timeLeft <= 300 ? 'text-amber-400' : 'text-indigo-400'}`} />
+            <span>
+              {timeLeft <= 60 ? '⚠️ Time Running Out! Submitting soon:' : 'Form Session Time Limit:'}
+            </span>
           </div>
-          <div className="font-mono text-sm tracking-wider px-3 py-1 rounded-lg bg-rose-500/20 text-rose-300 border border-rose-500/40">
+          <div className={`font-mono text-sm tracking-wider px-3 py-1 rounded-lg border ${
+            timeLeft <= 60 
+              ? 'bg-rose-500/30 text-rose-200 border-rose-400 font-black' 
+              : timeLeft <= 300 
+              ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 font-bold' 
+              : 'bg-slate-800 text-indigo-300 border-slate-700'
+          }`}>
             ⏱️ {formatTime(timeLeft)}
           </div>
         </div>

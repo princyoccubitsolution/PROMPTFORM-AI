@@ -460,6 +460,7 @@ STRICT GENERATION RULES:
     "limit_responses": boolean,
     "shuffle_questions": boolean,
     "timer_limit": number,
+    "expires_at"?: string | null,
     "anti_cheat_detection": boolean
   }
 }

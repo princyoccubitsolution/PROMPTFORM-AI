@@ -19,6 +19,8 @@ export interface FormSettings {
   shuffle_questions: boolean;
   shuffle_options: boolean;
   timer_limit: number;
+  expires_at: string | null;
+  expiration_message: string | null;
   anti_cheat_detection: boolean;
   team_members_only: boolean;
   invited_only: boolean;
@@ -90,6 +92,8 @@ export const useFormStore = create<FormState>((set) => ({
     shuffle_questions: false,
     shuffle_options: false,
     timer_limit: 0,
+    expires_at: null,
+    expiration_message: null,
     anti_cheat_detection: false,
     team_members_only: false,
     invited_only: false,
@@ -124,6 +128,8 @@ export const useFormStore = create<FormState>((set) => ({
       allow_editing: false,
       shuffle_questions: false,
       timer_limit: 0,
+      expires_at: null,
+      expiration_message: null,
       anti_cheat_detection: false,
       team_members_only: false,
       invited_only: false,
