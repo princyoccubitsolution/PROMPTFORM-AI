@@ -351,6 +351,8 @@ export default function BuilderPage() {
     try {
       const normalizedSettings = {
         ...store.settings,
+        expires_at: store.settings.expires_at || null,
+        expiration_message: store.settings.expiration_message || null,
         timer_limit: Number(store.settings.timer_limit) || 0
       };
       const updatedForm = await api.put(`/forms/${formId}`, {
@@ -383,6 +385,8 @@ export default function BuilderPage() {
     try {
       const normalizedSettings = {
         ...store.settings,
+        expires_at: store.settings.expires_at || null,
+        expiration_message: store.settings.expiration_message || null,
         timer_limit: Number(store.settings.timer_limit) || 0
       };
       const updatedForm = await api.put(`/forms/${formId}`, { 
@@ -2059,8 +2063,13 @@ export default function BuilderPage() {
                             type="datetime-local"
                             value={toDateTimeLocalValue(store.settings.expires_at)}
                             onChange={(e) => {
-                              const iso = e.target.value ? new Date(e.target.value).toISOString() : null;
-                              store.updateSettings({ expires_at: iso });
+                              const val = e.target.value;
+                              if (val) {
+                                const d = new Date(val);
+                                if (!isNaN(d.getTime())) {
+                                  store.updateSettings({ expires_at: d.toISOString() });
+                                }
+                              }
                             }}
                             className="w-full h-9 px-3 rounded-lg text-xs font-semibold bg-muted dark:bg-background border border-border text-foreground dark:text-zinc-200 outline-none focus:ring-1 focus:ring-primary/40"
                           />
