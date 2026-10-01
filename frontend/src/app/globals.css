@@ -222,8 +222,8 @@
   input[type="datetime-local"],
   textarea,
   select {
-    color: #0f172a;
-    -webkit-text-fill-color: #0f172a;
+    color: inherit;
+    -webkit-text-fill-color: currentColor;
   }
 
   .dark input[type="text"],
@@ -238,8 +238,8 @@
   .dark input[type="datetime-local"],
   .dark textarea,
   .dark select {
-    color: #f8fafc !important;
-    -webkit-text-fill-color: #f8fafc !important;
+    color: inherit;
+    -webkit-text-fill-color: currentColor;
   }
 
   /* Explicit transparent background support for inputs */

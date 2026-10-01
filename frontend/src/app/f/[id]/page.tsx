@@ -1566,10 +1566,10 @@ export default function PublicFormPage() {
               }
             }}
             required={q.required}
-            className={`w-full h-12 bg-white !bg-white border rounded-xl text-sm font-medium text-black !text-black dark:text-black dark:!text-black placeholder:text-slate-400 dark:placeholder:text-slate-400 transition-all focus:outline-none ${
+            className={`w-full h-12 bg-white dark:bg-zinc-900 border rounded-xl text-sm font-medium text-slate-900 dark:text-zinc-100 placeholder:text-slate-400 dark:placeholder:text-zinc-500 transition-all focus:outline-none ${
               validationErrors[q.id] 
                 ? 'border-rose-400 focus:ring-2 focus:ring-rose-200' 
-                : 'border-slate-200 hover:border-slate-300 focus:border-indigo-600 focus:ring-4 focus:ring-indigo-50'
+                : 'border-slate-200 dark:border-zinc-700 hover:border-slate-300 dark:hover:border-zinc-600 focus:border-indigo-600 focus:ring-4 focus:ring-indigo-50 dark:focus:ring-indigo-950/40'
             } ${['name', 'email', 'phone', 'website', 'amount', 'price'].includes(q.type) || isAlphanumericId ? 'pl-10 pr-4' : 'px-4'}`}
           />
         </div>
@@ -1590,10 +1590,10 @@ export default function PublicFormPage() {
               if (validationErrors[q.id]) setValidationErrors(prev => ({ ...prev, [q.id]: "" }));
             }}
             required={q.required}
-            className={`w-full h-12 pl-10 pr-11 bg-white !bg-white border rounded-xl text-sm font-medium text-black !text-black dark:text-black dark:!text-black placeholder:text-slate-400 dark:placeholder:text-slate-400 transition-all focus:outline-none ${
+            className={`w-full h-12 pl-10 pr-11 bg-white dark:bg-zinc-900 border rounded-xl text-sm font-medium text-slate-900 dark:text-zinc-100 placeholder:text-slate-400 dark:placeholder:text-zinc-500 transition-all focus:outline-none ${
               validationErrors[q.id] 
                 ? 'border-rose-400 focus:ring-2 focus:ring-rose-200' 
-                : 'border-slate-200 hover:border-slate-300 focus:border-indigo-600 focus:ring-4 focus:ring-indigo-50'
+                : 'border-slate-200 dark:border-zinc-700 hover:border-slate-300 dark:hover:border-zinc-600 focus:border-indigo-600 focus:ring-4 focus:ring-indigo-50 dark:focus:ring-indigo-950/40'
             }`}
           />
           <button
@@ -1621,10 +1621,10 @@ export default function PublicFormPage() {
               if (validationErrors[q.id]) setValidationErrors(prev => ({ ...prev, [q.id]: "" }));
             }}
             required={q.required}
-            className={`w-full py-3 bg-white !bg-white border rounded-xl text-sm font-medium text-black !text-black dark:text-black dark:!text-black placeholder:text-slate-400 dark:placeholder:text-slate-400 transition-all resize-y min-h-[100px] focus:outline-none ${
+            className={`w-full py-3 bg-white dark:bg-zinc-900 border rounded-xl text-sm font-medium text-slate-900 dark:text-zinc-100 placeholder:text-slate-400 dark:placeholder:text-zinc-500 transition-all resize-y min-h-[100px] focus:outline-none ${
               validationErrors[q.id] 
                 ? 'border-rose-400 focus:ring-2 focus:ring-rose-200' 
-                : 'border-slate-200 hover:border-slate-300 focus:border-indigo-600 focus:ring-4 focus:ring-indigo-50'
+                : 'border-slate-200 dark:border-zinc-700 hover:border-slate-300 dark:hover:border-zinc-600 focus:border-indigo-600 focus:ring-4 focus:ring-indigo-50 dark:focus:ring-indigo-950/40'
             } ${q.type === 'address' ? 'pl-10 pr-4' : 'px-4'}`}
           />
         </div>
@@ -1751,7 +1751,7 @@ export default function PublicFormPage() {
               if (validationErrors[q.id]) setValidationErrors(prev => ({ ...prev, [q.id]: "" }));
             }}
             required={q.required}
-            className="w-full h-12 px-4 bg-white !bg-white border border-slate-200 hover:border-slate-300 rounded-xl text-sm font-medium text-black !text-black dark:text-black dark:!text-black transition-all focus:outline-none focus:border-indigo-600 focus:ring-4 focus:ring-indigo-50 cursor-pointer appearance-none"
+            className="w-full h-12 px-4 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 hover:border-slate-300 dark:hover:border-zinc-600 rounded-xl text-sm font-medium text-slate-900 dark:text-zinc-100 transition-all focus:outline-none focus:border-indigo-600 focus:ring-4 focus:ring-indigo-50 dark:focus:ring-indigo-950/40 cursor-pointer appearance-none"
           >
             <option value="" disabled>Choose an option...</option>
             {options.map((opt: string, oIdx: number) => (
@@ -2001,7 +2001,7 @@ export default function PublicFormPage() {
               if (validationErrors[q.id]) setValidationErrors(prev => ({ ...prev, [q.id]: "" }));
             }}
             required={q.required}
-            className="w-full h-12 pl-10 pr-4 bg-white !bg-white border border-slate-200 hover:border-slate-300 rounded-xl text-sm font-medium text-black !text-black dark:text-black dark:!text-black transition-all focus:outline-none focus:border-indigo-600 focus:ring-4 focus:ring-indigo-50"
+            className="w-full h-12 pl-10 pr-4 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 hover:border-slate-300 dark:hover:border-zinc-600 rounded-xl text-sm font-medium text-slate-900 dark:text-zinc-100 transition-all focus:outline-none focus:border-indigo-600 focus:ring-4 focus:ring-indigo-50 dark:focus:ring-indigo-950/40"
           />
         </div>
       );
@@ -2019,7 +2019,7 @@ export default function PublicFormPage() {
               if (validationErrors[q.id]) setValidationErrors(prev => ({ ...prev, [q.id]: "" }));
             }}
             required={q.required}
-            className="w-full h-12 pl-10 pr-4 bg-white !bg-white border border-slate-200 hover:border-slate-300 rounded-xl text-sm font-medium text-black !text-black dark:text-black dark:!text-black transition-all focus:outline-none focus:border-indigo-600 focus:ring-4 focus:ring-indigo-50"
+            className="w-full h-12 pl-10 pr-4 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 hover:border-slate-300 dark:hover:border-zinc-600 rounded-xl text-sm font-medium text-slate-900 dark:text-zinc-100 transition-all focus:outline-none focus:border-indigo-600 focus:ring-4 focus:ring-indigo-50 dark:focus:ring-indigo-950/40"
           />
         </div>
       );
@@ -2057,7 +2057,7 @@ export default function PublicFormPage() {
                 if (validationErrors[q.id]) setValidationErrors(prev => ({ ...prev, [q.id]: "" }));
               }}
               required={q.required}
-              className="w-full h-12 pl-10 pr-4 bg-white !bg-white border border-slate-200 hover:border-slate-300 rounded-xl text-sm font-medium text-black !text-black dark:text-black dark:!text-black placeholder:text-slate-400 dark:placeholder:text-slate-400 transition-all focus:outline-none focus:border-indigo-600 focus:ring-4 focus:ring-indigo-50"
+              className="w-full h-12 pl-10 pr-4 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 hover:border-slate-300 dark:hover:border-zinc-600 rounded-xl text-sm font-medium text-slate-900 dark:text-zinc-100 placeholder:text-slate-400 dark:placeholder:text-zinc-500 transition-all focus:outline-none focus:border-indigo-600 focus:ring-4 focus:ring-indigo-50 dark:focus:ring-indigo-950/40"
             />
           </div>
           {answers[q.id] && (
@@ -2108,7 +2108,7 @@ export default function PublicFormPage() {
                       }
                     }
                   }}
-                  className="w-9 sm:w-11 h-12 text-center text-base sm:text-lg font-bold border border-slate-200 rounded-xl bg-white !bg-white text-black !text-black dark:text-black dark:!text-black focus:outline-none focus:border-indigo-600 focus:ring-4 focus:ring-indigo-50 flex-1 max-w-[48px]"
+                  className="w-9 sm:w-11 h-12 text-center text-base sm:text-lg font-bold border border-slate-200 dark:border-zinc-700 rounded-xl bg-white dark:bg-zinc-900 text-slate-900 dark:text-zinc-100 focus:outline-none focus:border-indigo-600 focus:ring-4 focus:ring-indigo-50 dark:focus:ring-indigo-950/40 flex-1 max-w-[48px]"
                 />
               );
             })}
@@ -2135,7 +2135,7 @@ export default function PublicFormPage() {
               [q.id]: { ...answers[q.id], cardNumber: e.target.value } 
             })}
             required={q.required}
-            className="w-full h-11 px-3.5 bg-white !bg-white border border-slate-200 rounded-xl text-xs font-medium text-black !text-black dark:text-black dark:!text-black placeholder:text-slate-400 dark:placeholder:text-slate-400 focus:outline-none focus:border-indigo-600"
+            className="w-full h-11 px-3.5 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 rounded-xl text-xs font-medium text-slate-900 dark:text-zinc-100 placeholder:text-slate-400 dark:placeholder:text-zinc-500 focus:outline-none focus:border-indigo-600"
           />
           <div className="grid grid-cols-2 gap-3">
             <input
@@ -2147,7 +2147,7 @@ export default function PublicFormPage() {
                 [q.id]: { ...answers[q.id], expiry: e.target.value } 
               })}
               required={q.required}
-              className="w-full h-11 px-3.5 bg-white !bg-white border border-slate-200 rounded-xl text-xs font-medium text-black !text-black dark:text-black dark:!text-black placeholder:text-slate-400 dark:placeholder:text-slate-400 focus:outline-none focus:border-indigo-600"
+              className="w-full h-11 px-3.5 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 rounded-xl text-xs font-medium text-slate-900 dark:text-zinc-100 placeholder:text-slate-400 dark:placeholder:text-zinc-500 focus:outline-none focus:border-indigo-600"
             />
             <input
               type="text"
@@ -2158,7 +2158,7 @@ export default function PublicFormPage() {
                 [q.id]: { ...answers[q.id], cvc: e.target.value } 
               })}
               required={q.required}
-              className="w-full h-11 px-3.5 bg-white !bg-white border border-slate-200 rounded-xl text-xs font-medium text-black !text-black dark:text-black dark:!text-black placeholder:text-slate-400 dark:placeholder:text-slate-400 focus:outline-none focus:border-indigo-600"
+              className="w-full h-11 px-3.5 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 rounded-xl text-xs font-medium text-slate-900 dark:text-zinc-100 placeholder:text-slate-400 dark:placeholder:text-zinc-500 focus:outline-none focus:border-indigo-600"
             />
           </div>
         </div>
@@ -2176,7 +2176,7 @@ export default function PublicFormPage() {
           if (validationErrors[q.id]) setValidationErrors(prev => ({ ...prev, [q.id]: "" }));
         }}
         required={q.required}
-        className="w-full h-12 px-4 bg-white !bg-white border border-slate-200 hover:border-slate-300 rounded-xl text-sm font-medium text-black !text-black dark:text-black dark:!text-black placeholder:text-slate-400 dark:placeholder:text-slate-400 transition-all focus:outline-none focus:border-indigo-600 focus:ring-4 focus:ring-indigo-50"
+        className="w-full h-12 px-4 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 hover:border-slate-300 dark:hover:border-zinc-600 rounded-xl text-sm font-medium text-slate-900 dark:text-zinc-100 placeholder:text-slate-400 dark:placeholder:text-zinc-500 transition-all focus:outline-none focus:border-indigo-600 focus:ring-4 focus:ring-indigo-50 dark:focus:ring-indigo-950/40"
       />
     );
   };
@@ -2827,7 +2827,7 @@ export default function PublicFormPage() {
                         placeholder="Type your response..."
                         autoFocus
                         required={currentQ.required}
-                        className="flex-1 h-11 px-4 bg-white !bg-white border border-slate-200 rounded-xl text-xs font-medium text-black !text-black dark:text-black dark:!text-black placeholder:text-slate-400 dark:placeholder:text-slate-400 focus:outline-none focus:border-indigo-600"
+                        className="flex-1 h-11 px-4 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 rounded-xl text-xs font-medium text-slate-900 dark:text-zinc-100 placeholder:text-slate-400 dark:placeholder:text-zinc-500 focus:outline-none focus:border-indigo-600"
                       />
                       <button
                         type="submit"

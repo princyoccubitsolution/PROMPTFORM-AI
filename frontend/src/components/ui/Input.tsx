@@ -45,8 +45,8 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
           step={isNumeric ? (step ?? "0.001") : step}
           onKeyDown={handleKeyDown}
           onChange={handleChange}
-          className={`w-full h-10 px-3.5 text-sm border rounded-xl bg-white !bg-white text-black !text-black dark:text-black dark:!text-black placeholder:text-slate-500 dark:placeholder:text-slate-500 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary shadow-2xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-outer-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-inner-spin-button]:m-0 ${
-            error ? "border-destructive focus:ring-destructive/20 focus:border-destructive" : "border-border hover:border-primary/40"
+          className={`w-full h-10 px-3.5 text-sm border rounded-xl bg-card dark:bg-zinc-900 text-slate-900 dark:text-zinc-100 placeholder:text-slate-400 dark:placeholder:text-zinc-500 border-border dark:border-zinc-800 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary shadow-2xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-outer-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-inner-spin-button]:m-0 ${
+            error ? "border-destructive focus:ring-destructive/20 focus:border-destructive" : "hover:border-primary/40"
           } ${className}`}
           {...props}
         />
