@@ -361,9 +361,10 @@ export default function BuilderPage() {
     store.setSaving(true);
     try {
       const expiresAtRaw = store.settings.expires_at;
-      const validExpiresAt = (expiresAtRaw && typeof expiresAtRaw === 'string' && !isNaN(new Date(expiresAtRaw).getTime()))
-        ? expiresAtRaw
-        : null;
+      const validExpiresAt = expiresAtRaw ? (() => {
+        const d = new Date(expiresAtRaw);
+        return !isNaN(d.getTime()) ? d.toISOString() : null;
+      })() : null;
       const normalizedSettings = {
         ...store.settings,
         expires_at: validExpiresAt,
@@ -400,9 +401,10 @@ export default function BuilderPage() {
     const newStatus = store.status === 'PUBLISHED' ? 'CLOSED' : 'PUBLISHED';
     try {
       const pubExpiresAtRaw = store.settings.expires_at;
-      const pubValidExpiresAt = (pubExpiresAtRaw && typeof pubExpiresAtRaw === 'string' && !isNaN(new Date(pubExpiresAtRaw).getTime()))
-        ? pubExpiresAtRaw
-        : null;
+      const pubValidExpiresAt = pubExpiresAtRaw ? (() => {
+        const d = new Date(pubExpiresAtRaw);
+        return !isNaN(d.getTime()) ? d.toISOString() : null;
+      })() : null;
       const normalizedSettings = {
         ...store.settings,
         expires_at: pubValidExpiresAt,
@@ -2240,6 +2242,21 @@ export default function BuilderPage() {
                         <p className="text-[10px] text-muted-foreground font-normal leading-relaxed pt-1">
                           ⏱️ Respondents will see a live countdown clock at the top of the form. When time expires, answers are automatically submitted and the form locks against further modifications.
                         </p>
+
+                        {/* Save Session Timer Settings Quick Button */}
+                        <div className="pt-2 flex items-center justify-between border-t border-border/50">
+                          <button
+                            type="button"
+                            onClick={handleSaveForm}
+                            className="px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                            Save Session Timer Settings
+                          </button>
+                          <span className="text-[10px] text-muted-foreground font-medium">
+                            Applies to live form immediately
+                          </span>
+                        </div>
                       </div>
                     )}
                   </div>

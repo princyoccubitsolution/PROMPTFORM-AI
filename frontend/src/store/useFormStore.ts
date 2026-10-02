@@ -144,12 +144,12 @@ export const useFormStore = create<FormState>((set) => ({
         display_mode: 'full',
         ...rawSettings,
         timer_limit: Number(rawSettings?.timer_limit) || 0,
-        // Validate expires_at: only accept valid ISO date strings, otherwise null
+        // Validate expires_at: accept valid ISO date strings or Date objects, otherwise null
         expires_at: (() => {
           const val = rawSettings?.expires_at;
-          if (!val || typeof val !== 'string') return null;
+          if (!val) return null;
           const d = new Date(val);
-          return isNaN(d.getTime()) ? null : val;
+          return isNaN(d.getTime()) ? null : d.toISOString();
         })()
       },
       theme: {
