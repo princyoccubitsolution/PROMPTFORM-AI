@@ -236,14 +236,27 @@ export default function PublicFormPage() {
     setErrorMessage("");
     try {
       const data = await api.get(`/forms/${formId}`);
-      setForm(data);
-      let loadedQuestions = data.questions || [];
+      const parsedSettings = typeof data.settings === 'string'
+        ? (() => { try { return JSON.parse(data.settings); } catch (_) { return {}; } })()
+        : (data.settings || {});
+      const parsedTheme = typeof data.theme === 'string'
+        ? (() => { try { return JSON.parse(data.theme); } catch (_) { return {}; } })()
+        : (data.theme || {});
+
+      const normalizedData = {
+        ...data,
+        settings: parsedSettings,
+        theme: parsedTheme
+      };
+
+      setForm(normalizedData);
+      let loadedQuestions = normalizedData.questions || [];
 
       // Detect if this is a Quiz or Student Assessment
       const isQuizOrStudent = Boolean(
-        data.category === 'quiz' || 
-        data.category === 'education' ||
-        (data.title || '').toLowerCase().match(/(quiz|exam|test|student|assessment|class|college|school)/i) ||
+        normalizedData.category === 'quiz' || 
+        normalizedData.category === 'education' ||
+        (normalizedData.title || '').toLowerCase().match(/(quiz|exam|test|student|assessment|class|college|school)/i) ||
         loadedQuestions.some((q: any) => {
           const l = (q.label || '').toLowerCase();
           return l.includes('enrollment') || l.includes('roll') || l.includes('student id');
@@ -253,9 +266,9 @@ export default function PublicFormPage() {
       // Check if already submitted in this browser session (or single response limit active)
       const searchParams = new URLSearchParams(window.location.search);
       const isPreviewMode = searchParams.get('preview') === 'true';
-      const submittedKey1 = `promptform_submitted_${data.id}`;
+      const submittedKey1 = `promptform_submitted_${normalizedData.id}`;
       const submittedKey2 = `promptform_submitted_${formId}`;
-      const submittedKey3 = data.uniqueShareId ? `promptform_submitted_${data.uniqueShareId}` : null;
+      const submittedKey3 = normalizedData.uniqueShareId ? `promptform_submitted_${normalizedData.uniqueShareId}` : null;
 
       if (typeof window !== 'undefined' && !isPreviewMode) {
         const hasSubmitted = 
@@ -266,7 +279,7 @@ export default function PublicFormPage() {
         if (hasSubmitted) {
           setHasStarted(true);
           const savedAnswers = 
-            localStorage.getItem(`promptform_submission_answers_${data.id}`) ||
+            localStorage.getItem(`promptform_submission_answers_${normalizedData.id}`) ||
             localStorage.getItem(`promptform_submission_answers_${formId}`) ||
             (submittedKey3 ? localStorage.getItem(`promptform_submission_answers_${submittedKey3}`) : null);
 
@@ -287,9 +300,9 @@ export default function PublicFormPage() {
       }
 
       // Check form expiration deadline
-      const formExpiresAt = data.settings?.expires_at;
+      const formExpiresAt = parsedSettings.expires_at;
       const isFormExpired = Boolean(
-        data.isExpired || 
+        normalizedData.isExpired || 
         (formExpiresAt && new Date(formExpiresAt).getTime() <= Date.now())
       );
 
@@ -297,8 +310,8 @@ export default function PublicFormPage() {
         setIsInactive(true);
         setIsExpiredState(true);
         setStatusMessage(
-          data.message || 
-          data.settings?.expiration_message || 
+          normalizedData.message || 
+          parsedSettings.expiration_message || 
           (formExpiresAt 
             ? `This form reached its deadline on ${new Date(formExpiresAt).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })} and is no longer accepting responses.`
             : "This form has expired and is no longer accepting responses.")

@@ -34,6 +34,18 @@ export const inMemoryNotifications: LiveNotification[] = [
   { id: "mock_1", userId: "all_users", text: "Welcome to PromptForm AI! Your dashboard is ready.", time: "1h ago", read: false }
 ];
 
+const parseSettings = (settings: any): Record<string, any> => {
+  if (!settings) return {};
+  if (typeof settings === 'string') {
+    try {
+      return JSON.parse(settings);
+    } catch (_) {
+      return {};
+    }
+  }
+  return typeof settings === 'object' ? settings : {};
+};
+
 const validateUuidMiddleware = (req: Request, res: Response, next: NextFunction) => {
   const { id } = req.params;
   if (!isUUID(id)) {
@@ -234,8 +246,10 @@ router.get('/:id', async (req: Request, res: Response) => {
       try {
         const cachedForm = JSON.parse(cachedFormStr);
 
+        const cachedSettings = parseSettings(cachedForm.settings);
+
         // Guard: check if form has expired based on expires_at deadline
-        const cachedExpiresAt = cachedForm.settings?.expires_at;
+        const cachedExpiresAt = cachedSettings.expires_at;
         let isCachedExpired = false;
         if (cachedExpiresAt) {
           const expiryDate = new Date(cachedExpiresAt);
@@ -258,16 +272,17 @@ router.get('/:id', async (req: Request, res: Response) => {
           if (!isOwner) {
             return res.json({
               ...cachedForm,
+              settings: cachedSettings,
               status: 'CLOSED',
               isExpired: true,
               questions: [],
-              message: cachedForm.settings?.expiration_message || 'This form has expired and is no longer accepting responses.'
+              message: cachedSettings.expiration_message || 'This form has expired and is no longer accepting responses.'
             });
           }
         }
 
         // Guard: mask questions if form is password-protected and correct password not provided
-        const formPassword = cachedForm.settings?.password;
+        const formPassword = cachedSettings.password;
         if (formPassword) {
           const providedPassword = req.headers['x-form-password'] || req.query.password;
           let isOwner = false;
@@ -350,8 +365,10 @@ router.get('/:id', async (req: Request, res: Response) => {
       await cache.set(getShareFormCacheKey(form.uniqueShareId), JSON.stringify(form), cacheTTL);
     }
 
+    const parsedDbSettings = parseSettings(form.settings);
+
     // Guard: check if form has expired based on expires_at deadline
-    const expiresAt = (form.settings as any)?.expires_at;
+    const expiresAt = parsedDbSettings.expires_at;
     let isExpired = false;
     if (expiresAt) {
       const expiryDate = new Date(expiresAt);
@@ -383,16 +400,17 @@ router.get('/:id', async (req: Request, res: Response) => {
         }
         return res.json({
           ...form,
+          settings: parsedDbSettings,
           status: 'CLOSED',
           isExpired: true,
           questions: [],
-          message: (form.settings as any)?.expiration_message || 'This form has expired and is no longer accepting responses.'
+          message: parsedDbSettings.expiration_message || 'This form has expired and is no longer accepting responses.'
         });
       }
     }
 
     // Guard: mask questions if form is password-protected and correct password not provided
-    const formPassword = (form.settings as any)?.password;
+    const formPassword = parsedDbSettings.password;
     if (formPassword) {
       const providedPassword = req.headers['x-form-password'] || req.query.password;
       let isOwner = false;
@@ -472,14 +490,15 @@ const updateFormHandler = async (req: AuthenticatedRequest, res: Response) => {
     // Build merged settings — explicitly preserve expires_at even when sent as null (toggle off)
     let mergedSettings: Record<string, any> | undefined = undefined;
     if (body.settings) {
-      mergedSettings = { ...existingSettings, ...body.settings };
+      const newSettings: Record<string, any> = { ...existingSettings, ...body.settings };
       // Explicitly handle expires_at: if the frontend sends it (including null), honour it;
       // if the frontend didn't send it at all, keep the existing DB value.
       if (body.settings.expires_at !== undefined) {
-        mergedSettings.expires_at = body.settings.expires_at;
+        newSettings.expires_at = body.settings.expires_at;
       } else if (existingSettings.expires_at !== undefined) {
-        mergedSettings.expires_at = existingSettings.expires_at;
+        newSettings.expires_at = existingSettings.expires_at;
       }
+      mergedSettings = newSettings;
     }
 
     const updatedForm = await db.form.update({
@@ -741,8 +760,10 @@ router.post('/:id/submit', async (req: Request, res: Response) => {
     }
     if (!form) return res.status(404).json({ error: 'Form not found' });
 
+    const formSettings = parseSettings(form.settings);
+
     // Guard: check if form deadline has expired
-    const expiresAt = (form.settings as any)?.expires_at;
+    const expiresAt = formSettings.expires_at;
     if (expiresAt) {
       const expiryDate = new Date(expiresAt);
       if (!isNaN(expiryDate.getTime()) && Date.now() > expiryDate.getTime()) {
@@ -756,7 +777,7 @@ router.post('/:id/submit', async (req: Request, res: Response) => {
           } catch (_) {}
         }
         return res.status(400).json({
-          error: (form.settings as any)?.expiration_message || 'This form has expired and is no longer accepting responses.',
+          error: formSettings.expiration_message || 'This form has expired and is no longer accepting responses.',
           isExpired: true
         });
       }
@@ -773,7 +794,7 @@ router.post('/:id/submit', async (req: Request, res: Response) => {
     }
 
     // Verify form password if password protection is configured
-    const formPassword = (form.settings as any)?.password;
+    const formPassword = formSettings.password;
     if (formPassword) {
       const submittedPassword = req.body.password || req.headers['x-form-password'];
       if (!submittedPassword || submittedPassword !== formPassword) {
@@ -786,7 +807,7 @@ router.post('/:id/submit', async (req: Request, res: Response) => {
     const isForceSubmit = Boolean(req.body.isForceSubmit || req.body.isTimeExpired || (req.body.browserMetadata?.is_flagged && Number(req.body.browserMetadata?.tab_switches) >= 3));
 
     // Enforce session timer limit (if configured)
-    const timerLimitMinutes = Number((form.settings as any)?.timer_limit) || 0;
+    const timerLimitMinutes = Number(formSettings.timer_limit) || 0;
     if (timerLimitMinutes > 0 && !isForceSubmit) {
       const maxAllowedSeconds = (timerLimitMinutes * 60) + 120; // 2 min grace period for network latency
       if (timeTaken > maxAllowedSeconds) {

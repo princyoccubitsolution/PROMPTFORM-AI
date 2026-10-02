@@ -77,6 +77,14 @@ function DashboardContent() {
   const [teams, setTeams] = useState<any[]>([]);
   const [templates, setTemplates] = useState<any[]>([]);
   const [workspaceAnalytics, setWorkspaceAnalytics] = useState<any>(null);
+  const getFormExpiresAt = (rawSettings: any): string | null => {
+    if (!rawSettings) return null;
+    const parsed = typeof rawSettings === 'string'
+      ? (() => { try { return JSON.parse(rawSettings); } catch (_) { return null; } })()
+      : rawSettings;
+    return parsed?.expires_at || null;
+  };
+
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -599,16 +607,21 @@ function DashboardContent() {
                                       }`}>
                                         {form.status}
                                       </span>
-                                      {form.settings?.expires_at && (
-                                        <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold inline-flex items-center gap-1 ${
-                                          new Date(form.settings.expires_at).getTime() <= Date.now()
-                                            ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/25'
-                                            : 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/25'
-                                        }`}>
-                                          <Clock className="w-3 h-3" />
-                                          {new Date(form.settings.expires_at).getTime() <= Date.now() ? 'Expired' : 'Timed'}
-                                        </span>
-                                      )}
+                                      {(() => {
+                                        const expiresAtVal = getFormExpiresAt(form.settings);
+                                        if (!expiresAtVal) return null;
+                                        const isExpiredBadge = new Date(expiresAtVal).getTime() <= Date.now();
+                                        return (
+                                          <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold inline-flex items-center gap-1 ${
+                                            isExpiredBadge
+                                              ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/25'
+                                              : 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/25'
+                                          }`}>
+                                            <Clock className="w-3 h-3" />
+                                            {isExpiredBadge ? 'Expired' : 'Timed'}
+                                          </span>
+                                        );
+                                      })()}
                                     </div>
                                   </td>
                                   <td className="py-3.5 px-4 font-semibold text-foreground">{form._count?.responses || 0}</td>
@@ -692,16 +705,21 @@ function DashboardContent() {
                                 }`}>
                                   {form.status}
                                 </span>
-                                {form.settings?.expires_at && (
-                                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 ${
-                                    new Date(form.settings.expires_at).getTime() <= Date.now()
-                                      ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/50 dark:text-rose-300'
-                                      : 'bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300'
-                                  }`}>
-                                    <Clock className="w-3 h-3" />
-                                    {new Date(form.settings.expires_at).getTime() <= Date.now() ? 'Expired' : 'Timed'}
-                                  </span>
-                                )}
+                                {(() => {
+                                  const expiresAtVal = getFormExpiresAt(form.settings);
+                                  if (!expiresAtVal) return null;
+                                  const isExpiredBadge = new Date(expiresAtVal).getTime() <= Date.now();
+                                  return (
+                                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 ${
+                                      isExpiredBadge
+                                        ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/50 dark:text-rose-300'
+                                        : 'bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300'
+                                    }`}>
+                                      <Clock className="w-3 h-3" />
+                                      {isExpiredBadge ? 'Expired' : 'Timed'}
+                                    </span>
+                                  );
+                                })()}
                               </div>
                             </div>
                             <CardDescription className="line-clamp-2 text-xs mt-1 leading-normal">{form.description || "No description provided."}</CardDescription>

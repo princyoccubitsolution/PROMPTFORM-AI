@@ -103,6 +103,19 @@ export default function BuilderPage() {
     setAccordions(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
+  // Helper to parse datetime-local string to local Date object
+  const parseLocalDatetimeInput = (val: string): Date | null => {
+    if (!val) return null;
+    const parts = val.split('T');
+    if (parts.length < 2) return null;
+    const [dateStr, timeStr] = parts;
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const [hours, minutes] = timeStr.split(':').map(Number);
+    if (!year || !month || !day || isNaN(hours) || isNaN(minutes)) return null;
+    const d = new Date(year, month - 1, day, hours, minutes);
+    return isNaN(d.getTime()) ? null : d;
+  };
+
   // Helper to format ISO string to datetime-local input string
   const toDateTimeLocalValue = (isoString?: string | null) => {
     if (!isoString) return '';
@@ -2075,8 +2088,8 @@ export default function BuilderPage() {
                             onChange={(e) => {
                               const val = e.target.value;
                               if (val) {
-                                const d = new Date(val);
-                                if (!isNaN(d.getTime())) {
+                                const d = parseLocalDatetimeInput(val) || new Date(val);
+                                if (d && !isNaN(d.getTime())) {
                                   store.updateSettings({ expires_at: d.toISOString() });
                                 }
                               }
@@ -2144,6 +2157,21 @@ export default function BuilderPage() {
                             onChange={(e) => store.updateSettings({ expiration_message: e.target.value || null })}
                             className="h-9 text-xs rounded-lg bg-muted dark:bg-background border-border text-foreground dark:text-zinc-200"
                           />
+                        </div>
+
+                        {/* Save Expiration Settings Quick Button */}
+                        <div className="pt-2 flex items-center justify-between border-t border-border/50">
+                          <button
+                            type="button"
+                            onClick={handleSaveForm}
+                            className="px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                            Save Deadline Settings
+                          </button>
+                          <span className="text-[10px] text-muted-foreground font-medium">
+                            Applies to live form immediately
+                          </span>
                         </div>
                       </div>
                     )}
