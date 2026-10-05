@@ -9,7 +9,7 @@ import {
   ExternalLink, Globe, Code, Download, Shield, BarChart3, AlertTriangle, CheckCircle2,
   QrCode, Mail, ArrowUp, ArrowDown, GripVertical, Calendar, Clock, CreditCard,
   Undo2, Redo2, History, Search, ChevronRight, ChevronDown, Bell, Moon, Sun, 
-  MoreHorizontal, User, Sparkle,
+  MoreHorizontal, User, Users, Sparkle,
   Phone, MapPin, Lock, Link, Hash, DollarSign, Image
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
@@ -21,6 +21,7 @@ import { useFormStore, Question } from '@/store/useFormStore';
 import { api, getBaseUrl } from '@/lib/api';
 import { Modal } from '@/components/ui/Modal';
 import { ShareModal } from '@/components/ShareModal';
+import { FormCollaboratorsModal } from '@/components/FormCollaboratorsModal';
 import { UpgradeModal } from '@/components/UpgradeModal';
 import { CustomSelect } from '@/components/ui/CustomSelect';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -161,6 +162,7 @@ export default function BuilderPage() {
 
   // Modals state
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [isCollaboratorsModalOpen, setIsCollaboratorsModalOpen] = useState(false);
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
   const [isResponseModalOpen, setIsResponseModalOpen] = useState(false);
   const [selectedResponse, setSelectedResponse] = useState<any>(null);
@@ -889,6 +891,18 @@ export default function BuilderPage() {
               <Share2 className="w-4 h-4 sm:mr-1.5" />
               <span className="hidden sm:inline">Public / Share</span>
               <span className="sm:hidden">Share</span>
+            </Button>
+
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => setIsCollaboratorsModalOpen(true)} 
+              className="h-9 px-2.5 sm:px-3 rounded-lg border border-border dark:border-border hover:bg-accent dark:hover:bg-zinc-800 text-xs font-semibold text-foreground dark:text-zinc-200"
+              title="Form Collaborators"
+            >
+              <Users className="w-4 h-4 sm:mr-1.5 text-primary" />
+              <span className="hidden sm:inline">Collaborators</span>
+              <span className="sm:hidden">People</span>
             </Button>
 
             <button 
@@ -2827,6 +2841,14 @@ export default function BuilderPage() {
         uniqueShareId={store.uniqueShareId || undefined}
         publicUrl={store.publicUrl || undefined}
         defaultMode={store.settings.display_mode || 'full'}
+      />
+
+      {/* FORM COLLABORATORS DIALOG */}
+      <FormCollaboratorsModal
+        isOpen={isCollaboratorsModalOpen}
+        onClose={() => setIsCollaboratorsModalOpen(false)}
+        formId={formId}
+        formTitle={store.title}
       />
 
       {/* RESPONSE VIEWER DETAILS MODAL */}

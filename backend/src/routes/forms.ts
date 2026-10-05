@@ -5,6 +5,7 @@ import { cache } from '../lib/cache';
 import { authMiddleware, AuthenticatedRequest } from '../middlewares/auth';
 import { subscriptionMiddleware } from '../middlewares/subscription';
 import { isUUID, generateUniqueShareId, hasFormAccess } from '../lib/utils';
+import { logActivity } from '../lib/activity';
 import { FormsService } from '../services/formsService';
 import { AnalyticsService } from '../services/analyticsService';
 
@@ -143,17 +144,30 @@ router.get('/', authMiddleware, async (req: AuthenticatedRequest, res: Response)
     const limitParam = req.query.limit;
     const pageParam = req.query.page;
 
+    const queryWhere = {
+      OR: [
+        { ownerId: req.user.id },
+        { teamId: { in: teamIds } },
+        { collaborators: { some: { userId: req.user.id } } }
+      ]
+    };
+
     if (limitParam === undefined && pageParam === undefined) {
       // Unpaginated plain array for backward compatibility
       const forms = await db.form.findMany({
-        where: {
-          OR: [
-            { ownerId: req.user.id },
-            { teamId: { in: teamIds } }
-          ]
-        },
+        where: queryWhere,
         orderBy: { updatedAt: 'desc' },
         include: {
+          owner: {
+            select: { id: true, name: true, email: true }
+          },
+          team: {
+            select: { id: true, name: true }
+          },
+          collaborators: {
+            where: { userId: req.user.id },
+            select: { role: true }
+          },
           _count: {
             select: { responses: true }
           }
@@ -168,28 +182,28 @@ router.get('/', authMiddleware, async (req: AuthenticatedRequest, res: Response)
 
     const [forms, totalCount] = await Promise.all([
       db.form.findMany({
-        where: {
-          OR: [
-            { ownerId: req.user.id },
-            { teamId: { in: teamIds } }
-          ]
-        },
+        where: queryWhere,
         orderBy: { updatedAt: 'desc' },
         skip,
         take: limit,
         include: {
+          owner: {
+            select: { id: true, name: true, email: true }
+          },
+          team: {
+            select: { id: true, name: true }
+          },
+          collaborators: {
+            where: { userId: req.user.id },
+            select: { role: true }
+          },
           _count: {
             select: { responses: true }
           }
         }
       }),
       db.form.count({
-        where: {
-          OR: [
-            { ownerId: req.user.id },
-            { teamId: { in: teamIds } }
-          ]
-        }
+        where: queryWhere
       })
     ]);
 
@@ -228,6 +242,38 @@ router.post('/notifications/live/read-all', authMiddleware, async (req: Authenti
     });
     return res.json({ success: true });
   } catch (error) {
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// SHARED WITH ME: Get forms where current user is a direct collaborator
+router.get('/collaborations/shared-with-me', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
+
+    const sharedForms = await db.formCollaborator.findMany({
+      where: { userId: req.user.id },
+      include: {
+        form: {
+          include: {
+            owner: { select: { id: true, name: true, email: true } },
+            team: { select: { id: true, name: true } },
+            _count: { select: { responses: true } }
+          }
+        }
+      },
+      orderBy: { updatedAt: 'desc' }
+    });
+
+    const result = sharedForms.map(sf => ({
+      ...sf.form,
+      accessRole: sf.role,
+      responseCount: sf.form._count.responses
+    }));
+
+    return res.json(result);
+  } catch (error) {
+    console.error('[Forms] Error fetching shared forms:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -446,6 +492,15 @@ router.post('/', authMiddleware, subscriptionMiddleware, async (req: Authenticat
 
     const form = await FormsService.createForm(req.user.id, body);
 
+    await logActivity({
+      userId: req.user.id,
+      action: 'FORM_CREATED',
+      formId: form.id,
+      teamId: form.teamId,
+      targetTitle: form.title,
+      details: `${req.user.name || req.user.email} created form "${form.title}"`
+    });
+
     return res.status(201).json(form);
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -491,8 +546,6 @@ const updateFormHandler = async (req: AuthenticatedRequest, res: Response) => {
     let mergedSettings: Record<string, any> | undefined = undefined;
     if (body.settings) {
       const newSettings: Record<string, any> = { ...existingSettings, ...body.settings };
-      // Explicitly handle expires_at: if the frontend sends it (including null), honour it;
-      // if the frontend didn't send it at all, keep the existing DB value.
       if (body.settings.expires_at !== undefined) {
         newSettings.expires_at = body.settings.expires_at;
       } else if (existingSettings.expires_at !== undefined) {
@@ -519,7 +572,27 @@ const updateFormHandler = async (req: AuthenticatedRequest, res: Response) => {
 
     // Force-invalidate Redis cache so the live site never serves stale form data
     await invalidateFormCache(updatedForm.id, updatedForm.uniqueShareId);
-    console.log(`[forms] Cache invalidated for form ${updatedForm.id} (share: ${updatedForm.uniqueShareId})`);
+
+    // Log activity
+    if (body.status === 'PUBLISHED' && form.status !== 'PUBLISHED') {
+      await logActivity({
+        userId: req.user.id,
+        action: 'FORM_PUBLISHED',
+        formId: updatedForm.id,
+        teamId: updatedForm.teamId,
+        targetTitle: updatedForm.title,
+        details: `${req.user.name || req.user.email} published "${updatedForm.title}"`
+      });
+    } else {
+      await logActivity({
+        userId: req.user.id,
+        action: 'FORM_UPDATED',
+        formId: updatedForm.id,
+        teamId: updatedForm.teamId,
+        targetTitle: updatedForm.title,
+        details: `${req.user.name || req.user.email} updated "${updatedForm.title}"`
+      });
+    }
 
     return res.json(updatedForm);
   } catch (error) {
@@ -613,8 +686,218 @@ router.delete('/:id', authMiddleware, validateUuidMiddleware, async (req: Authen
 
     await invalidateFormCache(id, form.uniqueShareId);
     await db.form.delete({ where: { id } });
+
+    await logActivity({
+      userId: req.user.id,
+      action: 'FORM_DELETED',
+      teamId: form.teamId,
+      targetTitle: form.title,
+      details: `${req.user.name || req.user.email} deleted form "${form.title}"`
+    });
+
     return res.json({ message: 'Form deleted successfully' });
   } catch (error) {
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ==================== FORM COLLABORATORS API ====================
+
+// GET: List all collaborators for a specific form
+router.get('/:id/collaborators', authMiddleware, validateUuidMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
+    const { id } = req.params;
+
+    const form = await db.form.findUnique({
+      where: { id },
+      include: {
+        owner: { select: { id: true, name: true, email: true } },
+        collaborators: {
+          include: {
+            user: { select: { id: true, name: true, email: true } }
+          },
+          orderBy: { createdAt: 'asc' }
+        }
+      }
+    });
+
+    if (!form) return res.status(404).json({ error: 'Form not found' });
+
+    const hasAccess = await hasFormAccess(id, req.user.id, ['admin', 'editor', 'viewer']);
+    if (!hasAccess) {
+      return res.status(403).json({ error: 'Forbidden. You do not have access to this form.' });
+    }
+
+    const collaboratorsList = [
+      {
+        id: `owner-${form.owner.id}`,
+        userId: form.owner.id,
+        role: 'owner',
+        user: form.owner,
+        isOwner: true
+      },
+      ...form.collaborators.map(c => ({
+        id: c.id,
+        userId: c.userId,
+        role: c.role,
+        user: c.user,
+        isOwner: false
+      }))
+    ];
+
+    return res.json({
+      formId: form.id,
+      title: form.title,
+      ownerId: form.ownerId,
+      isCurrentUserOwner: form.ownerId === req.user.id,
+      collaborators: collaboratorsList
+    });
+  } catch (error) {
+    console.error('[Forms] Get collaborators error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST: Add collaborator to form
+router.post('/:id/collaborators', authMiddleware, validateUuidMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
+    const { id } = req.params;
+    const { email, role } = z.object({
+      email: z.string().email(),
+      role: z.enum(['editor', 'viewer']).default('editor')
+    }).parse(req.body);
+
+    const form = await db.form.findUnique({ where: { id } });
+    if (!form) return res.status(404).json({ error: 'Form not found' });
+
+    if (form.ownerId !== req.user.id) {
+      return res.status(403).json({ error: 'Forbidden. Only the form owner can add collaborators.' });
+    }
+
+    const targetUser = await db.user.findUnique({ where: { email: email.toLowerCase() } });
+    if (!targetUser) {
+      return res.status(404).json({ error: 'No user registered with this email address.' });
+    }
+
+    if (targetUser.id === form.ownerId) {
+      return res.status(400).json({ error: 'The form owner is already a collaborator.' });
+    }
+
+    const existing = await db.formCollaborator.findUnique({
+      where: { formId_userId: { formId: id, userId: targetUser.id } }
+    });
+
+    if (existing) {
+      return res.status(400).json({ error: 'This user is already a collaborator on this form.' });
+    }
+
+    const collaborator = await db.formCollaborator.create({
+      data: {
+        formId: id,
+        userId: targetUser.id,
+        role
+      },
+      include: {
+        user: { select: { id: true, name: true, email: true } }
+      }
+    });
+
+    await logActivity({
+      userId: req.user.id,
+      action: 'COLLABORATOR_ADDED',
+      formId: id,
+      teamId: form.teamId,
+      targetTitle: form.title,
+      details: `${targetUser.name || targetUser.email} was added as ${role} to "${form.title}"`
+    });
+
+    return res.status(201).json(collaborator);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: 'Validation failed', details: error.errors });
+    }
+    console.error('[Forms] Add collaborator error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PUT: Update collaborator role
+router.put('/:id/collaborators/:collaboratorId', authMiddleware, validateUuidMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
+    const { id, collaboratorId } = req.params;
+    const { role } = z.object({ role: z.enum(['editor', 'viewer']) }).parse(req.body);
+
+    const form = await db.form.findUnique({ where: { id } });
+    if (!form) return res.status(404).json({ error: 'Form not found' });
+
+    if (form.ownerId !== req.user.id) {
+      return res.status(403).json({ error: 'Forbidden. Only the form owner can change collaborator roles.' });
+    }
+
+    const updated = await db.formCollaborator.update({
+      where: { id: collaboratorId },
+      data: { role },
+      include: {
+        user: { select: { id: true, name: true, email: true } }
+      }
+    });
+
+    await logActivity({
+      userId: req.user.id,
+      action: 'ROLE_CHANGED',
+      formId: id,
+      teamId: form.teamId,
+      targetTitle: form.title,
+      details: `Role of ${updated.user.name || updated.user.email} changed to ${role} on "${form.title}"`
+    });
+
+    return res.json(updated);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: 'Validation failed', details: error.errors });
+    }
+    console.error('[Forms] Update collaborator error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DELETE: Remove collaborator
+router.delete('/:id/collaborators/:collaboratorId', authMiddleware, validateUuidMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
+    const { id, collaboratorId } = req.params;
+
+    const form = await db.form.findUnique({ where: { id } });
+    if (!form) return res.status(404).json({ error: 'Form not found' });
+
+    const collab = await db.formCollaborator.findUnique({
+      where: { id: collaboratorId },
+      include: { user: true }
+    });
+
+    if (!collab) return res.status(404).json({ error: 'Collaborator not found' });
+
+    if (form.ownerId !== req.user.id && collab.userId !== req.user.id) {
+      return res.status(403).json({ error: 'Forbidden. Only owner or collaborator can remove collaboration.' });
+    }
+
+    await db.formCollaborator.delete({ where: { id: collaboratorId } });
+
+    await logActivity({
+      userId: req.user.id,
+      action: 'COLLABORATOR_REMOVED',
+      formId: id,
+      teamId: form.teamId,
+      targetTitle: form.title,
+      details: `${collab.user.name || collab.user.email} was removed from "${form.title}"`
+    });
+
+    return res.json({ message: 'Collaborator removed successfully.' });
+  } catch (error) {
+    console.error('[Forms] Remove collaborator error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -1030,6 +1313,16 @@ router.post('/:id/submit', async (req: Request, res: Response) => {
       text: `New response received for '${form.title}'.`,
       time: "Just now",
       read: false
+    });
+
+    // Log Activity in database
+    await logActivity({
+      userId: form.ownerId,
+      action: 'RESPONSE_RECEIVED',
+      formId: form.id,
+      teamId: form.teamId,
+      targetTitle: form.title,
+      details: `New response received for "${form.title}"`
     });
 
     // Log submit event in analytics

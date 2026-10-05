@@ -6,6 +6,7 @@ export interface AuthenticatedRequest extends Request {
   user?: {
     id: string;
     email: string;
+    name?: string | null;
     role: string;
     subscriptionPlan: string;
   };
@@ -34,6 +35,7 @@ export const authMiddleware = async (req: AuthenticatedRequest, res: Response, n
       select: {
         id: true,
         email: true,
+        name: true,
         role: true,
         subscriptionPlan: true,
         activeSessionToken: true
@@ -55,6 +57,7 @@ export const authMiddleware = async (req: AuthenticatedRequest, res: Response, n
     req.user = {
       id: user.id,
       email: user.email,
+      name: user.name,
       role: user.role,
       subscriptionPlan: user.subscriptionPlan
     };

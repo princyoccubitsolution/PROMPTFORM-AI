@@ -21,6 +21,10 @@ import { BrandedLogo } from '@/components/NavigationHeader';
 import { UpgradeModal } from '@/components/UpgradeModal';
 import { CustomSelect } from '@/components/ui/CustomSelect';
 import { AssistantChat } from '@/components/AssistantChat';
+import { TeamDashboard } from '@/components/team/TeamDashboard';
+import { TeamSwitcher } from '@/components/team/TeamSwitcher';
+import { CreateFormModal } from '@/components/CreateFormModal';
+import { FormCollaboratorsModal } from '@/components/FormCollaboratorsModal';
 import {
   ResponsiveContainer,
   AreaChart,
@@ -89,6 +93,9 @@ function DashboardContent() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Modals & Action States
+  const [isCreateFormModalOpen, setIsCreateFormModalOpen] = useState(false);
+  const [selectedCollaboratorForm, setSelectedCollaboratorForm] = useState<any>(null);
+  const [formsFilter, setFormsFilter] = useState<string>("all"); // 'all', 'personal', 'team', 'shared'
   const [isCreateTeamOpen, setIsCreateTeamOpen] = useState(false);
   const [newTeamName, setNewTeamName] = useState("");
   const [isInviteOpen, setIsInviteOpen] = useState(false);
@@ -217,21 +224,8 @@ function DashboardContent() {
     router.push('/login');
   };
 
-  const handleCreateBlankForm = async () => {
-    try {
-      const newForm = await api.post('/forms', {
-        title: "Untitled Form",
-        description: "Created in PromptForm AI Dashboard."
-      });
-      router.push(`/builder/${newForm.id}`);
-    } catch (err: any) {
-      if (err.status === 403 && err.data?.status === 'restricted') {
-        setActiveRestriction(err.data);
-        setIsUpgradeModalOpen(true);
-        return;
-      }
-      alert(err.message || "Failed to create form.");
-    }
+  const handleCreateBlankForm = () => {
+    setIsCreateFormModalOpen(true);
   };
 
   const handleGenerateAIFormSubmit = async (e: React.FormEvent) => {
@@ -409,10 +403,22 @@ function DashboardContent() {
   }
 
   // Filtered forms list
-  const filteredForms = forms.filter(form => 
-    form.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    (form.description && form.description.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+  const filteredForms = forms.filter(form => {
+    const matchesSearch = form.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+      (form.description && form.description.toLowerCase().includes(searchQuery.toLowerCase()));
+    if (!matchesSearch) return false;
+
+    if (formsFilter === 'personal') {
+      return !form.teamId && form.ownerId === user?.id;
+    }
+    if (formsFilter === 'team') {
+      return !!form.teamId;
+    }
+    if (formsFilter === 'shared') {
+      return form.ownerId !== user?.id;
+    }
+    return true;
+  });
 
   // Filtered templates list
   const filteredTemplates = templates.filter(tmpl => {
@@ -679,8 +685,31 @@ function DashboardContent() {
                     </div>
                     <Button onClick={handleCreateBlankForm} className="space-x-1 text-xs">
                       <Plus className="w-4 h-4" />
-                      <span>New blank form</span>
+                      <span>New form</span>
                     </Button>
+                  </div>
+
+                  {/* Workspace Scope Filter Tabs */}
+                  <div className="flex items-center space-x-2 border-b border-border/70 pb-2 overflow-x-auto">
+                    {[
+                      { id: "all", label: `All Forms (${forms.length})` },
+                      { id: "personal", label: `My Workspace (${forms.filter(f => !f.teamId && f.ownerId === user?.id).length})` },
+                      { id: "team", label: `Team Forms (${forms.filter(f => !!f.teamId).length})` },
+                      { id: "shared", label: `Shared with Me (${forms.filter(f => f.ownerId !== user?.id).length})` }
+                    ].map(tab => (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        onClick={() => setFormsFilter(tab.id)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                          formsFilter === tab.id
+                            ? 'bg-primary text-primary-foreground shadow-2xs'
+                            : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                        }`}
+                      >
+                        {tab.label}
+                      </button>
+                    ))}
                   </div>
 
                   {/* Forms Grid View */}
@@ -688,7 +717,9 @@ function DashboardContent() {
                     <div className="text-center py-20 border border-dashed border-border dark:border-border rounded-lg bg-card dark:bg-background">
                       <FileText className="w-12 h-12 text-slate-350 mx-auto mb-3" />
                       <h4 className="font-bold text-foreground dark:text-muted-foreground text-sm">No Forms Found</h4>
-                      <p className="text-xs text-muted-foreground mt-1">Try resetting search filters or generate with AI.</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {formsFilter !== 'all' ? 'No forms in this selected workspace scope.' : 'Try resetting search filters or create a new form.'}
+                      </p>
                     </div>
                   ) : (
                     <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -723,6 +754,20 @@ function DashboardContent() {
                               </div>
                             </div>
                             <CardDescription className="line-clamp-2 text-xs mt-1 leading-normal">{form.description || "No description provided."}</CardDescription>
+                            
+                            {/* Workspace/Team indication badge */}
+                            <div className="pt-2 flex items-center gap-2">
+                              {form.team ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-primary/10 text-primary border border-primary/20">
+                                  <Users className="w-3 h-3" />
+                                  <span>{form.team.name}</span>
+                                </span>
+                              ) : form.ownerId !== user?.id ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                                  Shared with me
+                                </span>
+                              ) : null}
+                            </div>
                           </CardHeader>
                           
                           <CardContent className="py-2 flex items-center space-x-4 text-xs text-muted-foreground border-t border-border dark:border-border/80 pt-3">
@@ -744,8 +789,14 @@ function DashboardContent() {
                               <Button variant="outline" size="sm" className="h-8 sm:h-7 px-2.5 text-xs" onClick={() => router.push(`/responses/${form.id}`)}>
                                 Data
                               </Button>
-                              <Button variant="outline" size="sm" className="h-8 sm:h-7 px-2.5 text-xs" onClick={() => router.push(`/analytics/${form.id}`)}>
-                                Charts
+                              <Button 
+                                variant="outline" 
+                                size="sm" 
+                                className="h-8 sm:h-7 px-2 text-xs" 
+                                onClick={() => setSelectedCollaboratorForm(form)}
+                                title="Manage Collaborators"
+                              >
+                                <Users className="w-3.5 h-3.5 text-primary" />
                               </Button>
                             </div>
                             <Button variant="ghost" size="sm" className="p-2 h-8 sm:h-7 text-destructive hover:bg-destructive/10 dark:hover:bg-destructive/10" onClick={() => handleDeleteForm(form.id)}>
@@ -1083,90 +1134,11 @@ function DashboardContent() {
 
               {/* TAB 8: TEAM WORKSPACES */}
               {activeTab === "team" && (
-                <>
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <h2 className="text-2xl font-bold text-foreground dark:text-foreground">Workspace Teams</h2>
-                      <p className="text-muted-foreground dark:text-slate-450 text-sm mt-1">Concurrently edit forms, share response tables, and track activity logs.</p>
-                    </div>
-                    <Button onClick={() => setIsCreateTeamOpen(true)} className="space-x-1 text-xs">
-                      <Plus className="w-4 h-4" />
-                      <span>Create Team</span>
-                    </Button>
-                  </div>
-
-                  {/* Teams List */}
-                  {teams.length === 0 ? (
-                    <Card className="text-center py-12">
-                      <CardContent>
-                        <Users className="w-12 h-12 text-slate-350 mx-auto mb-3" />
-                        <h4 className="font-bold text-foreground dark:text-muted-foreground text-sm">No collaboration teams created yet.</h4>
-                        <p className="text-xs text-muted-foreground mt-1">Create a team and invite editors to start concurrent reviews.</p>
-                      </CardContent>
-                    </Card>
-                  ) : (
-                    <div className="grid sm:grid-cols-2 gap-6">
-                      {teams.map(team => (
-                        <Card key={team.id} className="border border-border dark:border-border flex flex-col justify-between">
-                          <CardHeader className="pb-2">
-                            <div className="flex justify-between items-start">
-                              <div>
-                                <CardTitle className="text-base font-semibold">{team.name}</CardTitle>
-                                <CardDescription className="text-xs mt-0.5">
-                                  Owner: {team.owner?.email === user?.email ? "You" : team.owner?.name || team.owner?.email}
-                                </CardDescription>
-                              </div>
-                              <Button 
-                                variant="outline" 
-                                size="sm" 
-                                onClick={() => { setSelectedTeamId(team.id); setIsInviteOpen(true); }}
-                                className="space-x-1 h-7 px-2.5 text-xs text-primary dark:text-primary"
-                              >
-                                <UserPlus className="w-3.5 h-3.5" />
-                                <span>Invite</span>
-                              </Button>
-                            </div>
-                          </CardHeader>
-                          <CardContent className="pt-2">
-                            <p className="text-xs font-semibold text-muted-foreground mb-2">Members ({team.members?.length || 0}):</p>
-                            <div className="flex flex-wrap gap-2">
-                              {team.members?.map((m: any) => (
-                                <span key={m.id} className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-secondary dark:bg-background text-xs font-bold border border-border dark:border-border text-foreground dark:text-muted-foreground">
-                                  <span>{m.user?.name || m.user?.email.split('@')[0]}</span>
-                                  <span className="text-xs text-slate-450 uppercase">({m.role})</span>
-                                </span>
-                              ))}
-                            </div>
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Mock Activity Tracking Logs */}
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-base">Collaborator Activity logs</CardTitle>
-                      <CardDescription>Recent actions logged by workspace collaborators.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      {[
-                        { actor: "You", action: "modified forms settings password code", target: "Customer Review Form", time: "20m ago" },
-                        { actor: "admin@promptform.ai", action: "joined marketing workspace team", target: "Marketing Team", time: "2h ago" },
-                        { actor: "editor@promptform.ai", action: "created new rating question", target: "Product Feedback quiz", time: "1d ago" }
-                      ].map((log, idx) => (
-                        <div key={idx} className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-2 border-b border-border dark:border-border pb-3 text-xs last:border-none">
-                          <div>
-                            <span className="font-bold text-foreground dark:text-foreground">{log.actor}</span>
-                            <span className="text-muted-foreground mx-1">{log.action} on</span>
-                            <span className="font-semibold text-primary">{log.target}</span>
-                          </div>
-                          <span className="text-xs text-muted-foreground font-mono">{log.time}</span>
-                        </div>
-                      ))}
-                    </CardContent>
-                  </Card>
-                </>
+                <TeamDashboard
+                  user={user}
+                  forms={forms}
+                  onOpenMyForms={() => setActiveTab("my_forms")}
+                />
               )}
 
               {/* TAB 9: INTEGRATIONS */}
@@ -1740,6 +1712,27 @@ function DashboardContent() {
         }}
         restriction={activeRestriction}
       />
+
+      {/* MODAL: CREATE FORM WITH WORKSPACE SELECTION */}
+      <CreateFormModal
+        isOpen={isCreateFormModalOpen}
+        onClose={() => setIsCreateFormModalOpen(false)}
+        teams={teams}
+        onCreated={() => loadDashboardData()}
+      />
+
+      {/* MODAL: FORM COLLABORATORS */}
+      {selectedCollaboratorForm && (
+        <FormCollaboratorsModal
+          isOpen={!!selectedCollaboratorForm}
+          onClose={() => {
+            setSelectedCollaboratorForm(null);
+            loadDashboardData();
+          }}
+          formId={selectedCollaboratorForm.id}
+          formTitle={selectedCollaboratorForm.title}
+        />
+      )}
     </DashboardLayout>
   );
 }

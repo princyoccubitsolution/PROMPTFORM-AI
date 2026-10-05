@@ -5,7 +5,8 @@
   "main": "dist/index.js",
   "scripts": {
     "dev": "nodemon --watch src --ext ts --exec ts-node src/index.ts",
-    "build": "node -e \"const fs=require('fs');try{fs.rmSync('./dist',{recursive:true,force:true})}catch(e){}\" && tsc",
+    "build": "npx prisma generate && node -e \"const fs=require('fs');try{fs.rmSync('./dist',{recursive:true,force:true})}catch(e){}\" && tsc",
+    "postinstall": "prisma generate",
     "start": "node dist/index.js",
     "test": "ts-node src/scripts/runTests.ts",
     "test:cloud": "node src/scripts/testLiveCloud.js",

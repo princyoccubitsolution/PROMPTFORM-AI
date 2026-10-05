@@ -44,8 +44,53 @@ export async function hasFormAccess(
     const membership = await db.teamMember.findUnique({
       where: { teamId_userId: { teamId: form.teamId, userId } }
     });
-    return !!membership && allowedRoles.includes(membership.role);
+    if (membership && allowedRoles.includes(membership.role)) {
+      return true;
+    }
+  }
+
+  // Check direct form collaboration
+  const directCollab = await db.formCollaborator.findUnique({
+    where: { formId_userId: { formId: form.id, userId } }
+  });
+  if (directCollab && allowedRoles.includes(directCollab.role)) {
+    return true;
   }
 
   return false;
 }
+
+/**
+ * Returns the effective role of a user for a given form ('owner', 'admin', 'editor', 'viewer', or null)
+ */
+export async function getFormUserRole(
+  formId: string,
+  userId: string
+): Promise<'owner' | 'admin' | 'editor' | 'viewer' | null> {
+  const isFormUUID = isUUID(formId);
+  const form = await db.form.findFirst({
+    where: isFormUUID ? { id: formId } : { uniqueShareId: formId }
+  });
+  if (!form) return null;
+  if (form.ownerId === userId) return 'owner';
+
+  // Direct collaborator takes priority or combines with team
+  const directCollab = await db.formCollaborator.findUnique({
+    where: { formId_userId: { formId: form.id, userId } }
+  });
+  if (directCollab) {
+    return directCollab.role as any;
+  }
+
+  if (form.teamId) {
+    const membership = await db.teamMember.findUnique({
+      where: { teamId_userId: { teamId: form.teamId, userId } }
+    });
+    if (membership) {
+      return membership.role as any;
+    }
+  }
+
+  return null;
+}
+

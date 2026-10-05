@@ -22,6 +22,8 @@ model User {
   teamsOwned       Team[]       @relation("TeamOwner")
   transactions     Transaction[]
   activeSessionToken String?
+  activities       Activity[]
+  collaborations   FormCollaborator[]
 }
 
 model Form {
@@ -47,6 +49,8 @@ model Form {
   analytics    Analytics[]
   events       FormEvent[]
   dailyMetrics FormDailyMetric[]
+  collaborators FormCollaborator[]
+  activities   Activity[]
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
 
@@ -89,10 +93,12 @@ model Response {
 model Team {
   id          String       @id @default(uuid())
   name        String
+  description String?
   ownerId     String
   owner       User         @relation("TeamOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   members     TeamMember[]
   forms       Form[]
+  activities  Activity[]
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 }
@@ -204,4 +210,39 @@ model FormDailyMetric {
   
   @@unique([formId, date])
   @@index([formId, date])
+}
+
+model FormCollaborator {
+  id        String   @id @default(uuid())
+  formId    String
+  form      Form     @relation(fields: [formId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      String   @default("editor") // "editor", "viewer"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([formId, userId])
+  @@index([userId])
+  @@index([formId])
+}
+
+model Activity {
+  id          String   @id @default(uuid())
+  teamId      String?
+  team        Team?    @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  formId      String?
+  form        Form?    @relation(fields: [formId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  action      String   // TEAM_CREATED, MEMBER_INVITED, MEMBER_JOINED, MEMBER_REMOVED, ROLE_CHANGED, FORM_CREATED, FORM_UPDATED, FORM_DELETED, FORM_PUBLISHED, COLLABORATOR_ADDED, COLLABORATOR_REMOVED, RESPONSE_RECEIVED
+  targetTitle String?
+  details     String?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  @@index([teamId])
+  @@index([formId])
+  @@index([userId])
+  @@index([createdAt])
 }
