@@ -26,6 +26,12 @@ export interface FormSettings {
   invited_only: boolean;
   invited_emails: string[];
   display_mode: 'full' | 'wizard' | 'chat';
+  notify_owner?: boolean;
+  notification_emails?: string;
+  auto_responder_enabled?: boolean;
+  auto_responder_subject?: string;
+  auto_responder_message?: string;
+  webhook_url?: string;
 }
 
 export interface FormTheme {
