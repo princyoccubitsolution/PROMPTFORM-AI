@@ -103,12 +103,8 @@ function DashboardContent() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("editor");
 
-  // Notifications Mock
-  const [notifications, setNotifications] = useState<any[]>([
-    { id: 1, text: "New response received for Event Registration Form.", time: "10m ago", read: false },
-    { id: 2, text: "Colleague admin@promptform.ai joined workspace team.", time: "2h ago", read: false },
-    { id: 3, text: "Form template Satisfactory Review was cloned successfully.", time: "1d ago", read: true }
-  ]);
+  // Notifications State
+  const [notifications, setNotifications] = useState<any[]>([]);
 
   // AI Generator Tab Local States
   const [generatorPrompt, setGeneratorPrompt] = useState("");
@@ -188,12 +184,13 @@ function DashboardContent() {
     setIsLoading(true);
     setErrorMessage(null);
     try {
-      const [profileData, formsData, teamsData, templatesData, analyticsData] = await Promise.all([
+      const [profileData, formsData, teamsData, templatesData, analyticsData, notificationsData] = await Promise.all([
         api.get('/auth/me'),
         api.get('/forms'),
         api.get('/teams'),
         api.get('/templates'),
-        api.get('/analytics/workspace?range=7')
+        api.get('/analytics/workspace?range=7'),
+        api.get('/forms/notifications/live').catch(() => [])
       ]);
 
       setUser(profileData);
@@ -201,6 +198,7 @@ function DashboardContent() {
       setTeams(teamsData);
       setTemplates(templatesData);
       setWorkspaceAnalytics(analyticsData);
+      setNotifications(Array.isArray(notificationsData) ? notificationsData : []);
     } catch (err: any) {
       setErrorMessage(err.message || "Failed to load dashboard workspace. Please retry.");
       if (err.status === 401 || err.message?.includes('expired') || err.message?.includes('Authentication')) {

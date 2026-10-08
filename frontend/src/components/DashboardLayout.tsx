@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Sparkles, Plus, FileText, BarChart3, Users, Settings, LogOut, 
   Folder, LayoutGrid, Bot, Palette, Sun, Moon,
-  Search, Bell, ChevronDown, Menu, X
+  Search, Bell, ChevronDown, Menu, X, Trash2
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { BrandedLogo } from '@/components/NavigationHeader';
@@ -88,9 +88,9 @@ export function DashboardLayout({ children, activeTab }: DashboardLayoutProps) {
       if (!token) return;
       try {
         const data = await api.get('/forms/notifications/live');
-        setNotifications(data);
+        setNotifications(Array.isArray(data) ? data : []);
       } catch (err) {
-        // Fallback to empty if not logged in or backend fails
+        setNotifications([]);
       }
     };
 
@@ -218,22 +218,39 @@ export function DashboardLayout({ children, activeTab }: DashboardLayoutProps) {
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: 10 }}
-                  className="absolute right-0 mt-2 w-[calc(100vw-2rem)] max-w-80 sm:w-80 bg-card dark:bg-card rounded-2xl border border-border dark:border-border shadow-xl z-50 p-4"
+                  className="absolute right-0 mt-2 w-[calc(100vw-2rem)] max-w-84 sm:w-84 bg-card dark:bg-card rounded-2xl border border-border dark:border-border shadow-2xl z-50 p-4 select-none"
                 >
                   <div className="flex justify-between items-center mb-3">
-                    <span className="font-bold text-sm text-foreground dark:text-foreground">Recent Alerts</span>
+                    <span className="font-bold text-xs uppercase tracking-wider text-foreground dark:text-foreground flex items-center gap-1.5">
+                      <Bell className="w-3.5 h-3.5 text-primary" />
+                      Live Notifications
+                    </span>
                     {notifications.length > 0 && (
-                      <button 
-                        onClick={async () => {
-                          try {
-                            await api.post('/forms/notifications/live/read-all');
-                            setNotifications(prev => prev.map(n => ({...n, read: true})));
-                          } catch (err) {}
-                        }}
-                        className="text-xs text-primary font-semibold hover:underline cursor-pointer"
-                      >
-                        Mark all read
-                      </button>
+                      <div className="flex items-center space-x-2">
+                        <button 
+                          onClick={async () => {
+                            try {
+                              await api.post('/forms/notifications/live/read-all');
+                              setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+                            } catch (err) {}
+                          }}
+                          className="text-[11px] text-primary font-semibold hover:underline cursor-pointer"
+                        >
+                          Mark all read
+                        </button>
+                        <span className="text-muted-foreground/40 text-xs">&bull;</span>
+                        <button 
+                          onClick={async () => {
+                            try {
+                              await api.delete('/forms/notifications/live');
+                              setNotifications([]);
+                            } catch (err) {}
+                          }}
+                          className="text-[11px] text-destructive font-semibold hover:underline cursor-pointer"
+                        >
+                          Clear
+                        </button>
+                      </div>
                     )}
                   </div>
                   <div className="space-y-2 max-h-72 overflow-y-auto scrollbar-thin pr-0.5">
@@ -245,12 +262,61 @@ export function DashboardLayout({ children, activeTab }: DashboardLayoutProps) {
                       </div>
                     ) : (
                       notifications.map(n => (
-                        <div key={n.id} className={`p-2.5 rounded-xl text-xs transition-all border ${n.read ? 'bg-transparent border-transparent text-muted-foreground dark:text-muted-foreground' : 'bg-muted/80 dark:bg-zinc-900 border-border dark:border-border/80 text-foreground dark:text-foreground font-semibold shadow-2xs'}`}>
-                          <p className="leading-normal">{n.text}</p>
-                          <span className="text-[10px] text-muted-foreground/80 dark:text-zinc-400 mt-1 block font-medium">{n.time}</span>
+                        <div 
+                          key={n.id} 
+                          onClick={async () => {
+                            if (!n.read) {
+                              try {
+                                await api.post(`/forms/notifications/live/${n.id}/read`);
+                                setNotifications(prev => prev.map(item => item.id === n.id ? { ...item, read: true } : item));
+                              } catch (err) {}
+                            }
+                          }}
+                          className={`p-3 rounded-xl text-xs transition-all border relative group cursor-pointer ${
+                            n.read 
+                              ? 'bg-transparent border-transparent text-muted-foreground dark:text-muted-foreground opacity-80' 
+                              : 'bg-primary/5 dark:bg-primary/10 border-primary/20 text-foreground dark:text-foreground font-medium shadow-2xs'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="leading-snug flex-1">{n.text}</p>
+                            <button
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                try {
+                                  await api.delete(`/forms/notifications/live/${n.id}`);
+                                  setNotifications(prev => prev.filter(item => item.id !== n.id));
+                                } catch (err) {}
+                              }}
+                              className="opacity-0 group-hover:opacity-100 p-1 hover:text-destructive transition-opacity cursor-pointer shrink-0"
+                              title="Remove notification"
+                            >
+                              <Trash2 className="w-3.5 h-3.5 text-muted-foreground hover:text-destructive" />
+                            </button>
+                          </div>
+                          <span className="text-[10px] text-muted-foreground/80 dark:text-zinc-400 mt-1.5 block font-normal">
+                            {n.time || 'Just now'}
+                          </span>
                         </div>
                       ))
                     )}
+                  </div>
+                  
+                  <div className="mt-3 pt-2.5 border-t border-border/60">
+                    <button
+                      onClick={async () => {
+                        try {
+                          const res = await api.post('/forms/notifications/live/test');
+                          if (res?.notification) {
+                            setNotifications(prev => [res.notification, ...prev]);
+                          }
+                        } catch (err) {}
+                      }}
+                      className="w-full py-1.5 px-3 rounded-lg bg-muted hover:bg-accent dark:bg-zinc-800 dark:hover:bg-zinc-700 text-[11px] font-bold text-foreground dark:text-zinc-200 transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                    >
+                      <Bell className="w-3.5 h-3.5 text-primary" />
+                      Send Test Live Notification
+                    </button>
                   </div>
                 </motion.div>
               )}

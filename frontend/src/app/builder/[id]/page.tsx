@@ -95,6 +95,7 @@ export default function BuilderPage() {
     logic: false,
     permissions: false,
     timeLimits: true,
+    notifications: true,
     publishing: false,
     analytics: false,
     developer: false
@@ -166,10 +167,18 @@ export default function BuilderPage() {
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
   const [isResponseModalOpen, setIsResponseModalOpen] = useState(false);
   const [selectedResponse, setSelectedResponse] = useState<any>(null);
-  // Live Notifications state
+  // Live Notifications & Toast state
   const [liveNotifications, setLiveNotifications] = useState<any[]>([]);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const notificationsRef = useRef<HTMLDivElement>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => {
+      setToastMessage(prev => (prev === msg ? null : prev));
+    }, 4000);
+  };
 
   useEffect(() => {
     const fetchNotifications = async () => {
@@ -177,8 +186,10 @@ export default function BuilderPage() {
       if (!token) return;
       try {
         const data = await api.get('/forms/notifications/live');
-        setLiveNotifications(data || []);
-      } catch (err) {}
+        setLiveNotifications(Array.isArray(data) ? data : []);
+      } catch (err) {
+        setLiveNotifications([]);
+      }
     };
 
     fetchNotifications();
@@ -816,24 +827,44 @@ export default function BuilderPage() {
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: 10 }}
-                    className="absolute right-0 mt-2 w-80 bg-card dark:bg-card rounded-2xl border border-border dark:border-border shadow-xl z-50 p-4 select-none"
+                    className="absolute right-0 mt-2 w-84 bg-card dark:bg-card rounded-2xl border border-border dark:border-border shadow-2xl z-50 p-4 select-none"
                   >
                     <div className="flex justify-between items-center mb-3">
-                      <span className="font-bold text-xs uppercase tracking-wider text-foreground dark:text-foreground">Recent Alerts</span>
+                      <span className="font-bold text-xs uppercase tracking-wider text-foreground dark:text-foreground flex items-center gap-1.5">
+                        <Bell className="w-3.5 h-3.5 text-primary" />
+                        Live Activity Alerts
+                      </span>
                       {liveNotifications.length > 0 && (
-                        <button
-                          onClick={async () => {
-                            try {
-                              await api.post('/forms/notifications/live/read-all');
-                              setLiveNotifications(prev => prev.map(n => ({...n, read: true})));
-                            } catch (err) {}
-                          }}
-                          className="text-xs text-primary font-semibold hover:underline cursor-pointer"
-                        >
-                          Mark all read
-                        </button>
+                        <div className="flex items-center space-x-2">
+                          <button
+                            onClick={async () => {
+                              try {
+                                await api.post('/forms/notifications/live/read-all');
+                                setLiveNotifications(prev => prev.map(n => ({ ...n, read: true })));
+                                showToast("Marked all notifications as read");
+                              } catch (err) {}
+                            }}
+                            className="text-[11px] text-primary font-semibold hover:underline cursor-pointer"
+                          >
+                            Mark all read
+                          </button>
+                          <span className="text-muted-foreground/40 text-xs">&bull;</span>
+                          <button
+                            onClick={async () => {
+                              try {
+                                await api.delete('/forms/notifications/live');
+                                setLiveNotifications([]);
+                                showToast("Cleared all notifications");
+                              } catch (err) {}
+                            }}
+                            className="text-[11px] text-destructive font-semibold hover:underline cursor-pointer"
+                          >
+                            Clear
+                          </button>
+                        </div>
                       )}
                     </div>
+                    
                     <div className="space-y-2 max-h-72 overflow-y-auto scrollbar-thin pr-0.5">
                       {liveNotifications.length === 0 ? (
                         <div className="text-center py-6 text-xs text-muted-foreground">
@@ -843,12 +874,62 @@ export default function BuilderPage() {
                         </div>
                       ) : (
                         liveNotifications.map(n => (
-                          <div key={n.id} className={`p-2.5 rounded-xl text-xs transition-all border ${n.read ? 'bg-transparent border-transparent text-muted-foreground dark:text-muted-foreground' : 'bg-muted/80 dark:bg-zinc-900 border-border dark:border-border/80 text-foreground dark:text-foreground font-semibold shadow-2xs'}`}>
-                            <p className="leading-normal">{n.text}</p>
-                            <span className="text-[10px] text-muted-foreground/80 dark:text-zinc-400 mt-1 block font-medium">{n.time}</span>
+                          <div
+                            key={n.id}
+                            onClick={async () => {
+                              if (!n.read) {
+                                try {
+                                  await api.post(`/forms/notifications/live/${n.id}/read`);
+                                  setLiveNotifications(prev => prev.map(item => item.id === n.id ? { ...item, read: true } : item));
+                                } catch (err) {}
+                              }
+                            }}
+                            className={`p-3 rounded-xl text-xs transition-all border relative group cursor-pointer ${
+                              n.read
+                                ? 'bg-transparent border-transparent text-muted-foreground dark:text-muted-foreground opacity-80'
+                                : 'bg-primary/5 dark:bg-primary/10 border-primary/20 text-foreground dark:text-foreground font-medium shadow-2xs'
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <p className="leading-snug flex-1">{n.text}</p>
+                              <button
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  try {
+                                    await api.delete(`/forms/notifications/live/${n.id}`);
+                                    setLiveNotifications(prev => prev.filter(item => item.id !== n.id));
+                                  } catch (err) {}
+                                }}
+                                className="opacity-0 group-hover:opacity-100 p-1 hover:text-destructive transition-opacity cursor-pointer shrink-0"
+                                title="Remove notification"
+                              >
+                                <Trash2 className="w-3.5 h-3.5 text-muted-foreground hover:text-destructive" />
+                              </button>
+                            </div>
+                            <span className="text-[10px] text-muted-foreground/80 dark:text-zinc-400 mt-1.5 block font-normal">
+                              {n.time || 'Just now'}
+                            </span>
                           </div>
                         ))
                       )}
+                    </div>
+
+                    <div className="mt-3 pt-2.5 border-t border-border/60 flex items-center justify-between">
+                      <button
+                        onClick={async () => {
+                          try {
+                            const res = await api.post('/forms/notifications/live/test');
+                            if (res?.notification) {
+                              setLiveNotifications(prev => [res.notification, ...prev]);
+                              showToast("🔔 Test live notification received!");
+                            }
+                          } catch (err) {}
+                        }}
+                        className="w-full py-1.5 px-3 rounded-lg bg-muted hover:bg-accent dark:bg-zinc-800 dark:hover:bg-zinc-700 text-[11px] font-bold text-foreground dark:text-zinc-200 transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                      >
+                        <Bell className="w-3.5 h-3.5 text-primary" />
+                        Send Test Live Notification
+                      </button>
                     </div>
                   </motion.div>
                 )}
@@ -2278,6 +2359,148 @@ export default function BuilderPage() {
               )}
             </div>
 
+            {/* Accordion 3.5: Email & Submission Notification Settings */}
+            <div className="border border-border dark:border-border rounded-xl overflow-hidden bg-muted/20 dark:bg-background/10">
+              <button
+                onClick={() => toggleAccordion('notifications')}
+                className="w-full px-4 py-3 flex items-center justify-between font-semibold text-xs text-foreground dark:text-zinc-200 bg-accent/50 dark:bg-card/40 border-none cursor-pointer"
+              >
+                <div className="flex items-center space-x-2">
+                  <Mail className="w-4 h-4 text-indigo-500" />
+                  <span>Email & Notification Alerts</span>
+                </div>
+                <ChevronDown className={`w-4 h-4 transition-transform ${accordions.notifications ? 'rotate-180' : ''}`} />
+              </button>
+
+              {accordions.notifications && (
+                <div className="p-4 space-y-4 bg-card dark:bg-background text-xs font-medium">
+                  {/* Part 1: Owner Submission Email Notifications */}
+                  <div className="space-y-2.5 pb-3 border-b border-border/60">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <span className="text-xs font-semibold text-foreground dark:text-zinc-200 uppercase tracking-wide block">
+                          Email Owner on Submission
+                        </span>
+                        <span className="text-[10px] text-muted-foreground font-normal block mt-0.5">
+                          Send instant email notification to form owner and extra recipients upon new submission.
+                        </span>
+                      </div>
+                      <Switch
+                        checked={store.settings.notify_owner !== false}
+                        onChange={(chk) => store.updateSettings({ notify_owner: chk })}
+                      />
+                    </div>
+
+                    {store.settings.notify_owner !== false && (
+                      <div className="space-y-1.5 pt-1">
+                        <label className="block text-[11px] font-medium text-muted-foreground uppercase">
+                          Additional Recipient Emails (Comma-separated)
+                        </label>
+                        <Input
+                          placeholder="admin@company.com, team@company.com"
+                          value={store.settings.notification_emails || ""}
+                          onChange={(e) => store.updateSettings({ notification_emails: e.target.value })}
+                          className="h-9 text-xs rounded-lg bg-muted dark:bg-background border-border text-foreground dark:text-zinc-200"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Part 2: Respondent Auto-Responder Email */}
+                  <div className="space-y-2.5 pb-3 border-b border-border/60">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <span className="text-xs font-semibold text-foreground dark:text-zinc-200 uppercase tracking-wide block">
+                          Respondent Auto-Responder
+                        </span>
+                        <span className="text-[10px] text-muted-foreground font-normal block mt-0.5">
+                          Send an automated receipt/confirmation email to the submitter when an email is collected.
+                        </span>
+                      </div>
+                      <Switch
+                        checked={Boolean(store.settings.auto_responder_enabled)}
+                        onChange={(chk) => store.updateSettings({ auto_responder_enabled: chk })}
+                      />
+                    </div>
+
+                    {Boolean(store.settings.auto_responder_enabled) && (
+                      <div className="space-y-2.5 pt-1">
+                        <div className="space-y-1">
+                          <label className="block text-[11px] font-medium text-muted-foreground uppercase">
+                            Auto-Responder Subject Line
+                          </label>
+                          <Input
+                            placeholder="e.g. Submission Received - Thank You!"
+                            value={store.settings.auto_responder_subject || ""}
+                            onChange={(e) => store.updateSettings({ auto_responder_subject: e.target.value })}
+                            className="h-9 text-xs rounded-lg bg-muted dark:bg-background border-border text-foreground dark:text-zinc-200"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="block text-[11px] font-medium text-muted-foreground uppercase">
+                            Custom Confirmation Message
+                          </label>
+                          <textarea
+                            rows={3}
+                            placeholder="Thank you for filling out our form. We have received your answers and will get back to you shortly!"
+                            value={store.settings.auto_responder_message || ""}
+                            onChange={(e) => store.updateSettings({ auto_responder_message: e.target.value })}
+                            className="w-full p-2.5 text-xs rounded-lg bg-muted dark:bg-background border border-border text-foreground dark:text-zinc-200 focus:outline-none focus:ring-1 focus:ring-primary"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Part 3: Webhook & Live Notifications Quick Actions */}
+                  <div className="space-y-2.5">
+                    <div className="space-y-1">
+                      <label className="block text-[11px] font-medium text-muted-foreground uppercase">
+                        Custom Webhook Endpoint URL (Optional)
+                      </label>
+                      <Input
+                        placeholder="https://api.yourdomain.com/webhooks/form-response"
+                        value={store.settings.webhook_url || ""}
+                        onChange={(e) => store.updateSettings({ webhook_url: e.target.value })}
+                        className="h-9 text-xs rounded-lg bg-muted dark:bg-background border-border text-foreground dark:text-zinc-200"
+                      />
+                    </div>
+
+                    <div className="pt-2 flex items-center justify-between border-t border-border/50">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleSaveForm();
+                          showToast("✨ Notification settings saved successfully!");
+                        }}
+                        className="px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        Save Notification Settings
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            const res = await api.post('/forms/notifications/live/test');
+                            if (res?.notification) {
+                              setLiveNotifications(prev => [res.notification, ...prev]);
+                              showToast("🔔 Test live notification sent!");
+                            }
+                          } catch (err) {}
+                        }}
+                        className="px-2.5 py-1.5 rounded-lg bg-accent hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-foreground dark:text-zinc-200 text-xs font-semibold transition-all cursor-pointer flex items-center gap-1 border border-border"
+                      >
+                        <Bell className="w-3.5 h-3.5 text-indigo-500" />
+                        Test Alert
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Accordion 4: Share Option Snippet */}
             <div className="border border-border dark:border-border rounded-xl overflow-hidden bg-muted/20 dark:bg-background/10">
               <button
@@ -3057,6 +3280,21 @@ export default function BuilderPage() {
         }}
         restriction={activeRestriction}
       />
+
+      {/* Floating Toast Notification Banner */}
+      <AnimatePresence>
+        {toastMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: 20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.95 }}
+            className="fixed bottom-6 right-6 z-50 px-4 py-3 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-xl shadow-2xl flex items-center space-x-2.5 text-xs font-semibold border border-zinc-700/50 dark:border-zinc-300 select-none"
+          >
+            <Bell className="w-4 h-4 text-indigo-400 dark:text-indigo-600 shrink-0" />
+            <span>{toastMessage}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -8,6 +8,8 @@ import { isUUID, generateUniqueShareId, hasFormAccess } from '../lib/utils';
 import { logActivity } from '../lib/activity';
 import { FormsService } from '../services/formsService';
 import { AnalyticsService } from '../services/analyticsService';
+import { emailService } from '../services/emailService';
+import { logger } from '../lib/logger';
 
 const router = Router();
 
@@ -28,11 +30,13 @@ interface LiveNotification {
   userId: string;
   text: string;
   time: string;
+  createdAt: string;
   read: boolean;
+  formId?: string;
 }
 
 export const inMemoryNotifications: LiveNotification[] = [
-  { id: "mock_1", userId: "all_users", text: "Welcome to PromptForm AI! Your dashboard is ready.", time: "1h ago", read: false }
+  { id: "mock_1", userId: "all_users", text: "Welcome to PromptForm AI! Live notification engine is fully active.", time: "1h ago", createdAt: new Date(Date.now() - 3600000).toISOString(), read: false }
 ];
 
 const parseSettings = (settings: any): Record<string, any> => {
@@ -241,6 +245,67 @@ router.post('/notifications/live/read-all', authMiddleware, async (req: Authenti
       }
     });
     return res.json({ success: true });
+  } catch (error) {
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/notifications/live/:id/read', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
+    const { id } = req.params;
+    const item = inMemoryNotifications.find(n => n.id === id && (n.userId === req.user!.id || n.userId === 'all_users'));
+    if (item) {
+      item.read = true;
+    }
+    return res.json({ success: true });
+  } catch (error) {
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.delete('/notifications/live/:id', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
+    const { id } = req.params;
+    const index = inMemoryNotifications.findIndex(n => n.id === id && (n.userId === req.user!.id || n.userId === 'all_users'));
+    if (index !== -1) {
+      inMemoryNotifications.splice(index, 1);
+    }
+    return res.json({ success: true });
+  } catch (error) {
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.delete('/notifications/live', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
+    let i = inMemoryNotifications.length;
+    while (i--) {
+      if (inMemoryNotifications[i].userId === req.user.id || inMemoryNotifications[i].userId === 'all_users') {
+        inMemoryNotifications.splice(i, 1);
+      }
+    }
+    return res.json({ success: true });
+  } catch (error) {
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/notifications/live/test', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
+    const newNotif: LiveNotification = {
+      id: 'test_' + Math.random().toString(36).substring(2, 9),
+      userId: req.user.id,
+      text: `🔔 Test Notification: Website notification engine is working perfectly!`,
+      time: 'Just now',
+      createdAt: new Date().toISOString(),
+      read: false
+    };
+    inMemoryNotifications.unshift(newNotif);
+    return res.json({ success: true, notification: newNotif });
   } catch (error) {
     return res.status(500).json({ error: 'Internal server error' });
   }
@@ -1312,8 +1377,54 @@ router.post('/:id/submit', async (req: Request, res: Response) => {
       userId: form.ownerId,
       text: `New response received for '${form.title}'.`,
       time: "Just now",
-      read: false
+      createdAt: new Date().toISOString(),
+      read: false,
+      formId: form.id
     });
+
+    // Dispatch Email Notifications & Auto-Responders
+    (async () => {
+      try {
+        const parsedSettings = parseSettings(form.settings);
+        
+        // 1. Owner Notification Email
+        if (parsedSettings.notify_owner !== false) {
+          const owner = await db.user.findUnique({ where: { id: form.ownerId } });
+          const recipientEmails: string[] = [];
+          if (owner?.email) recipientEmails.push(owner.email);
+          if (parsedSettings.notification_emails && typeof parsedSettings.notification_emails === 'string') {
+            const extraEmails = parsedSettings.notification_emails
+              .split(',')
+              .map((e: string) => e.trim())
+              .filter((e: string) => Boolean(e) && e.includes('@'));
+            recipientEmails.push(...extraEmails);
+          }
+          const uniqueRecipients = Array.from(new Set(recipientEmails));
+          if (uniqueRecipients.length > 0) {
+            await emailService.sendOwnerNotification({
+              formTitle: form.title,
+              recipientEmails: uniqueRecipients,
+              answers,
+              responseId: response.id,
+              submittedAt: response.completedAt
+            });
+          }
+        }
+
+        // 2. Respondent Auto-Responder Email
+        if (parsedSettings.auto_responder_enabled && resolvedEmail) {
+          await emailService.sendAutoResponder({
+            formTitle: form.title,
+            recipientEmail: resolvedEmail,
+            subject: parsedSettings.auto_responder_subject,
+            message: parsedSettings.auto_responder_message,
+            answers
+          });
+        }
+      } catch (emailErr: any) {
+        logger.error(`Error dispatching form submission emails: ${emailErr.message}`, emailErr);
+      }
+    })();
 
     // Log Activity in database
     await logActivity({
@@ -1385,6 +1496,12 @@ router.post('/:id/submit', async (req: Request, res: Response) => {
               { text: `New submission received for form "${form.title}" (Response ID: ${response.id})` },
               wf.id
             );
+          } else if (wf.action === 'send_email' && (wf.config as any)?.email_recipient) {
+            return emailService.sendWorkflowEmail({
+              to: (wf.config as any).email_recipient,
+              subject: (wf.config as any).subject || `New Submission: "${form.title}"`,
+              body: (wf.config as any).message || `A new response (ID: ${response.id}) was submitted for form "${form.title}".`
+            });
           }
           return Promise.resolve();
         });
