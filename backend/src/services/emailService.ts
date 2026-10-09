@@ -72,7 +72,8 @@ class EmailService {
           greetingTimeout: 10000,
           socketTimeout: 10000
         });
-        this.fromEmail = process.env.SMTP_FROM || smtpUser;
+        const rawFrom = process.env.SMTP_FROM || smtpUser;
+        this.fromEmail = rawFrom.replace(/\\"/g, '"').replace(/\\/g, '');
         logger.info(`EmailService initialized with Custom SMTP: ${smtpHost} (${this.fromEmail})`);
         return;
       } catch (err: any) {
