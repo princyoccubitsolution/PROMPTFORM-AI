@@ -279,28 +279,44 @@ router.post('/invitations/accept/:token', authMiddleware, async (req: Authentica
       return res.status(400).json({ error: 'This invitation has expired.' });
     }
 
-    // Add user as team member with the specified role
-    const member = await db.teamMember.upsert({
-      where: { teamId_userId: { teamId: invite.teamId, userId: req.user.id } },
-      create: {
-        teamId: invite.teamId,
-        userId: req.user.id,
-        role: invite.role
-      },
-      update: {
-        role: invite.role
-      },
-      include: {
-        team: true,
-        user: { select: { id: true, name: true, email: true } }
-      }
+    // The invitation belongs to one email address; a different signed-in account
+    // (e.g. the team owner testing the link in their own browser) must not consume it.
+    if ((req.user.email || '').trim().toLowerCase() !== invite.email.trim().toLowerCase()) {
+      return res.status(403).json({
+        error: `This invitation was sent to ${invite.email}, but you are signed in as ${req.user.email}. Please sign in with ${invite.email} to accept it.`,
+        code: 'INVITE_EMAIL_MISMATCH',
+        invitedEmail: invite.email
+      });
+    }
+
+    const userId = req.user.id;
+    const alreadyMember = await db.teamMember.findUnique({
+      where: { teamId_userId: { teamId: invite.teamId, userId } }
     });
 
-    // Mark invitation as accepted
-    await db.teamInvite.update({
-      where: { id: invite.id },
-      data: { status: 'accepted' }
+    // Claim the invite and create the membership atomically: the conditional update only
+    // succeeds for a still-pending invite, so concurrent/duplicate accepts cannot both win.
+    const claimed = await db.$transaction(async (tx) => {
+      const { count } = await tx.teamInvite.updateMany({
+        where: { id: invite.id, status: 'pending' },
+        data: { status: 'accepted' }
+      });
+      if (count !== 1) return false;
+
+      if (alreadyMember) {
+        // Never downgrade an existing member (or the owner) through an invitation
+        if (invite.team.ownerId !== userId && alreadyMember.role !== 'admin') {
+          await tx.teamMember.update({ where: { id: alreadyMember.id }, data: { role: invite.role } });
+        }
+      } else {
+        await tx.teamMember.create({ data: { teamId: invite.teamId, userId, role: invite.role } });
+      }
+      return true;
     });
+
+    if (!claimed) {
+      return res.status(409).json({ error: 'This invitation has already been accepted.' });
+    }
 
     // Log Activity
     await logActivity({
@@ -319,6 +335,7 @@ router.post('/invitations/accept/:token', authMiddleware, async (req: Authentica
       message: `Successfully joined "${invite.team.name}" as ${invite.role}!`
     });
   } catch (error) {
+    console.error('[Teams] Accept invitation failed:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

@@ -8,6 +8,12 @@ import { api } from '@/lib/api';
 import { registerSchema } from '@/lib/validations';
 import { useTheme } from 'next-themes';
 import { BrandedLogo } from '@/components/NavigationHeader';
+import { postAuthDestination } from '@/lib/pendingInvite';
+
+function getRedirectParam(): string | null {
+  if (typeof window === 'undefined') return null;
+  return new URLSearchParams(window.location.search).get('redirect');
+}
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -77,10 +83,8 @@ export default function RegisterPage() {
 
       if (data.isNewUser) {
         localStorage.setItem('promptform_needs_onboarding', 'true');
-        window.location.href = '/onboarding';
-      } else {
-        window.location.href = '/dashboard';
       }
+      window.location.href = postAuthDestination(Boolean(data.isNewUser), getRedirectParam());
     } catch (err: any) {
       setError(err.message || 'Registration failed. Please check credentials.');
     } finally {
@@ -91,7 +95,7 @@ export default function RegisterPage() {
   const handleGoogleSignup = () => {
     setIsLoading(true);
     setError(null);
-    window.location.href = api.getOAuthGoogleUrl('dashboard');
+    window.location.href = api.getOAuthGoogleUrl(getRedirectParam() || 'dashboard');
   };
 
   if (!mounted) return null;

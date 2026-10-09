@@ -23,6 +23,14 @@ function AcceptInviteContent() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
+  const [mismatch, setMismatch] = useState(false);
+
+  const switchAccount = () => {
+    ['promptform_access_token', 'promptform_refresh_token', 'promptform_user_email', 'promptform_user_name'].forEach((k) => {
+      try { localStorage.removeItem(k); } catch {}
+    });
+    window.location.href = `/login?redirect=${encodeURIComponent(`/accept-invite?token=${token}`)}`;
+  };
 
   useEffect(() => {
     const userToken = localStorage.getItem('promptform_access_token');
@@ -38,7 +46,10 @@ function AcceptInviteContent() {
       try {
         const data = await api.get(`/teams/invitations/verify/${token}`);
         setInviteDetails(data);
+        // Remember the invite so sign-up / onboarding can return here to finish accepting it
+        try { localStorage.setItem('promptform_pending_invite', token); } catch {}
       } catch (err: any) {
+        try { localStorage.removeItem('promptform_pending_invite'); } catch {}
         setErrorMessage(err.message || "Invalid or expired invitation token.");
       } finally {
         setIsLoading(false);
@@ -62,12 +73,20 @@ function AcceptInviteContent() {
 
     try {
       const res = await api.post(`/teams/invitations/accept/${token}`);
+      try { localStorage.removeItem('promptform_pending_invite'); } catch {}
       setSuccessMessage(res.message || "Successfully joined team workspace!");
+      // Full navigation so team lists and member counts are re-fetched from the server
       setTimeout(() => {
-        router.push(`/dashboard?tab=team&teamId=${res.teamId}`);
+        window.location.href = `/dashboard?tab=team&teamId=${res.teamId}`;
       }, 1500);
     } catch (err: any) {
-      setErrorMessage(err.message || "Failed to accept invitation.");
+      const msg: string = err.message || "Failed to accept invitation.";
+      if (/signed in as/i.test(msg)) {
+        setMismatch(true);
+      } else if (/already been|expired|not found/i.test(msg)) {
+        try { localStorage.removeItem('promptform_pending_invite'); } catch {}
+      }
+      setErrorMessage(msg);
     } finally {
       setIsAccepting(false);
     }
@@ -105,6 +124,11 @@ function AcceptInviteContent() {
                   {errorMessage}
                 </p>
               </div>
+              {mismatch && (
+                <Button className="w-full rounded-xl mt-4" onClick={switchAccount}>
+                  Sign in with the invited account
+                </Button>
+              )}
               <Button
                 variant="outline"
                 className="w-full rounded-xl mt-4"

@@ -7,6 +7,7 @@ import { Mail, Lock, Eye, EyeOff, ShieldCheck, Github, ArrowRight } from 'lucide
 import { api } from '@/lib/api';
 import { useTheme } from 'next-themes';
 import { BrandedLogo } from '@/components/NavigationHeader';
+import { postAuthDestination } from '@/lib/pendingInvite';
 
 declare global {
   interface Window {
@@ -55,10 +56,8 @@ function LoginContent() {
 
         if (isNewUserParam === 'true') {
           localStorage.setItem('promptform_needs_onboarding', 'true');
-          window.location.replace('/onboarding');
-        } else {
-          window.location.replace(`/${redirect.replace(/^\/+/, '')}`);
         }
+        window.location.replace(postAuthDestination(isNewUserParam === 'true', redirect));
       } catch (e) {
         setError('Failed to save authentication session.');
       }
@@ -83,10 +82,8 @@ function LoginContent() {
       
       if (data.isNewUser) {
         localStorage.setItem('promptform_needs_onboarding', 'true');
-        window.location.href = '/onboarding';
-      } else {
-        window.location.href = `/${redirect.replace(/^\/+/, '')}`;
       }
+      window.location.href = postAuthDestination(Boolean(data.isNewUser), redirect);
     } catch (err: any) {
       setError(err.message || 'Invalid email or password.');
     } finally {
@@ -250,7 +247,7 @@ function LoginContent() {
         <div className="text-center pt-3 border-t border-border text-xs">
           <span className="text-muted-foreground">
             New here?{' '}
-            <Link href="/register" className="text-primary hover:opacity-80 font-semibold transition-opacity">
+            <Link href={redirect && redirect !== 'dashboard' ? `/register?redirect=${encodeURIComponent(redirect)}` : '/register'} className="text-primary hover:opacity-80 font-semibold transition-opacity">
               Create account
             </Link>
           </span>

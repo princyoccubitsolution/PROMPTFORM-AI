@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { BrandedLogo } from '@/components/NavigationHeader';
 import { Loader2, AlertCircle, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
+import { postAuthDestination } from '@/lib/pendingInvite';
 
 function AuthCallbackContent() {
   const router = useRouter();
@@ -34,11 +35,8 @@ function AuthCallbackContent() {
 
         if (isNewUser === 'true') {
           localStorage.setItem('promptform_needs_onboarding', 'true');
-          window.location.replace('/onboarding');
-        } else {
-          const cleanDest = redirectParam.replace(/^\/+/, '');
-          window.location.replace(`/${cleanDest}`);
         }
+        window.location.replace(postAuthDestination(isNewUser === 'true', redirectParam));
       } catch (err: any) {
         setErrorMsg('Failed to store authentication tokens in browser.');
       }
