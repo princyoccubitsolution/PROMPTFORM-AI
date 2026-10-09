@@ -31,132 +31,276 @@ interface SendTeamInvitationParams {
   inviteUrl: string;
 }
 
+export interface DeliveryInfo {
+  messageId?: string;
+  accepted?: string[];
+  response?: string;
+}
+
+function cleanEnv(val?: string): string {
+  if (!val) return '';
+  return val.trim().replace(/^["']|["']$/g, '').trim();
+}
+
+function formatCleanFrom(rawFrom: string, smtpUser: string, isGmail: boolean): string {
+  const unescaped = rawFrom.replace(/\\"/g, '"').replace(/\\/g, '').trim().replace(/^["']|["']$/g, '');
+  if (isGmail && smtpUser && !unescaped.toLowerCase().includes(smtpUser.toLowerCase())) {
+    return `"PromptForm AI" <${smtpUser}>`;
+  }
+  const match = unescaped.match(/^([^<]+)<([^>]+)>$/);
+  if (match) {
+    const displayName = match[1].trim().replace(/^["']|["']$/g, '');
+    const emailAddr = match[2].trim();
+    return `"${displayName}" <${emailAddr}>`;
+  }
+  if (unescaped.includes('@')) {
+    return `"PromptForm AI" <${unescaped}>`;
+  }
+  return `"PromptForm AI" <${smtpUser}>`;
+}
+
 class EmailService {
   private transporter: Transporter | null = null;
   private fromEmail: string = 'notifications@promptform.ai';
-  private isInitializing: Promise<void> | null = null;
+  private replyToEmail: string = '';
+  private configuredKey: string = '';
+  private lastError: string | null = null;
+  private lastDeliveryInfo: DeliveryInfo | null = null;
 
   constructor() {
-    this.isInitializing = this.initTransporter();
+    this.ensureConfigured();
   }
 
-  private async initTransporter() {
-    const smtpHost = process.env.SMTP_HOST;
-    const smtpPort = parseInt(process.env.SMTP_PORT || '587', 10);
-    const smtpUser = process.env.SMTP_USER;
-    const smtpPass = process.env.SMTP_PASS;
+  public getLastError(): string | null {
+    return this.lastError;
+  }
 
-    const isPlaceholder = !smtpUser || smtpUser.includes('your-email') || smtpUser.includes('example.com');
+  public getLastDeliveryInfo(): DeliveryInfo | null {
+    return this.lastDeliveryInfo;
+  }
 
-    if (smtpHost && smtpUser && smtpPass && !isPlaceholder) {
-      try {
-        const isGmail = smtpHost.includes('gmail');
-        this.transporter = nodemailer.createTransport(isGmail ? {
-          service: 'gmail',
-          auth: {
-            user: smtpUser,
-            pass: smtpPass
-          },
-          connectionTimeout: 10000,
-          greetingTimeout: 10000,
-          socketTimeout: 10000
-        } : {
-          host: smtpHost,
-          port: smtpPort,
-          secure: smtpPort === 465,
-          auth: {
-            user: smtpUser,
-            pass: smtpPass
-          },
-          connectionTimeout: 10000,
-          greetingTimeout: 10000,
-          socketTimeout: 10000
-        });
-        const rawFrom = process.env.SMTP_FROM || smtpUser;
-        this.fromEmail = rawFrom.replace(/\\"/g, '"').replace(/\\/g, '');
-        logger.info(`EmailService initialized with Custom SMTP: ${smtpHost} (${this.fromEmail})`);
-        return;
-      } catch (err: any) {
-        logger.warn(`Failed to initialize custom SMTP: ${err.message}. Falling back to Ethereal Transporter.`);
-      }
-    }
+  private getSmtpCredentials() {
+    const smtpHost = cleanEnv(process.env.SMTP_HOST);
+    const smtpPort = parseInt(cleanEnv(process.env.SMTP_PORT) || '465', 10);
+    const smtpUser = cleanEnv(process.env.SMTP_USER);
+    const smtpPass = cleanEnv(process.env.SMTP_PASS);
+    const rawFrom = cleanEnv(process.env.SMTP_FROM) || smtpUser;
+    const isPlaceholder =
+      !smtpHost ||
+      !smtpUser ||
+      !smtpPass ||
+      smtpUser.includes('your-email') ||
+      smtpUser.includes('example.com');
 
-    // Auto-create real test mail account on Ethereal if no custom SMTP configured
-    try {
-      const testAccount = await nodemailer.createTestAccount();
-      this.transporter = nodemailer.createTransport({
-        host: 'smtp.ethereal.email',
-        port: 587,
-        secure: false,
-        auth: {
-          user: testAccount.user,
-          pass: testAccount.pass
-        }
-      });
-      this.fromEmail = `"PromptForm AI" <${testAccount.user}>`;
-      logger.info(`EmailService initialized with Auto-Provisioned Real Email Transporter (User: ${testAccount.user})`);
-    } catch (etherealErr: any) {
-      logger.warn(`Could not provision test email account: ${etherealErr.message}. Email service running in console fallback mode.`);
+    return {
+      smtpHost,
+      smtpPort: isNaN(smtpPort) ? 465 : smtpPort,
+      smtpUser,
+      smtpPass,
+      rawFrom,
+      isPlaceholder
+    };
+  }
+
+  private ensureConfigured(): boolean {
+    const { smtpHost, smtpPort, smtpUser, smtpPass, rawFrom, isPlaceholder } = this.getSmtpCredentials();
+    if (isPlaceholder) {
       this.transporter = null;
+      return false;
+    }
+
+    const key = `${smtpHost}:${smtpPort}:${smtpUser}:${rawFrom}`;
+    if (this.transporter && this.configuredKey === key) {
+      return true;
+    }
+
+    try {
+      const isGmail = smtpHost.toLowerCase().includes('gmail');
+      const effectivePort = isGmail && smtpPort !== 465 && smtpPort !== 587 ? 465 : smtpPort;
+      const isSecure = effectivePort === 465;
+
+      this.transporter = nodemailer.createTransport({
+        host: smtpHost,
+        port: effectivePort,
+        secure: isSecure,
+        auth: {
+          user: smtpUser,
+          pass: smtpPass
+        },
+        // Force IPv4 to prevent ENETUNREACH on cloud containers without IPv6 routing
+        family: 4,
+        connectionTimeout: 8000,
+        greetingTimeout: 8000,
+        socketTimeout: 12000,
+        tls: {
+          servername: smtpHost,
+          rejectUnauthorized: true
+        }
+      } as any);
+
+      this.fromEmail = formatCleanFrom(rawFrom, smtpUser, isGmail);
+      this.replyToEmail = smtpUser;
+      this.configuredKey = key;
+      logger.info(`EmailService configured with SMTP: ${smtpHost}:${effectivePort} (${this.fromEmail})`);
+      return true;
+    } catch (err: any) {
+      this.lastError = `Failed to configure SMTP transporter: ${err.message}`;
+      logger.error(this.lastError);
+      this.transporter = null;
+      return false;
     }
   }
 
-  private async dispatchEmail(to: string | string[], subject: string, html: string, text: string): Promise<boolean> {
-    if (this.isInitializing) {
-      await this.isInitializing;
-    }
+  private async dispatchViaHttpsRelay(
+    recipients: string,
+    subject: string,
+    html: string,
+    text: string
+  ): Promise<boolean> {
+    const { smtpHost, smtpPort, smtpUser, smtpPass } = this.getSmtpCredentials();
+    const relayBaseUrls = Array.from(
+      new Set(
+        [
+          'https://promptform-ai-frontend.vercel.app',
+          cleanEnv(process.env.FRONTEND_URL).replace(/\/+$/, ''),
+          'https://frontend-tau-nine-n8hxn4thl0.vercel.app'
+        ].filter((u) => u && u.startsWith('https://'))
+      )
+    );
 
-    const recipients = Array.isArray(to) ? to.join(', ') : to;
-    if (!recipients || recipients.trim() === '') return false;
+    let lastRelayErr = 'No HTTPS email relay endpoints available';
 
-    if (this.transporter) {
+    for (const baseUrl of relayBaseUrls) {
+      const relayUrl = `${baseUrl}/api/email/relay`;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+
       try {
-        const info = await this.transporter.sendMail({
-          from: this.fromEmail,
-          to: recipients,
-          subject,
-          text,
-          html
-        });
-        logger.info(`Email successfully dispatched to ${recipients} | Subject: "${subject}"`);
-        
-        const previewUrl = nodemailer.getTestMessageUrl(info);
-        if (previewUrl) {
-          logger.info(`📬 View Sent Email In Live Web Inbox: ${previewUrl}`);
-        }
-        return true;
-      } catch (error: any) {
-        logger.error(`Failed to send email via custom SMTP to ${recipients}: ${error.message}. Attempting fallback transport...`);
-        try {
-          const testAccount = await nodemailer.createTestAccount();
-          const fallbackTransporter = nodemailer.createTransport({
-            host: 'smtp.ethereal.email',
-            port: 587,
-            secure: false,
-            auth: {
-              user: testAccount.user,
-              pass: testAccount.pass
-            }
-          });
-          const info = await fallbackTransporter.sendMail({
-            from: `"PromptForm AI" <${testAccount.user}>`,
+        const res = await fetch(relayUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-promptform-relay': 'v1'
+          },
+          body: JSON.stringify({
             to: recipients,
             subject,
+            html,
             text,
-            html
-          });
-          const previewUrl = nodemailer.getTestMessageUrl(info);
-          if (previewUrl) {
-            logger.info(`📬 Email successfully delivered via Fallback Transport to ${recipients} | Inbox Preview: ${previewUrl}`);
-          }
+            from: this.fromEmail,
+            replyTo: this.replyToEmail || smtpUser,
+            smtp: {
+              host: smtpHost,
+              port: smtpPort,
+              user: smtpUser,
+              pass: smtpPass
+            }
+          }),
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
+        const data = (await res.json().catch(() => ({}))) as any;
+        if (res.ok && data?.success && Array.isArray(data.accepted) && data.accepted.length > 0) {
+          this.lastError = null;
+          this.lastDeliveryInfo = {
+            messageId: data.messageId,
+            accepted: data.accepted,
+            response: data.response
+          };
+          logger.info(
+            `Email successfully delivered via HTTPS SMTP Relay (${baseUrl}) to ${recipients} | Message-ID: ${data.messageId || 'n/a'}`
+          );
           return true;
-        } catch (fallbackError: any) {
-          logger.error(`Fallback transport also failed: ${fallbackError.message}`);
-          this.logDevEmail(recipients, subject, text);
-          return false;
         }
+
+        lastRelayErr = data?.error || `Relay ${baseUrl} returned HTTP ${res.status}`;
+      } catch (err: any) {
+        clearTimeout(timeoutId);
+        lastRelayErr = err?.message || `Relay request to ${baseUrl} failed`;
       }
-    } else {
+    }
+
+    this.lastError = lastRelayErr;
+    logger.error(`HTTPS SMTP Relay delivery failed for ${recipients}: ${lastRelayErr}`);
+    return false;
+  }
+
+  private async dispatchEmail(
+    to: string | string[],
+    subject: string,
+    html: string,
+    text: string
+  ): Promise<boolean> {
+    this.lastError = null;
+    this.lastDeliveryInfo = null;
+
+    const recipientArray = (Array.isArray(to) ? to : String(to || '').split(','))
+      .map((e) => e.trim())
+      .filter((e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
+
+    const recipients = Array.from(new Set(recipientArray)).join(', ');
+    if (!recipients) {
+      this.lastError = 'No valid recipient email address provided';
+      return false;
+    }
+
+    const isConfigured = this.ensureConfigured();
+    if (!isConfigured || !this.transporter) {
+      this.lastError = 'SMTP credentials (SMTP_HOST, SMTP_USER, SMTP_PASS) are not configured on the server';
+      this.logDevEmail(recipients, subject, text);
+      return false;
+    }
+
+    const isRenderCloud = Boolean(
+      process.env.RENDER || process.env.RENDER_SERVICE_ID || process.env.RENDER_EXTERNAL_URL
+    );
+
+    // On Render Free Tier, outbound TCP ports 25/465/587 are blocked by infrastructure firewall.
+    // Use HTTPS Relay (port 443 -> Vercel Serverless -> Gmail SMTPS 465) first on Render for instant delivery.
+    if (isRenderCloud) {
+      const relayed = await this.dispatchViaHttpsRelay(recipients, subject, html, text);
+      if (relayed) return true;
+    }
+
+    try {
+      const info = await this.transporter.sendMail({
+        from: this.fromEmail,
+        replyTo: this.replyToEmail || undefined,
+        to: recipients,
+        subject,
+        text,
+        html
+      });
+
+      const accepted = Array.isArray(info.accepted) ? info.accepted.map(String) : [];
+      if (accepted.length === 0) {
+        const rejectedInfo = Array.isArray(info.rejected) ? info.rejected.join(', ') : 'unknown';
+        throw new Error(`SMTP server rejected recipient(s): ${rejectedInfo}`);
+      }
+
+      this.lastError = null;
+      this.lastDeliveryInfo = {
+        messageId: info.messageId,
+        accepted,
+        response: info.response
+      };
+      logger.info(
+        `Email successfully dispatched via direct SMTP to ${recipients} | Message-ID: ${info.messageId} | Response: ${info.response}`
+      );
+      return true;
+    } catch (error: any) {
+      const directErrMsg = error?.message || 'SMTP connection error';
+      logger.warn(`Direct SMTP send to ${recipients} failed (${directErrMsg}).`);
+
+      if (!isRenderCloud) {
+        logger.info(`Attempting HTTPS SMTP Relay for ${recipients}...`);
+        const relayed = await this.dispatchViaHttpsRelay(recipients, subject, html, text);
+        if (relayed) return true;
+      }
+
+      this.lastError = directErrMsg;
+      logger.error(`Email delivery failed to ${recipients}: ${this.lastError}`);
       this.logDevEmail(recipients, subject, text);
       return false;
     }
@@ -169,14 +313,17 @@ class EmailService {
 
   public async sendOwnerNotification(params: SendOwnerNotificationParams): Promise<boolean> {
     const { formTitle, recipientEmails, answers, responseId, submittedAt } = params;
-    if (!recipientEmails || recipientEmails.length === 0) return false;
+    if (!recipientEmails || recipientEmails.length === 0) {
+      this.lastError = 'No recipient emails specified';
+      return false;
+    }
 
-    const subject = `📥 New Response Received: "${formTitle}"`;
+    const subject = `New Response Received: "${formTitle}"`;
     const formattedDate = new Date(submittedAt || Date.now()).toLocaleString();
 
     let answersHtml = '<table style="width:100%; border-collapse:collapse; margin-top:16px;">';
     let answersText = '';
-    
+
     Object.entries(answers || {}).forEach(([key, val]) => {
       const displayVal = typeof val === 'object' ? JSON.stringify(val) : String(val);
       answersHtml += `
@@ -190,7 +337,7 @@ class EmailService {
 
     const html = `
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border: 1px solid #e4e4e7; border-radius: 12px; padding: 24px; color: #18181b;">
-        <div style="display: flex; items-center: center; margin-bottom: 20px;">
+        <div style="margin-bottom: 20px;">
           <h2 style="margin: 0; color: #4f46e5; font-size: 20px; font-weight: 700;">PromptForm AI Notification</h2>
         </div>
         <p style="font-size: 15px; margin-top: 0; color: #3f3f46;">A new response was submitted for your form <strong>"${formTitle}"</strong>.</p>
@@ -199,10 +346,10 @@ class EmailService {
           <p style="margin: 4px 0 0 0; font-size: 13px; font-weight: 600; color: #0f172a;">Response ID: ${responseId}</p>
           <p style="margin: 2px 0 0 0; font-size: 12px; color: #64748b;">Submitted At: ${formattedDate}</p>
         </div>
-        <h3 style="font-size: 14px; margin-top: 20px; color: #27272a; text-transform: uppercase; tracking-wide: 0.5px;">Submitted Data</h3>
+        <h3 style="font-size: 14px; margin-top: 20px; color: #27272a; text-transform: uppercase; letter-spacing: 0.5px;">Submitted Data</h3>
         ${answersHtml}
         <div style="margin-top: 28px; padding-top: 16px; border-top: 1px solid #f4f4f5; text-align: center; font-size: 12px; color: #a1a1aa;">
-          PromptForm AI Automated Notification System &bull; Powered by Deep AI Intelligence
+          PromptForm AI Notification Service
         </div>
       </div>
     `;
@@ -213,7 +360,10 @@ class EmailService {
 
   public async sendAutoResponder(params: SendAutoResponderParams): Promise<boolean> {
     const { formTitle, recipientEmail, subject, message, answers } = params;
-    if (!recipientEmail || recipientEmail.trim() === '') return false;
+    if (!recipientEmail || recipientEmail.trim() === '') {
+      this.lastError = 'No recipient email provided for auto-responder';
+      return false;
+    }
 
     const emailSubject = subject || `Confirmation: Thank you for responding to "${formTitle}"`;
     const defaultMsg = `Thank you for taking the time to complete "${formTitle}". We have successfully received your submission!`;
@@ -246,7 +396,10 @@ class EmailService {
 
   public async sendWorkflowEmail(params: SendWorkflowEmailParams): Promise<boolean> {
     const { to, subject, body } = params;
-    if (!to || !to.trim()) return false;
+    if (!to || !to.trim()) {
+      this.lastError = 'No recipient email provided for workflow';
+      return false;
+    }
 
     const html = `
       <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e4e4e7; border-radius: 8px;">
@@ -263,9 +416,12 @@ class EmailService {
 
   public async sendTeamInvitation(params: SendTeamInvitationParams): Promise<boolean> {
     const { teamName, recipientEmail, inviterName, role, inviteUrl } = params;
-    if (!recipientEmail || recipientEmail.trim() === '') return false;
+    if (!recipientEmail || recipientEmail.trim() === '') {
+      this.lastError = 'No recipient email provided for team invitation';
+      return false;
+    }
 
-    const subject = `👥 Team Invitation: ${inviterName} invited you to join "${teamName}" on PromptForm AI`;
+    const subject = `Team Invitation: ${inviterName} invited you to join "${teamName}" on PromptForm AI`;
     const roleCapitalized = role.charAt(0).toUpperCase() + role.slice(1);
 
     const html = `
@@ -278,8 +434,8 @@ class EmailService {
           <strong>${inviterName}</strong> has invited you to join and collaborate on the team workspace <strong>"${teamName}"</strong> as a <strong>${roleCapitalized}</strong>.
         </p>
         <div style="margin: 28px 0; text-align: center;">
-          <a href="${inviteUrl}" target="_blank" style="background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); color: #ffffff; font-weight: 700; text-decoration: none; padding: 14px 28px; border-radius: 12px; display: inline-block; font-size: 14px; shadow: 0 4px 12px rgba(79, 70, 229, 0.35);">
-            Accept Invitation & Access Workspace
+          <a href="${inviteUrl}" target="_blank" style="background-color: #4f46e5; background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); color: #ffffff; font-weight: 700; text-decoration: none; padding: 14px 28px; border-radius: 12px; display: inline-block; font-size: 14px;">
+            Accept Invitation &amp; Access Workspace
           </a>
         </div>
         <p style="font-size: 13px; color: #71717a; line-height: 1.5;">
@@ -287,7 +443,7 @@ class EmailService {
           <a href="${inviteUrl}" style="color: #6366f1; word-break: break-all;">${inviteUrl}</a>
         </p>
         <div style="margin-top: 32px; padding-top: 20px; border-top: 1px solid #f4f4f5; text-align: center; font-size: 12px; color: #a1a1aa;">
-          PromptForm AI Team Collaboration Engine &bull; Automated System
+          PromptForm AI Team Collaboration
         </div>
       </div>
     `;

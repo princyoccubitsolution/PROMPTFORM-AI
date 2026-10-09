@@ -2569,16 +2569,17 @@ export default function BuilderPage() {
                           type="button"
                           onClick={async () => {
                             try {
+                              showToast("📨 Sending test email...");
                               const res = await api.post('/forms/notifications/live/test-email', {
                                 targetEmail: store.settings.notification_emails
                               });
-                              if (res?.success) {
-                                showToast("📧 Test email dispatched successfully!");
+                              if (res?.success && res?.emailSent !== false) {
+                                showToast(`📧 ${res.message || "Test email dispatched successfully!"}`);
                               } else {
-                                showToast(res?.message || "Failed to send test email");
+                                showToast(`⚠️ ${res?.message || res?.error || "Failed to send test email"}`);
                               }
                             } catch (err: any) {
-                              showToast("Failed to send test email");
+                              showToast(`⚠️ ${err?.message || "Failed to send test email"}`);
                             }
                           }}
                           className="px-2.5 py-2 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 text-xs font-semibold transition-all cursor-pointer flex items-center gap-1 border border-indigo-500/20"

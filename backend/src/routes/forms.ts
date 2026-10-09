@@ -419,12 +419,20 @@ router.post('/notifications/live/test-email', authMiddleware, async (req: Authen
   try {
     if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
     const { targetEmail } = req.body;
-    const recipient = targetEmail || req.user.email;
-    if (!recipient) return res.status(400).json({ error: 'No recipient email provided' });
+    const rawTargets = typeof targetEmail === 'string' && targetEmail.trim()
+      ? targetEmail.split(',').map((e: string) => e.trim()).filter((e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e))
+      : [];
+    const recipientList = rawTargets.length > 0
+      ? Array.from(new Set(rawTargets))
+      : (req.user.email ? [req.user.email] : []);
+
+    if (recipientList.length === 0) {
+      return res.status(400).json({ error: 'No valid recipient email provided' });
+    }
 
     const sent = await emailService.sendOwnerNotification({
       formTitle: 'PromptForm AI Email Test',
-      recipientEmails: [recipient],
+      recipientEmails: recipientList,
       answers: {
         'Test Message': 'Your PromptForm AI email notification service is working perfectly!',
         'Timestamp': new Date().toLocaleString(),
@@ -434,9 +442,19 @@ router.post('/notifications/live/test-email', authMiddleware, async (req: Authen
       submittedAt: new Date()
     });
 
-    return res.json({ 
-      success: sent, 
-      message: sent ? `Test email sent successfully to ${recipient}` : `Failed to deliver email` 
+    const deliveryInfo = emailService.getLastDeliveryInfo();
+    const emailError = emailService.getLastError();
+    const recipientDisplay = recipientList.join(', ');
+
+    return res.json({
+      success: sent,
+      emailSent: sent,
+      recipients: recipientList,
+      messageId: deliveryInfo?.messageId || null,
+      error: sent ? null : (emailError || 'Failed to deliver email'),
+      message: sent
+        ? `Test email sent successfully to ${recipientDisplay}`
+        : `Failed to deliver email to ${recipientDisplay}: ${emailError || 'SMTP delivery failed'}`
     });
   } catch (error: any) {
     return res.status(500).json({ error: error.message || 'Internal server error' });

@@ -126,11 +126,19 @@ export function TeamDetailWorkspace({ teamId, onBack, currentUser }: TeamDetailW
       setIsInviteOpen(false);
       setInviteEmail('');
       await loadTeamDetail();
-      if (res?.inviteUrl && navigator.clipboard) {
-        navigator.clipboard.writeText(res.inviteUrl).catch(() => {});
-        alert(`${res.message || 'Invitation created successfully!'}\n\nInvitation link has been copied to your clipboard.`);
+      const copiedNote = res?.inviteUrl && navigator.clipboard
+        ? (() => {
+            navigator.clipboard.writeText(res.inviteUrl).catch(() => {});
+            return '\n\nInvitation link has been copied to your clipboard.';
+          })()
+        : '';
+
+      if (res?.emailSent === false) {
+        alert(
+          `⚠️ ${res.message || `Invitation created, but email delivery failed (${res?.emailError || 'SMTP error'}).`}${copiedNote}`
+        );
       } else {
-        alert(res?.message || 'Member invited to team workspace successfully!');
+        alert(`${res?.message || 'Invitation email sent successfully!'}${copiedNote}`);
       }
     } catch (err: any) {
       alert(err.message || 'Failed to invite member.');

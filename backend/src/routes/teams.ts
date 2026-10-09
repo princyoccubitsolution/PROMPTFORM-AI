@@ -655,7 +655,10 @@ router.post('/:id/members', authMiddleware, async (req: AuthenticatedRequest, re
     });
 
     // Send invitation email with token accept link
-    const frontendUrl = process.env.FRONTEND_URL || 'https://promptform-ai-frontend.vercel.app';
+    const reqOrigin = typeof req.headers.origin === 'string' && req.headers.origin.startsWith('http')
+      ? req.headers.origin.replace(/\/+$/, '')
+      : '';
+    const frontendUrl = (reqOrigin || process.env.FRONTEND_URL || 'https://promptform-ai-frontend.vercel.app').replace(/\/+$/, '');
     const inviteUrl = `${frontendUrl}/accept-invite?token=${token}`;
 
     const emailSent = await emailService.sendTeamInvitation({
@@ -665,6 +668,8 @@ router.post('/:id/members', authMiddleware, async (req: AuthenticatedRequest, re
       role,
       inviteUrl
     });
+    const emailError = emailSent ? null : emailService.getLastError();
+    const deliveryInfo = emailService.getLastDeliveryInfo();
 
     // Log Activity
     await logActivity({
@@ -682,9 +687,11 @@ router.post('/:id/members', authMiddleware, async (req: AuthenticatedRequest, re
       token: invite.token,
       inviteUrl,
       emailSent,
+      emailError,
+      messageId: deliveryInfo?.messageId || null,
       message: emailSent
         ? `Invitation email sent to ${recipientEmail} as ${role.toUpperCase()}.`
-        : `Invitation created successfully for ${recipientEmail}!`
+        : `Invitation created for ${recipientEmail}, but email delivery failed (${emailError || 'SMTP error'}). Please share the invitation link manually.`
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
