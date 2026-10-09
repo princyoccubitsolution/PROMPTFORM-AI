@@ -270,6 +270,63 @@ class EmailService {
     return false;
   }
 
+  private async dispatchViaResend(recipients: string[], subject: string, html: string, text: string): Promise<boolean> {
+    const from = cleanEnv(process.env.EMAIL_FROM) || cleanEnv(process.env.RESEND_FROM);
+    if (!from) {
+      this.lastError = 'RESEND_API_KEY is set but EMAIL_FROM (e.g. "PromptForm AI <noreply@yourdomain.com>") is missing';
+      logger.error(this.lastError);
+      return false;
+    }
+    try {
+      const res = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${cleanEnv(process.env.RESEND_API_KEY)}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          from,
+          to: recipients,
+          subject,
+          html,
+          text,
+          reply_to: cleanEnv(process.env.EMAIL_REPLY_TO) || cleanEnv(process.env.SMTP_USER) || undefined
+        })
+      });
+      const data = (await res.json().catch(() => ({}))) as any;
+      if (!res.ok || !data?.id) {
+        this.lastError = `Resend rejected the email (HTTP ${res.status}): ${data?.message || data?.name || 'unknown error'}`;
+        logger.error(`${this.lastError} | to: ${recipients.join(', ')}`);
+        return false;
+      }
+      this.lastError = null;
+      this.lastDeliveryInfo = { status: 'accepted', messageId: data.id, accepted: recipients, response: 'resend:queued' };
+      logger.info(`Email accepted by Resend for ${recipients.join(', ')} | Resend ID: ${data.id}`);
+      return true;
+    } catch (err: any) {
+      this.lastError = `Resend request failed: ${err?.message || 'network error'}`;
+      logger.error(this.lastError);
+      return false;
+    }
+  }
+
+  /** Looks up the provider's latest delivery event (delivered, bounced, complained, ...) for a Resend message ID. */
+  public async getProviderDeliveryStatus(messageId: string): Promise<{ provider: string; lastEvent: string | null; error?: string }> {
+    const key = cleanEnv(process.env.RESEND_API_KEY);
+    if (!key || !/^[0-9a-f-]{36}$/i.test(messageId)) {
+      return { provider: 'gmail-smtp', lastEvent: null, error: 'Gmail SMTP does not expose delivery events; check the sender mailbox for bounces' };
+    }
+    try {
+      const res = await fetch(`https://api.resend.com/emails/${messageId}`, { headers: { Authorization: `Bearer ${key}` } });
+      const data = (await res.json().catch(() => ({}))) as any;
+      if (!res.ok) return { provider: 'resend', lastEvent: null, error: data?.message || `HTTP ${res.status}` };
+      logger.info(`Resend delivery status for ${messageId}: ${data.last_event}`);
+      return { provider: 'resend', lastEvent: data.last_event || null };
+    } catch (err: any) {
+      return { provider: 'resend', lastEvent: null, error: err?.message || 'network error' };
+    }
+  }
+
   private async dispatchEmail(
     to: string | string[],
     subject: string,
@@ -296,9 +353,17 @@ class EmailService {
       return false;
     }
 
+    // Transactional provider (Resend) takes priority when configured: HTTPS-only, verified-domain
+    // sender, and per-message delivery status. Falls back to Gmail SMTP if it is not set or fails.
+    if (cleanEnv(process.env.RESEND_API_KEY)) {
+      const sentViaResend = await this.dispatchViaResend(Array.from(new Set(recipientArray)), subject, html, text);
+      if (sentViaResend) return true;
+    }
+    const resendError = this.lastError;
+
     const isConfigured = this.ensureConfigured();
     if (!isConfigured || !this.transporter) {
-      this.lastError = 'SMTP credentials (SMTP_HOST, SMTP_USER, SMTP_PASS) are not configured on the server';
+      this.lastError = [resendError, 'SMTP credentials (SMTP_HOST, SMTP_USER, SMTP_PASS) are not configured on the server'].filter(Boolean).join('; ');
       this.logDevEmail(recipients, subject, text);
       return false;
     }

@@ -51,6 +51,11 @@ services:
         sync: false
       - key: SMTP_FROM
         sync: false
+      # Optional transactional provider (preferred over Gmail SMTP when set)
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
     disk:
       name: uploads-data
       mountPath: /opt/render/project/src/backend/public/uploads

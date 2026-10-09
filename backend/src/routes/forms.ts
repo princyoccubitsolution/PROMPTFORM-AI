@@ -462,6 +462,13 @@ router.post('/notifications/live/test-email', authMiddleware, async (req: Authen
   }
 });
 
+// Provider delivery status (delivered / bounced / complained) for a sent email's message ID
+router.get('/notifications/live/email-status/:messageId', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
+  const status = await emailService.getProviderDeliveryStatus(req.params.messageId);
+  return res.json(status);
+});
+
 // SHARED WITH ME: Get forms where current user is a direct collaborator
 router.get('/collaborations/shared-with-me', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   try {
