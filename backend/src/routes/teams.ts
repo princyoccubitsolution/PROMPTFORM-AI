@@ -212,6 +212,116 @@ router.post('/', authMiddleware, async (req: AuthenticatedRequest, res: Response
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
+// GET: Verify Invitation Token details (Public endpoint for /accept-invite page)
+router.get('/invitations/verify/:token', async (req: Request, res: Response) => {
+  try {
+    const { token } = req.params;
+    const invite = await db.teamInvite.findUnique({
+      where: { token },
+      include: {
+        team: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            owner: { select: { name: true, email: true } }
+          }
+        }
+      }
+    });
+
+    if (!invite) return res.status(404).json({ error: 'Invitation not found or invalid token.' });
+
+    if (invite.status !== 'pending') {
+      return res.status(400).json({ error: `This invitation has already been ${invite.status}.` });
+    }
+
+    if (invite.expiresAt < new Date()) {
+      await db.teamInvite.update({ where: { id: invite.id }, data: { status: 'expired' } });
+      return res.status(400).json({ error: 'This invitation link has expired. Please ask the team owner for a new invitation.' });
+    }
+
+    return res.json({
+      id: invite.id,
+      email: invite.email,
+      role: invite.role,
+      token: invite.token,
+      teamId: invite.teamId,
+      teamName: invite.team.name,
+      teamDescription: invite.team.description,
+      inviterName: invite.team.owner.name || invite.team.owner.email,
+      expiresAt: invite.expiresAt
+    });
+  } catch (error) {
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST: Accept Team Workspace Invitation (Requires authenticated user)
+router.post('/invitations/accept/:token', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
+    const { token } = req.params;
+
+    const invite = await db.teamInvite.findUnique({
+      where: { token },
+      include: { team: true }
+    });
+
+    if (!invite) return res.status(404).json({ error: 'Invitation not found or invalid token.' });
+
+    if (invite.status !== 'pending') {
+      return res.status(400).json({ error: `This invitation has already been ${invite.status}.` });
+    }
+
+    if (invite.expiresAt < new Date()) {
+      await db.teamInvite.update({ where: { id: invite.id }, data: { status: 'expired' } });
+      return res.status(400).json({ error: 'This invitation has expired.' });
+    }
+
+    // Add user as team member with the specified role
+    const member = await db.teamMember.upsert({
+      where: { teamId_userId: { teamId: invite.teamId, userId: req.user.id } },
+      create: {
+        teamId: invite.teamId,
+        userId: req.user.id,
+        role: invite.role
+      },
+      update: {
+        role: invite.role
+      },
+      include: {
+        team: true,
+        user: { select: { id: true, name: true, email: true } }
+      }
+    });
+
+    // Mark invitation as accepted
+    await db.teamInvite.update({
+      where: { id: invite.id },
+      data: { status: 'accepted' }
+    });
+
+    // Log Activity
+    await logActivity({
+      userId: req.user.id,
+      action: 'MEMBER_JOINED',
+      teamId: invite.teamId,
+      targetTitle: req.user.email,
+      details: `${req.user.name || req.user.email} accepted invitation and joined "${invite.team.name}" as ${invite.role}`
+    });
+
+    return res.json({
+      success: true,
+      teamId: invite.teamId,
+      role: invite.role,
+      teamName: invite.team.name,
+      message: `Successfully joined "${invite.team.name}" as ${invite.role}!`
+    });
+  } catch (error) {
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 // GET: Team Detail Workspace (Overview + stats + members)
 router.get('/:id', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
@@ -430,116 +540,7 @@ router.get('/:id/activity', authMiddleware, async (req: AuthenticatedRequest, re
   }
 });
 
-// GET: Verify Invitation Token details (Public endpoint for /accept-invite page)
-router.get('/invitations/verify/:token', async (req: Request, res: Response) => {
-  try {
-    const { token } = req.params;
-    const invite = await db.teamInvite.findUnique({
-      where: { token },
-      include: {
-        team: {
-          select: {
-            id: true,
-            name: true,
-            description: true,
-            owner: { select: { name: true, email: true } }
-          }
-        }
-      }
-    });
 
-    if (!invite) return res.status(404).json({ error: 'Invitation not found or invalid token.' });
-
-    if (invite.status !== 'pending') {
-      return res.status(400).json({ error: `This invitation has already been ${invite.status}.` });
-    }
-
-    if (invite.expiresAt < new Date()) {
-      await db.teamInvite.update({ where: { id: invite.id }, data: { status: 'expired' } });
-      return res.status(400).json({ error: 'This invitation link has expired. Please ask the team owner for a new invitation.' });
-    }
-
-    return res.json({
-      id: invite.id,
-      email: invite.email,
-      role: invite.role,
-      token: invite.token,
-      teamId: invite.teamId,
-      teamName: invite.team.name,
-      teamDescription: invite.team.description,
-      inviterName: invite.team.owner.name || invite.team.owner.email,
-      expiresAt: invite.expiresAt
-    });
-  } catch (error) {
-    return res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// POST: Accept Team Workspace Invitation (Requires authenticated user)
-router.post('/invitations/accept/:token', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
-    const { token } = req.params;
-
-    const invite = await db.teamInvite.findUnique({
-      where: { token },
-      include: { team: true }
-    });
-
-    if (!invite) return res.status(404).json({ error: 'Invitation not found or invalid token.' });
-
-    if (invite.status !== 'pending') {
-      return res.status(400).json({ error: `This invitation has already been ${invite.status}.` });
-    }
-
-    if (invite.expiresAt < new Date()) {
-      await db.teamInvite.update({ where: { id: invite.id }, data: { status: 'expired' } });
-      return res.status(400).json({ error: 'This invitation has expired.' });
-    }
-
-    // Add user as team member with the specified role
-    const member = await db.teamMember.upsert({
-      where: { teamId_userId: { teamId: invite.teamId, userId: req.user.id } },
-      create: {
-        teamId: invite.teamId,
-        userId: req.user.id,
-        role: invite.role
-      },
-      update: {
-        role: invite.role
-      },
-      include: {
-        team: true,
-        user: { select: { id: true, name: true, email: true } }
-      }
-    });
-
-    // Mark invitation as accepted
-    await db.teamInvite.update({
-      where: { id: invite.id },
-      data: { status: 'accepted' }
-    });
-
-    // Log Activity
-    await logActivity({
-      userId: req.user.id,
-      action: 'MEMBER_JOINED',
-      teamId: invite.teamId,
-      targetTitle: req.user.email,
-      details: `${req.user.name || req.user.email} accepted invitation and joined "${invite.team.name}" as ${invite.role}`
-    });
-
-    return res.json({
-      success: true,
-      teamId: invite.teamId,
-      role: invite.role,
-      teamName: invite.team.name,
-      message: `Successfully joined "${invite.team.name}" as ${invite.role}!`
-    });
-  } catch (error) {
-    return res.status(500).json({ error: 'Internal server error' });
-  }
-});
 
 // GET: List pending invitations for a team (Owner/Admin only)
 router.get('/:id/invitations', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
