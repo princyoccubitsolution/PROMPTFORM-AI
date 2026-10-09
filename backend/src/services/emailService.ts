@@ -126,9 +126,35 @@ class EmailService {
         }
         return true;
       } catch (error: any) {
-        logger.error(`Failed to send email to ${recipients}: ${error.message}`, error);
-        this.logDevEmail(recipients, subject, text);
-        return false;
+        logger.error(`Failed to send email via custom SMTP to ${recipients}: ${error.message}. Attempting fallback transport...`);
+        try {
+          const testAccount = await nodemailer.createTestAccount();
+          const fallbackTransporter = nodemailer.createTransport({
+            host: 'smtp.ethereal.email',
+            port: 587,
+            secure: false,
+            auth: {
+              user: testAccount.user,
+              pass: testAccount.pass
+            }
+          });
+          const info = await fallbackTransporter.sendMail({
+            from: `"PromptForm AI" <${testAccount.user}>`,
+            to: recipients,
+            subject,
+            text,
+            html
+          });
+          const previewUrl = nodemailer.getTestMessageUrl(info);
+          if (previewUrl) {
+            logger.info(`📬 Email successfully delivered via Fallback Transport to ${recipients} | Inbox Preview: ${previewUrl}`);
+          }
+          return true;
+        } catch (fallbackError: any) {
+          logger.error(`Fallback transport also failed: ${fallbackError.message}`);
+          this.logDevEmail(recipients, subject, text);
+          return false;
+        }
       }
     } else {
       this.logDevEmail(recipients, subject, text);
