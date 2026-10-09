@@ -50,14 +50,27 @@ class EmailService {
 
     if (smtpHost && smtpUser && smtpPass && !isPlaceholder) {
       try {
-        this.transporter = nodemailer.createTransport({
+        const isGmail = smtpHost.includes('gmail');
+        this.transporter = nodemailer.createTransport(isGmail ? {
+          service: 'gmail',
+          auth: {
+            user: smtpUser,
+            pass: smtpPass
+          },
+          connectionTimeout: 10000,
+          greetingTimeout: 10000,
+          socketTimeout: 10000
+        } : {
           host: smtpHost,
           port: smtpPort,
           secure: smtpPort === 465,
           auth: {
             user: smtpUser,
             pass: smtpPass
-          }
+          },
+          connectionTimeout: 10000,
+          greetingTimeout: 10000,
+          socketTimeout: 10000
         });
         this.fromEmail = process.env.SMTP_FROM || smtpUser;
         logger.info(`EmailService initialized with Custom SMTP: ${smtpHost} (${this.fromEmail})`);
