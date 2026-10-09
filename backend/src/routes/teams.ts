@@ -688,9 +688,10 @@ router.post('/:id/members', authMiddleware, async (req: AuthenticatedRequest, re
       inviteUrl,
       emailSent,
       emailError,
+      deliveryStatus: emailSent ? 'accepted' : 'rejected',
       messageId: deliveryInfo?.messageId || null,
       message: emailSent
-        ? `Invitation email sent to ${recipientEmail} as ${role.toUpperCase()}.`
+        ? `Invitation email accepted by the mail server for ${recipientEmail} as ${role.toUpperCase()}. Ask them to check Inbox and Spam.`
         : `Invitation created for ${recipientEmail}, but email delivery failed (${emailError || 'SMTP error'}). Please share the invitation link manually.`
     });
   } catch (error) {

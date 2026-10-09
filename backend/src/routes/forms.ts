@@ -450,10 +450,11 @@ router.post('/notifications/live/test-email', authMiddleware, async (req: Authen
       success: sent,
       emailSent: sent,
       recipients: recipientList,
+      deliveryStatus: sent ? 'accepted' : 'rejected',
       messageId: deliveryInfo?.messageId || null,
       error: sent ? null : (emailError || 'Failed to deliver email'),
       message: sent
-        ? `Test email sent successfully to ${recipientDisplay}`
+        ? `Test email accepted by the mail server for ${recipientDisplay}. Ask the recipient to check Inbox and Spam; if it does not arrive, a bounce notice will be sent to the sender mailbox.`
         : `Failed to deliver email to ${recipientDisplay}: ${emailError || 'SMTP delivery failed'}`
     });
   } catch (error: any) {

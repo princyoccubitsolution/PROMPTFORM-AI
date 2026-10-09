@@ -1,5 +1,46 @@
 import nodemailer, { Transporter } from 'nodemailer';
+import { promises as dns } from 'dns';
 import { logger } from '../lib/logger';
+
+// Common misspellings of major mailbox providers. Gmail accepts mail to these, then retries
+// silently for days (e.g. gmali.com has no MX), so the sender sees "sent" but nothing arrives.
+const DOMAIN_TYPOS: Record<string, string> = {
+  'gmali.com': 'gmail.com', 'gmial.com': 'gmail.com', 'gmal.com': 'gmail.com', 'gamil.com': 'gmail.com',
+  'gnail.com': 'gmail.com', 'gmail.co': 'gmail.com', 'gmaill.com': 'gmail.com', 'gmail.con': 'gmail.com',
+  'gmail.cm': 'gmail.com', 'gmai.com': 'gmail.com', 'yaho.com': 'yahoo.com', 'yahooo.com': 'yahoo.com',
+  'hotmal.com': 'hotmail.com', 'hotmial.com': 'hotmail.com', 'outlok.com': 'outlook.com', 'outllok.com': 'outlook.com'
+};
+
+const mxCache = new Map<string, { ok: boolean; reason?: string; at: number }>();
+
+/** Returns an error string if the recipient's domain cannot receive mail, otherwise null. */
+async function checkRecipientDomain(email: string): Promise<string | null> {
+  const domain = email.split('@')[1]?.toLowerCase() || '';
+  if (DOMAIN_TYPOS[domain]) {
+    return `"${email}" looks misspelled (did you mean @${DOMAIN_TYPOS[domain]}?)`;
+  }
+  const cached = mxCache.get(domain);
+  if (cached && Date.now() - cached.at < 10 * 60 * 1000) {
+    return cached.ok ? null : cached.reason || null;
+  }
+  try {
+    const mx = await dns.resolveMx(domain);
+    // RFC 7505 null MX ("." exchange) means the domain explicitly accepts no mail
+    const usable = mx.filter((r) => r.exchange && r.exchange !== '.');
+    const reason = usable.length ? undefined : `The domain "${domain}" does not accept email (no mail server)`;
+    mxCache.set(domain, { ok: !reason, reason, at: Date.now() });
+    return reason || null;
+  } catch (err: any) {
+    if (err?.code === 'ENOTFOUND' || err?.code === 'ENODATA') {
+      const reason = `The domain "${domain}" has no mail server (MX record), so email to ${email} cannot be delivered`;
+      mxCache.set(domain, { ok: false, reason, at: Date.now() });
+      return reason;
+    }
+    // Transient DNS failure: don't block sending
+    logger.warn(`MX lookup for ${domain} failed (${err?.code || err?.message}); sending anyway`);
+    return null;
+  }
+}
 
 interface SendOwnerNotificationParams {
   formTitle: string;
@@ -32,6 +73,8 @@ interface SendTeamInvitationParams {
 }
 
 export interface DeliveryInfo {
+  // 'accepted' = the SMTP provider queued it. Inbox delivery is not confirmed; bounces arrive at SMTP_USER's mailbox.
+  status?: 'accepted';
   messageId?: string;
   accepted?: string[];
   response?: string;
@@ -204,12 +247,13 @@ class EmailService {
         if (res.ok && data?.success && Array.isArray(data.accepted) && data.accepted.length > 0) {
           this.lastError = null;
           this.lastDeliveryInfo = {
+            status: 'accepted',
             messageId: data.messageId,
             accepted: data.accepted,
             response: data.response
           };
           logger.info(
-            `Email successfully delivered via HTTPS SMTP Relay (${baseUrl}) to ${recipients} | Message-ID: ${data.messageId || 'n/a'}`
+            `Email accepted by SMTP provider via HTTPS relay (${baseUrl}) for ${recipients} | Message-ID: ${data.messageId || 'n/a'} | Response: ${data.response || 'n/a'}`
           );
           return true;
         }
@@ -242,6 +286,13 @@ class EmailService {
     const recipients = Array.from(new Set(recipientArray)).join(', ');
     if (!recipients) {
       this.lastError = 'No valid recipient email address provided';
+      return false;
+    }
+
+    const domainErrors = (await Promise.all(recipientArray.map(checkRecipientDomain))).filter(Boolean);
+    if (domainErrors.length > 0) {
+      this.lastError = domainErrors.join('; ');
+      logger.warn(`Email not sent (undeliverable recipient): ${this.lastError}`);
       return false;
     }
 
@@ -281,12 +332,13 @@ class EmailService {
 
       this.lastError = null;
       this.lastDeliveryInfo = {
+        status: 'accepted',
         messageId: info.messageId,
         accepted,
         response: info.response
       };
       logger.info(
-        `Email successfully dispatched via direct SMTP to ${recipients} | Message-ID: ${info.messageId} | Response: ${info.response}`
+        `Email accepted by SMTP provider via direct SMTP for ${recipients} | Message-ID: ${info.messageId} | Response: ${info.response}`
       );
       return true;
     } catch (error: any) {

@@ -239,10 +239,12 @@ export async function POST(req: NextRequest) {
     const body = (await req.json()) as RelayPayload;
     const { to, subject, html, text, from, smtp } = body;
 
-    const smtpHost = cleanEnvValue(smtp?.host || process.env.SMTP_HOST || 'smtp.gmail.com');
-    const smtpPort = Number(smtp?.port || process.env.SMTP_PORT || 465);
-    const smtpUser = cleanEnvValue(smtp?.user || process.env.SMTP_USER);
-    const smtpPass = cleanEnvValue(smtp?.pass || process.env.SMTP_PASS);
+    // Credentials must come from the caller; never fall back to this deployment's env,
+    // otherwise anyone could send mail as the owner's account through this public route.
+    const smtpHost = cleanEnvValue(smtp?.host || 'smtp.gmail.com');
+    const smtpPort = Number(smtp?.port || 465);
+    const smtpUser = cleanEnvValue(smtp?.user);
+    const smtpPass = cleanEnvValue(smtp?.pass);
 
     // Restrict to approved SMTP hosts to prevent abuse
     const allowedHosts = ['smtp.gmail.com', cleanEnvValue(process.env.SMTP_HOST)].filter(Boolean);
