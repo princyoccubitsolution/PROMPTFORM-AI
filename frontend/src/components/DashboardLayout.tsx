@@ -7,7 +7,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Sparkles, Plus, FileText, BarChart3, Users, Settings, LogOut, 
   Folder, LayoutGrid, Bot, Palette, Sun, Moon,
-  Search, Bell, ChevronDown, Menu, X, Trash2
+  Search, Bell, ChevronDown, Menu, X, Trash2,
+  Inbox, Zap, CheckCheck, Filter, ExternalLink
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { BrandedLogo } from '@/components/NavigationHeader';
@@ -34,6 +35,7 @@ export function DashboardLayout({ children, activeTab }: DashboardLayoutProps) {
   // User Data
   const [user, setUser] = useState<any>({ name: "User", email: "", subscriptionPlan: "free", credits: 0 });
   const [notifications, setNotifications] = useState<any[]>([]);
+  const [filterUnreadOnly, setFilterUnreadOnly] = useState(false);
 
   const notificationsRef = React.useRef<HTMLDivElement>(null);
   const userPopoverRef = React.useRef<HTMLDivElement>(null);
@@ -199,12 +201,12 @@ export function DashboardLayout({ children, activeTab }: DashboardLayoutProps) {
               return (
                 <button 
                   onClick={() => setNotificationsOpen(!notificationsOpen)}
-                  className="w-9 h-9 sm:w-8 sm:h-8 rounded-xl border border-border/80 dark:border-zinc-800 bg-card/60 dark:bg-zinc-900/60 hover:bg-muted dark:hover:bg-zinc-800 text-muted-foreground transition-all flex items-center justify-center relative cursor-pointer shadow-2xs"
+                  className="w-9 h-9 sm:w-8.5 sm:h-8.5 rounded-xl border border-border/80 dark:border-zinc-800 bg-card/80 dark:bg-zinc-900/80 hover:bg-muted dark:hover:bg-zinc-800 text-muted-foreground transition-all flex items-center justify-center relative cursor-pointer shadow-2xs group"
                   aria-label="View notifications"
                 >
-                  <Bell className="w-4 h-4 text-foreground/80" />
+                  <Bell className="w-4 h-4 text-foreground/80 group-hover:text-primary transition-colors" />
                   {unreadCount > 0 && (
-                    <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 bg-primary text-[10px] font-bold text-primary-foreground rounded-full flex items-center justify-center ring-2 ring-background shadow-xs">
+                    <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 bg-gradient-to-r from-indigo-500 to-violet-600 text-[10px] font-extrabold text-white rounded-full flex items-center justify-center ring-2 ring-background shadow-md shadow-indigo-500/30 animate-pulse">
                       {unreadCount > 9 ? '9+' : unreadCount}
                     </span>
                   )}
@@ -215,18 +217,31 @@ export function DashboardLayout({ children, activeTab }: DashboardLayoutProps) {
             <AnimatePresence>
               {notificationsOpen && (
                 <motion.div 
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 10 }}
-                  className="absolute right-0 mt-2 w-[calc(100vw-2rem)] max-w-84 sm:w-84 bg-card dark:bg-card rounded-2xl border border-border dark:border-border shadow-2xl z-50 p-4 select-none"
+                  initial={{ opacity: 0, y: 12, scale: 0.96 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 8, scale: 0.96 }}
+                  transition={{ duration: 0.18, ease: "easeOut" }}
+                  className="absolute right-0 mt-3 w-[calc(100vw-2rem)] max-w-96 sm:w-[420px] bg-card/95 dark:bg-zinc-950/95 backdrop-blur-xl rounded-3xl border border-border/80 dark:border-zinc-800/80 shadow-2xl z-50 p-4 select-none overflow-hidden"
                 >
-                  <div className="flex justify-between items-center mb-3">
-                    <span className="font-bold text-xs uppercase tracking-wider text-foreground dark:text-foreground flex items-center gap-1.5">
-                      <Bell className="w-3.5 h-3.5 text-primary" />
-                      Live Notifications
-                    </span>
+                  {/* Top Bar Header */}
+                  <div className="flex justify-between items-center mb-3.5 pb-2.5 border-b border-border/60 dark:border-zinc-800/60">
+                    <div className="flex items-center space-x-2">
+                      <div className="p-1.5 rounded-lg bg-primary/10 text-primary">
+                        <Bell className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <span className="font-bold text-xs uppercase tracking-wider text-foreground dark:text-zinc-100 block">
+                          Notifications
+                        </span>
+                        <span className="text-[10px] text-emerald-500 font-semibold flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping inline-block" />
+                          Live Activity Feed
+                        </span>
+                      </div>
+                    </div>
+
                     {notifications.length > 0 && (
-                      <div className="flex items-center space-x-2">
+                      <div className="flex items-center space-x-1.5">
                         <button 
                           onClick={async () => {
                             try {
@@ -234,11 +249,12 @@ export function DashboardLayout({ children, activeTab }: DashboardLayoutProps) {
                               setNotifications(prev => prev.map(n => ({ ...n, read: true })));
                             } catch (err) {}
                           }}
-                          className="text-[11px] text-primary font-semibold hover:underline cursor-pointer"
+                          className="px-2 py-1 rounded-lg text-[11px] text-primary font-semibold hover:bg-primary/10 transition-colors flex items-center gap-1 cursor-pointer"
+                          title="Mark all as read"
                         >
-                          Mark all read
+                          <CheckCheck className="w-3.5 h-3.5" />
+                          <span>Read All</span>
                         </button>
-                        <span className="text-muted-foreground/40 text-xs">&bull;</span>
                         <button 
                           onClick={async () => {
                             try {
@@ -246,63 +262,143 @@ export function DashboardLayout({ children, activeTab }: DashboardLayoutProps) {
                               setNotifications([]);
                             } catch (err) {}
                           }}
-                          className="text-[11px] text-destructive font-semibold hover:underline cursor-pointer"
+                          className="px-2 py-1 rounded-lg text-[11px] text-destructive font-semibold hover:bg-destructive/10 transition-colors cursor-pointer"
+                          title="Clear all alerts"
                         >
                           Clear
                         </button>
                       </div>
                     )}
                   </div>
-                  <div className="space-y-2 max-h-72 overflow-y-auto scrollbar-thin pr-0.5">
-                    {notifications.length === 0 ? (
-                      <div className="text-center py-6 text-xs text-muted-foreground">
-                        <Bell className="w-8 h-8 mx-auto mb-2 opacity-30 text-muted-foreground" />
-                        <p className="font-semibold text-foreground">No new notifications</p>
-                        <p className="text-[11px] text-muted-foreground mt-0.5">You're all caught up! ✨</p>
-                      </div>
-                    ) : (
-                      notifications.map(n => (
-                        <div 
-                          key={n.id} 
-                          onClick={async () => {
-                            if (!n.read) {
-                              try {
-                                await api.post(`/forms/notifications/live/${n.id}/read`);
-                                setNotifications(prev => prev.map(item => item.id === n.id ? { ...item, read: true } : item));
-                              } catch (err) {}
-                            }
-                          }}
-                          className={`p-3 rounded-xl text-xs transition-all border relative group cursor-pointer ${
-                            n.read 
-                              ? 'bg-transparent border-transparent text-muted-foreground dark:text-muted-foreground opacity-80' 
-                              : 'bg-primary/5 dark:bg-primary/10 border-primary/20 text-foreground dark:text-foreground font-medium shadow-2xs'
-                          }`}
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <p className="leading-snug flex-1">{n.text}</p>
-                            <button
-                              onClick={async (e) => {
-                                e.stopPropagation();
-                                try {
-                                  await api.delete(`/forms/notifications/live/${n.id}`);
-                                  setNotifications(prev => prev.filter(item => item.id !== n.id));
-                                } catch (err) {}
-                              }}
-                              className="opacity-0 group-hover:opacity-100 p-1 hover:text-destructive transition-opacity cursor-pointer shrink-0"
-                              title="Remove notification"
-                            >
-                              <Trash2 className="w-3.5 h-3.5 text-muted-foreground hover:text-destructive" />
-                            </button>
+
+                  {/* Filter Tabs */}
+                  {notifications.length > 0 && (
+                    <div className="flex items-center space-x-1 mb-3 p-1 rounded-xl bg-muted/60 dark:bg-zinc-900/60 text-[11px] font-semibold">
+                      <button
+                        onClick={() => setFilterUnreadOnly(false)}
+                        className={`flex-1 py-1 px-2.5 rounded-lg transition-all cursor-pointer ${
+                          !filterUnreadOnly 
+                            ? 'bg-card dark:bg-zinc-800 text-foreground dark:text-zinc-100 shadow-2xs font-bold' 
+                            : 'text-muted-foreground hover:text-foreground'
+                        }`}
+                      >
+                        All Alerts ({notifications.length})
+                      </button>
+                      <button
+                        onClick={() => setFilterUnreadOnly(true)}
+                        className={`flex-1 py-1 px-2.5 rounded-lg transition-all cursor-pointer ${
+                          filterUnreadOnly 
+                            ? 'bg-card dark:bg-zinc-800 text-foreground dark:text-zinc-100 shadow-2xs font-bold' 
+                            : 'text-muted-foreground hover:text-foreground'
+                        }`}
+                      >
+                        Unread ({notifications.filter(n => !n.read).length})
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Notifications List */}
+                  <div className="space-y-2 max-h-80 overflow-y-auto scrollbar-thin pr-0.5">
+                    {(() => {
+                      const displayedList = filterUnreadOnly 
+                        ? notifications.filter(n => !n.read) 
+                        : notifications;
+
+                      if (displayedList.length === 0) {
+                        return (
+                          <div className="text-center py-8 text-xs text-muted-foreground">
+                            <div className="w-12 h-12 mx-auto mb-2.5 rounded-2xl bg-muted/50 dark:bg-zinc-900/50 flex items-center justify-center text-muted-foreground/60">
+                              <Bell className="w-6 h-6" />
+                            </div>
+                            <p className="font-bold text-foreground dark:text-zinc-200">
+                              {filterUnreadOnly ? "No Unread Notifications" : "No Alerts Yet"}
+                            </p>
+                            <p className="text-[11px] text-muted-foreground mt-0.5">
+                              {filterUnreadOnly ? "You're all caught up!" : "New submissions and form activity will appear here live."}
+                            </p>
                           </div>
-                          <span className="text-[10px] text-muted-foreground/80 dark:text-zinc-400 mt-1.5 block font-normal">
-                            {n.time || 'Just now'}
-                          </span>
-                        </div>
-                      ))
-                    )}
+                        );
+                      }
+
+                      return displayedList.map(n => {
+                        const isResponse = n.text?.toLowerCase().includes('response') || n.text?.toLowerCase().includes('submission');
+                        const isTeam = n.text?.toLowerCase().includes('team') || n.text?.toLowerCase().includes('member');
+                        const isTest = n.text?.toLowerCase().includes('test');
+
+                        return (
+                          <div 
+                            key={n.id} 
+                            onClick={async () => {
+                              if (!n.read) {
+                                try {
+                                  await api.post(`/forms/notifications/live/${n.id}/read`);
+                                  setNotifications(prev => prev.map(item => item.id === n.id ? { ...item, read: true } : item));
+                                } catch (err) {}
+                              }
+                              if (n.formId) {
+                                setNotificationsOpen(false);
+                                router.push(`/builder/${n.formId}?tab=responses`);
+                              }
+                            }}
+                            className={`p-3.5 rounded-2xl text-xs transition-all border relative group cursor-pointer ${
+                              n.read 
+                                ? 'bg-transparent border-transparent text-muted-foreground opacity-75 hover:opacity-100 hover:bg-muted/40' 
+                                : 'bg-primary/5 dark:bg-primary/10 border-primary/20 text-foreground font-semibold shadow-2xs border-l-4 border-l-primary'
+                            }`}
+                          >
+                            <div className="flex items-start space-x-3">
+                              <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${
+                                isResponse ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' :
+                                isTeam ? 'bg-indigo-500/10 text-indigo-500 border border-indigo-500/20' :
+                                isTest ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20' :
+                                'bg-violet-500/10 text-violet-500 border border-violet-500/20'
+                              }`}>
+                                {isResponse ? <Inbox className="w-4 h-4" /> :
+                                 isTeam ? <Users className="w-4 h-4" /> :
+                                 isTest ? <Zap className="w-4 h-4" /> :
+                                 <Sparkles className="w-4 h-4" />}
+                              </div>
+
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-start justify-between gap-1.5">
+                                  <p className="leading-snug text-foreground dark:text-zinc-100 font-semibold truncate-2-lines">
+                                    {n.text}
+                                  </p>
+                                  <button
+                                    onClick={async (e) => {
+                                      e.stopPropagation();
+                                      try {
+                                        await api.delete(`/forms/notifications/live/${n.id}`);
+                                        setNotifications(prev => prev.filter(item => item.id !== n.id));
+                                      } catch (err) {}
+                                    }}
+                                    className="opacity-0 group-hover:opacity-100 p-1 hover:text-destructive transition-opacity cursor-pointer shrink-0"
+                                    title="Remove alert"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5 text-muted-foreground hover:text-destructive" />
+                                  </button>
+                                </div>
+                                
+                                <div className="flex items-center justify-between mt-2 pt-1 border-t border-border/40">
+                                  <span className="text-[10px] text-muted-foreground font-medium">
+                                    {n.time || 'Just now'}
+                                  </span>
+                                  {n.formId && (
+                                    <span className="text-[10px] text-primary font-bold hover:underline flex items-center gap-0.5">
+                                      View Responses <ExternalLink className="w-2.5 h-2.5" />
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      });
+                    })()}
                   </div>
                   
-                  <div className="mt-3 pt-2.5 border-t border-border/60">
+                  {/* Bottom Footer Quick Action */}
+                  <div className="mt-3 pt-2.5 border-t border-border/60 dark:border-zinc-800/60 flex items-center justify-between">
                     <button
                       onClick={async () => {
                         try {
@@ -312,10 +408,10 @@ export function DashboardLayout({ children, activeTab }: DashboardLayoutProps) {
                           }
                         } catch (err) {}
                       }}
-                      className="w-full py-1.5 px-3 rounded-lg bg-muted hover:bg-accent dark:bg-zinc-800 dark:hover:bg-zinc-700 text-[11px] font-bold text-foreground dark:text-zinc-200 transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                      className="w-full py-2 px-3 rounded-xl bg-muted/80 hover:bg-accent dark:bg-zinc-900 dark:hover:bg-zinc-800 text-xs font-bold text-foreground dark:text-zinc-100 transition-all cursor-pointer flex items-center justify-center gap-2 border border-border/50 shadow-2xs"
                     >
-                      <Bell className="w-3.5 h-3.5 text-primary" />
-                      Send Test Live Notification
+                      <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-500/20" />
+                      <span>Trigger Test Notification</span>
                     </button>
                   </div>
                 </motion.div>

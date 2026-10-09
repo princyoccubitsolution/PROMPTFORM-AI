@@ -9,7 +9,7 @@ import {
   ExternalLink, Globe, Code, Download, Shield, BarChart3, AlertTriangle, CheckCircle2,
   QrCode, Mail, ArrowUp, ArrowDown, GripVertical, Calendar, Clock, CreditCard,
   Undo2, Redo2, History, Search, ChevronRight, ChevronDown, Bell, Moon, Sun, 
-  MoreHorizontal, User, Users, Sparkle,
+  MoreHorizontal, User, Users, Sparkle, Inbox, CheckCheck,
   Phone, MapPin, Lock, Link, Hash, DollarSign, Image
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
@@ -170,6 +170,7 @@ export default function BuilderPage() {
   // Live Notifications & Toast state
   const [liveNotifications, setLiveNotifications] = useState<any[]>([]);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [filterUnreadOnly, setFilterUnreadOnly] = useState(false);
   const notificationsRef = useRef<HTMLDivElement>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -806,37 +807,50 @@ export default function BuilderPage() {
               {(() => {
                 const unreadCount = liveNotifications.filter(n => !n.read).length;
                 return (
-                  <button
+                  <button 
                     onClick={() => setNotificationsOpen(!notificationsOpen)}
-                    className="p-2.5 rounded-lg text-muted-foreground hover:text-foreground dark:hover:text-zinc-100 transition-colors border-none bg-transparent cursor-pointer relative"
-                    title="Notifications"
+                    className="w-9 h-9 sm:w-8.5 sm:h-8.5 rounded-xl border border-border/80 dark:border-zinc-800 bg-card/80 dark:bg-zinc-900/80 hover:bg-muted dark:hover:bg-zinc-800 text-muted-foreground transition-all flex items-center justify-center relative cursor-pointer shadow-2xs group"
+                    aria-label="View notifications"
                   >
-                    <Bell className="w-5 h-5 text-muted-foreground hover:text-foreground" />
+                    <Bell className="w-4 h-4 text-foreground/80 group-hover:text-primary transition-colors" />
                     {unreadCount > 0 && (
-                      <span className="absolute top-1.5 right-1.5 min-w-[16px] h-[16px] px-1 bg-primary text-[9px] font-bold text-primary-foreground rounded-full flex items-center justify-center ring-2 ring-background shadow-xs">
+                      <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 bg-gradient-to-r from-indigo-500 to-violet-600 text-[10px] font-extrabold text-white rounded-full flex items-center justify-center ring-2 ring-background shadow-md shadow-indigo-500/30 animate-pulse">
                         {unreadCount > 9 ? '9+' : unreadCount}
                       </span>
                     )}
                   </button>
                 );
               })()}
-
+              
               <AnimatePresence>
                 {notificationsOpen && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 10 }}
-                    className="absolute right-0 mt-2 w-84 bg-card dark:bg-card rounded-2xl border border-border dark:border-border shadow-2xl z-50 p-4 select-none"
+                  <motion.div 
+                    initial={{ opacity: 0, y: 12, scale: 0.96 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 8, scale: 0.96 }}
+                    transition={{ duration: 0.18, ease: "easeOut" }}
+                    className="absolute right-0 mt-3 w-[calc(100vw-2rem)] max-w-96 sm:w-[420px] bg-card/95 dark:bg-zinc-950/95 backdrop-blur-xl rounded-3xl border border-border/80 dark:border-zinc-800/80 shadow-2xl z-50 p-4 select-none overflow-hidden"
                   >
-                    <div className="flex justify-between items-center mb-3">
-                      <span className="font-bold text-xs uppercase tracking-wider text-foreground dark:text-foreground flex items-center gap-1.5">
-                        <Bell className="w-3.5 h-3.5 text-primary" />
-                        Live Activity Alerts
-                      </span>
+                    {/* Top Bar Header */}
+                    <div className="flex justify-between items-center mb-3.5 pb-2.5 border-b border-border/60 dark:border-zinc-800/60">
+                      <div className="flex items-center space-x-2">
+                        <div className="p-1.5 rounded-lg bg-primary/10 text-primary">
+                          <Bell className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <span className="font-bold text-xs uppercase tracking-wider text-foreground dark:text-zinc-100 block">
+                            Notifications
+                          </span>
+                          <span className="text-[10px] text-emerald-500 font-semibold flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping inline-block" />
+                            Live Activity Feed
+                          </span>
+                        </div>
+                      </div>
+
                       {liveNotifications.length > 0 && (
-                        <div className="flex items-center space-x-2">
-                          <button
+                        <div className="flex items-center space-x-1.5">
+                          <button 
                             onClick={async () => {
                               try {
                                 await api.post('/forms/notifications/live/read-all');
@@ -844,12 +858,13 @@ export default function BuilderPage() {
                                 showToast("Marked all notifications as read");
                               } catch (err) {}
                             }}
-                            className="text-[11px] text-primary font-semibold hover:underline cursor-pointer"
+                            className="px-2 py-1 rounded-lg text-[11px] text-primary font-semibold hover:bg-primary/10 transition-colors flex items-center gap-1 cursor-pointer"
+                            title="Mark all as read"
                           >
-                            Mark all read
+                            <CheckCheck className="w-3.5 h-3.5" />
+                            <span>Read All</span>
                           </button>
-                          <span className="text-muted-foreground/40 text-xs">&bull;</span>
-                          <button
+                          <button 
                             onClick={async () => {
                               try {
                                 await api.delete('/forms/notifications/live');
@@ -857,78 +872,148 @@ export default function BuilderPage() {
                                 showToast("Cleared all notifications");
                               } catch (err) {}
                             }}
-                            className="text-[11px] text-destructive font-semibold hover:underline cursor-pointer"
+                            className="px-2 py-1 rounded-lg text-[11px] text-destructive font-semibold hover:bg-destructive/10 transition-colors cursor-pointer"
+                            title="Clear all alerts"
                           >
                             Clear
                           </button>
                         </div>
                       )}
                     </div>
-                    
-                    <div className="space-y-2 max-h-72 overflow-y-auto scrollbar-thin pr-0.5">
-                      {liveNotifications.length === 0 ? (
-                        <div className="text-center py-6 text-xs text-muted-foreground">
-                          <Bell className="w-8 h-8 mx-auto mb-2 opacity-30 text-muted-foreground" />
-                          <p className="font-semibold text-foreground">No new notifications</p>
-                          <p className="text-[11px] text-muted-foreground mt-0.5">You're all caught up! ✨</p>
-                        </div>
-                      ) : (
-                        liveNotifications.map(n => (
-                          <div
-                            key={n.id}
-                            onClick={async () => {
-                              if (!n.read) {
-                                try {
-                                  await api.post(`/forms/notifications/live/${n.id}/read`);
-                                  setLiveNotifications(prev => prev.map(item => item.id === n.id ? { ...item, read: true } : item));
-                                } catch (err) {}
-                              }
-                            }}
-                            className={`p-3 rounded-xl text-xs transition-all border relative group cursor-pointer ${
-                              n.read
-                                ? 'bg-transparent border-transparent text-muted-foreground dark:text-muted-foreground opacity-80'
-                                : 'bg-primary/5 dark:bg-primary/10 border-primary/20 text-foreground dark:text-foreground font-medium shadow-2xs'
-                            }`}
-                          >
-                            <div className="flex items-start justify-between gap-2">
-                              <p className="leading-snug flex-1">{n.text}</p>
-                              <button
-                                onClick={async (e) => {
-                                  e.stopPropagation();
-                                  try {
-                                    await api.delete(`/forms/notifications/live/${n.id}`);
-                                    setLiveNotifications(prev => prev.filter(item => item.id !== n.id));
-                                  } catch (err) {}
-                                }}
-                                className="opacity-0 group-hover:opacity-100 p-1 hover:text-destructive transition-opacity cursor-pointer shrink-0"
-                                title="Remove notification"
-                              >
-                                <Trash2 className="w-3.5 h-3.5 text-muted-foreground hover:text-destructive" />
-                              </button>
-                            </div>
-                            <span className="text-[10px] text-muted-foreground/80 dark:text-zinc-400 mt-1.5 block font-normal">
-                              {n.time || 'Just now'}
-                            </span>
-                          </div>
-                        ))
-                      )}
-                    </div>
 
-                    <div className="mt-3 pt-2.5 border-t border-border/60 flex items-center justify-between">
+                    {/* Filter Tabs */}
+                    {liveNotifications.length > 0 && (
+                      <div className="flex items-center space-x-1 mb-3 p-1 rounded-xl bg-muted/60 dark:bg-zinc-900/60 text-[11px] font-semibold">
+                        <button
+                          onClick={() => setFilterUnreadOnly(false)}
+                          className={`flex-1 py-1 px-2.5 rounded-lg transition-all cursor-pointer ${
+                            !filterUnreadOnly 
+                              ? 'bg-card dark:bg-zinc-800 text-foreground dark:text-zinc-100 shadow-2xs font-bold' 
+                              : 'text-muted-foreground hover:text-foreground'
+                          }`}
+                        >
+                          All Alerts ({liveNotifications.length})
+                        </button>
+                        <button
+                          onClick={() => setFilterUnreadOnly(true)}
+                          className={`flex-1 py-1 px-2.5 rounded-lg transition-all cursor-pointer ${
+                            filterUnreadOnly 
+                              ? 'bg-card dark:bg-zinc-800 text-foreground dark:text-zinc-100 shadow-2xs font-bold' 
+                              : 'text-muted-foreground hover:text-foreground'
+                          }`}
+                        >
+                          Unread ({liveNotifications.filter(n => !n.read).length})
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Notifications List */}
+                    <div className="space-y-2 max-h-80 overflow-y-auto scrollbar-thin pr-1">
+                      {(() => {
+                        const displayedList = filterUnreadOnly 
+                          ? liveNotifications.filter(n => !n.read) 
+                          : liveNotifications;
+
+                        if (displayedList.length === 0) {
+                          return (
+                            <div className="text-center py-8 px-4 text-xs text-muted-foreground bg-muted/20 dark:bg-zinc-900/30 rounded-2xl border border-dashed border-border/60">
+                              <div className="w-10 h-10 mx-auto mb-2 rounded-full bg-primary/10 text-primary flex items-center justify-center">
+                                <Bell className="w-6 h-6" />
+                              </div>
+                              <p className="font-bold text-foreground dark:text-zinc-200">
+                                {filterUnreadOnly ? "No Unread Notifications" : "No Alerts Yet"}
+                              </p>
+                              <p className="text-[11px] text-muted-foreground mt-0.5">
+                                {filterUnreadOnly ? "You're all caught up!" : "New submissions and form activity will appear here live."}
+                              </p>
+                            </div>
+                          );
+                        }
+
+                        return displayedList.map(n => {
+                          const isResponse = n.text?.toLowerCase().includes('response') || n.text?.toLowerCase().includes('submission');
+                          const isTeam = n.text?.toLowerCase().includes('team') || n.text?.toLowerCase().includes('member');
+                          const isTest = n.text?.toLowerCase().includes('test');
+
+                          return (
+                            <div 
+                              key={n.id} 
+                              onClick={async () => {
+                                if (!n.read) {
+                                  try {
+                                    await api.post(`/forms/notifications/live/${n.id}/read`);
+                                    setLiveNotifications(prev => prev.map(item => item.id === n.id ? { ...item, read: true } : item));
+                                  } catch (err) {}
+                                }
+                              }}
+                              className={`p-3.5 rounded-2xl text-xs transition-all border relative group cursor-pointer ${
+                                n.read 
+                                  ? 'bg-transparent border-transparent text-muted-foreground opacity-75 hover:opacity-100 hover:bg-muted/40' 
+                                  : 'bg-primary/5 dark:bg-primary/10 border-primary/20 text-foreground font-semibold shadow-2xs border-l-4 border-l-primary'
+                              }`}
+                            >
+                              <div className="flex items-start space-x-3">
+                                <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${
+                                  isResponse ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' :
+                                  isTeam ? 'bg-indigo-500/10 text-indigo-500 border border-indigo-500/20' :
+                                  isTest ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20' :
+                                  'bg-violet-500/10 text-violet-500 border border-violet-500/20'
+                                }`}>
+                                  {isResponse ? <Inbox className="w-4 h-4" /> :
+                                   isTeam ? <Users className="w-4 h-4" /> :
+                                   isTest ? <Zap className="w-4 h-4" /> :
+                                   <Sparkles className="w-4 h-4" />}
+                                </div>
+
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-start justify-between gap-1.5">
+                                    <p className="leading-snug text-foreground dark:text-zinc-100 font-semibold truncate-2-lines">
+                                      {n.text}
+                                    </p>
+                                    <button
+                                      onClick={async (e) => {
+                                        e.stopPropagation();
+                                        try {
+                                          await api.delete(`/forms/notifications/live/${n.id}`);
+                                          setLiveNotifications(prev => prev.filter(item => item.id !== n.id));
+                                        } catch (err) {}
+                                      }}
+                                      className="opacity-0 group-hover:opacity-100 p-1 hover:text-destructive transition-opacity cursor-pointer shrink-0"
+                                      title="Remove alert"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5 text-muted-foreground hover:text-destructive" />
+                                    </button>
+                                  </div>
+                                  
+                                  <div className="flex items-center justify-between mt-2 pt-1 border-t border-border/40">
+                                    <span className="text-[10px] text-muted-foreground font-medium">
+                                      {n.time || 'Just now'}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        });
+                      })()}
+                    </div>
+                    
+                    {/* Bottom Footer Quick Action */}
+                    <div className="mt-3 pt-2.5 border-t border-border/60 dark:border-zinc-800/60 flex items-center justify-between">
                       <button
                         onClick={async () => {
                           try {
                             const res = await api.post('/forms/notifications/live/test');
                             if (res?.notification) {
                               setLiveNotifications(prev => [res.notification, ...prev]);
-                              showToast("🔔 Test live notification received!");
+                              showToast("🔔 Test live alert received!");
                             }
                           } catch (err) {}
                         }}
-                        className="w-full py-1.5 px-3 rounded-lg bg-muted hover:bg-accent dark:bg-zinc-800 dark:hover:bg-zinc-700 text-[11px] font-bold text-foreground dark:text-zinc-200 transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                        className="w-full py-2 px-3 rounded-xl bg-muted/80 hover:bg-accent dark:bg-zinc-900 dark:hover:bg-zinc-800 text-xs font-bold text-foreground dark:text-zinc-100 transition-all cursor-pointer flex items-center justify-center gap-2 border border-border/50 shadow-2xs"
                       >
-                        <Bell className="w-3.5 h-3.5 text-primary" />
-                        Send Test Live Notification
+                        <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-500/20" />
+                        <span>Trigger Test Notification</span>
                       </button>
                     </div>
                   </motion.div>
@@ -2467,34 +2552,58 @@ export default function BuilderPage() {
                       />
                     </div>
 
-                    <div className="pt-2 flex items-center justify-between border-t border-border/50">
+                    <div className="pt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border/50">
                       <button
                         type="button"
                         onClick={() => {
                           handleSaveForm();
                           showToast("✨ Notification settings saved successfully!");
                         }}
-                        className="px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
+                        className="px-3.5 py-2 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
                       >
                         <Check className="w-3.5 h-3.5" />
-                        Save Notification Settings
+                        Save Settings
                       </button>
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          try {
-                            const res = await api.post('/forms/notifications/live/test');
-                            if (res?.notification) {
-                              setLiveNotifications(prev => [res.notification, ...prev]);
-                              showToast("🔔 Test live notification sent!");
+                      <div className="flex items-center space-x-1.5">
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            try {
+                              const res = await api.post('/forms/notifications/live/test-email', {
+                                targetEmail: store.settings.notification_emails
+                              });
+                              if (res?.success) {
+                                showToast("📧 Test email dispatched successfully!");
+                              } else {
+                                showToast(res?.message || "Failed to send test email");
+                              }
+                            } catch (err: any) {
+                              showToast("Failed to send test email");
                             }
-                          } catch (err) {}
-                        }}
-                        className="px-2.5 py-1.5 rounded-lg bg-accent hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-foreground dark:text-zinc-200 text-xs font-semibold transition-all cursor-pointer flex items-center gap-1 border border-border"
-                      >
-                        <Bell className="w-3.5 h-3.5 text-indigo-500" />
-                        Test Alert
-                      </button>
+                          }}
+                          className="px-2.5 py-2 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 text-xs font-semibold transition-all cursor-pointer flex items-center gap-1 border border-indigo-500/20"
+                          title="Send a sample email notification"
+                        >
+                          <Mail className="w-3.5 h-3.5 text-indigo-500" />
+                          <span>Test Email</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            try {
+                              const res = await api.post('/forms/notifications/live/test');
+                              if (res?.notification) {
+                                setLiveNotifications(prev => [res.notification, ...prev]);
+                                showToast("🔔 Test live bell notification sent!");
+                              }
+                            } catch (err) {}
+                          }}
+                          className="px-2.5 py-2 rounded-xl bg-accent hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-foreground dark:text-zinc-200 text-xs font-semibold transition-all cursor-pointer flex items-center gap-1 border border-border"
+                        >
+                          <Bell className="w-3.5 h-3.5 text-amber-500" />
+                          <span>Test Bell</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>

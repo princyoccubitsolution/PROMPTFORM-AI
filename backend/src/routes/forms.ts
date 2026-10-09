@@ -225,12 +225,90 @@ router.get('/', authMiddleware, async (req: AuthenticatedRequest, res: Response)
   }
 });
 
+const readNotifIds = new Set<string>();
+const deletedNotifIds = new Set<string>();
+
+const formatTimeAgo = (dateInput: Date | string): string => {
+  const d = new Date(dateInput);
+  const now = new Date();
+  const diffMs = now.getTime() - d.getTime();
+  const diffSec = Math.floor(diffMs / 1000);
+  if (diffSec < 60) return 'Just now';
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHours = Math.floor(diffMin / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays < 30) return `${diffDays}d ago`;
+  return d.toLocaleDateString();
+};
+
 // LIVE NOTIFICATIONS (must precede /:id)
 router.get('/notifications/live', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   try {
     if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
-    const userNotifications = inMemoryNotifications.filter(n => n.userId === req.user!.id || n.userId === 'all_users');
-    return res.json(userNotifications);
+
+    // 1. Fetch user activities from DB
+    const activities = await db.activity.findMany({
+      where: {
+        OR: [
+          { userId: req.user.id },
+          { form: { ownerId: req.user.id } }
+        ]
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 25
+    });
+
+    const dbNotifications: LiveNotification[] = activities.map(act => {
+      const isResponse = act.action === 'RESPONSE_RECEIVED';
+
+      let defaultText = act.details || `${act.action.replace(/_/g, ' ')}`;
+      if (isResponse && act.targetTitle) {
+        defaultText = `New submission received for '${act.targetTitle}'.`;
+      }
+
+      return {
+        id: `act_${act.id}`,
+        userId: req.user!.id,
+        text: defaultText,
+        time: formatTimeAgo(act.createdAt),
+        createdAt: act.createdAt.toISOString(),
+        read: readNotifIds.has(`act_${act.id}`),
+        formId: act.formId || undefined
+      };
+    });
+
+    // 2. Fetch memory notifications
+    const memNotifs = inMemoryNotifications
+      .filter(n => n.userId === req.user!.id || n.userId === 'all_users')
+      .map(n => ({
+        ...n,
+        time: formatTimeAgo(n.createdAt || new Date().toISOString()),
+        read: n.read || readNotifIds.has(n.id)
+      }));
+
+    // 3. Combine & remove deleted items
+    const combined = [...memNotifs, ...dbNotifications].filter(n => !deletedNotifIds.has(n.id));
+
+    // Deduplicate by text and formId so in-memory and DB duplicates are merged
+    const uniqueMap = new Map<string, LiveNotification>();
+    combined.forEach(item => {
+      const dedupeKey = item.id.startsWith('act_') ? item.id : `${item.formId || ''}_${item.text}`;
+      if (!uniqueMap.has(dedupeKey)) {
+        uniqueMap.set(dedupeKey, item);
+      } else {
+        const existing = uniqueMap.get(dedupeKey)!;
+        if (existing.read) item.read = true;
+        if (!existing.formId && item.formId) uniqueMap.set(dedupeKey, item);
+      }
+    });
+
+    const result = Array.from(uniqueMap.values()).sort((a, b) => 
+      new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+    );
+
+    return res.json(result);
   } catch (error) {
     return res.status(500).json({ error: 'Internal server error' });
   }
@@ -244,6 +322,14 @@ router.post('/notifications/live/read-all', authMiddleware, async (req: Authenti
         n.read = true;
       }
     });
+    // Mark DB activities as read for user session
+    const activities = await db.activity.findMany({
+      where: { OR: [{ userId: req.user.id }, { form: { ownerId: req.user.id } }] },
+      select: { id: true },
+      take: 50
+    });
+    activities.forEach(act => readNotifIds.add(`act_${act.id}`));
+
     return res.json({ success: true });
   } catch (error) {
     return res.status(500).json({ error: 'Internal server error' });
@@ -254,6 +340,7 @@ router.post('/notifications/live/:id/read', authMiddleware, async (req: Authenti
   try {
     if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
     const { id } = req.params;
+    readNotifIds.add(id);
     const item = inMemoryNotifications.find(n => n.id === id && (n.userId === req.user!.id || n.userId === 'all_users'));
     if (item) {
       item.read = true;
@@ -268,6 +355,7 @@ router.delete('/notifications/live/:id', authMiddleware, async (req: Authenticat
   try {
     if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
     const { id } = req.params;
+    deletedNotifIds.add(id);
     const index = inMemoryNotifications.findIndex(n => n.id === id && (n.userId === req.user!.id || n.userId === 'all_users'));
     if (index !== -1) {
       inMemoryNotifications.splice(index, 1);
@@ -284,9 +372,17 @@ router.delete('/notifications/live', authMiddleware, async (req: AuthenticatedRe
     let i = inMemoryNotifications.length;
     while (i--) {
       if (inMemoryNotifications[i].userId === req.user.id || inMemoryNotifications[i].userId === 'all_users') {
+        deletedNotifIds.add(inMemoryNotifications[i].id);
         inMemoryNotifications.splice(i, 1);
       }
     }
+    const activities = await db.activity.findMany({
+      where: { OR: [{ userId: req.user.id }, { form: { ownerId: req.user.id } }] },
+      select: { id: true },
+      take: 50
+    });
+    activities.forEach(act => deletedNotifIds.add(`act_${act.id}`));
+
     return res.json({ success: true });
   } catch (error) {
     return res.status(500).json({ error: 'Internal server error' });
@@ -299,15 +395,51 @@ router.post('/notifications/live/test', authMiddleware, async (req: Authenticate
     const newNotif: LiveNotification = {
       id: 'test_' + Math.random().toString(36).substring(2, 9),
       userId: req.user.id,
-      text: `🔔 Test Notification: Website notification engine is working perfectly!`,
+      text: `🔔 Test Notification: Persistent notification engine active & working perfectly!`,
       time: 'Just now',
       createdAt: new Date().toISOString(),
       read: false
     };
     inMemoryNotifications.unshift(newNotif);
+    
+    // Log activity in DB so it persists
+    await logActivity({
+      userId: req.user.id,
+      action: 'TEST_NOTIFICATION',
+      details: '🔔 Test Notification: Persistent notification engine active & working perfectly!'
+    }).catch(() => {});
+
     return res.json({ success: true, notification: newNotif });
   } catch (error) {
     return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/notifications/live/test-email', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
+    const { targetEmail } = req.body;
+    const recipient = targetEmail || req.user.email;
+    if (!recipient) return res.status(400).json({ error: 'No recipient email provided' });
+
+    const sent = await emailService.sendOwnerNotification({
+      formTitle: 'PromptForm AI Email Test',
+      recipientEmails: [recipient],
+      answers: {
+        'Test Message': 'Your PromptForm AI email notification service is working perfectly!',
+        'Timestamp': new Date().toLocaleString(),
+        'Status': 'Verified'
+      },
+      responseId: 'test_resp_' + Math.random().toString(36).substring(2, 7),
+      submittedAt: new Date()
+    });
+
+    return res.json({ 
+      success: sent, 
+      message: sent ? `Test email sent successfully to ${recipient}` : `Failed to deliver email` 
+    });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message || 'Internal server error' });
   }
 });
 
