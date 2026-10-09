@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { db } from '../lib/db';
 import { authMiddleware, AuthenticatedRequest } from '../middlewares/auth';
 import { logActivity } from '../lib/activity';
+import { emailService } from '../services/emailService';
 
 const router = Router();
 
@@ -450,8 +451,29 @@ router.post('/:id/members', authMiddleware, async (req: AuthenticatedRequest, re
 
     // Resolve user by email
     const userToInvite = await db.user.findUnique({ where: { email: email.toLowerCase() } });
+    const frontendUrl = process.env.FRONTEND_URL || 'https://promptform-ai-frontend.vercel.app';
+
     if (!userToInvite) {
-      return res.status(404).json({ error: 'No user registered with this email address. Please ask them to create an account first.' });
+      const inviteUrl = `${frontendUrl}/login?signup=true&email=${encodeURIComponent(email)}&teamId=${id}`;
+      const emailSent = await emailService.sendTeamInvitation({
+        teamName: team.name,
+        recipientEmail: email.toLowerCase(),
+        inviterName: req.user.name || req.user.email,
+        role,
+        inviteUrl
+      });
+
+      if (emailSent) {
+        return res.status(200).json({
+          pending: true,
+          emailSent: true,
+          message: `Team invitation email dispatched to ${email}. They will join the workspace upon signing up.`
+        });
+      } else {
+        return res.status(400).json({
+          error: `Could not send invitation email to ${email}. Please ensure SMTP environment settings are configured in production.`
+        });
+      }
     }
 
     // Check if already member
@@ -476,6 +498,15 @@ router.post('/:id/members', authMiddleware, async (req: AuthenticatedRequest, re
       }
     });
 
+    const inviteUrl = `${frontendUrl}/dashboard?tab=team&teamId=${id}`;
+    const emailSent = await emailService.sendTeamInvitation({
+      teamName: team.name,
+      recipientEmail: userToInvite.email,
+      inviterName: req.user.name || req.user.email,
+      role,
+      inviteUrl
+    });
+
     // Log Activity
     await logActivity({
       userId: req.user.id,
@@ -485,7 +516,10 @@ router.post('/:id/members', authMiddleware, async (req: AuthenticatedRequest, re
       details: `${userToInvite.name || userToInvite.email} joined ${team.name} as ${role}`
     });
 
-    return res.status(201).json(member);
+    return res.status(201).json({
+      ...member,
+      emailSent
+    });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return res.status(400).json({ error: 'Validation failed', details: error.errors });

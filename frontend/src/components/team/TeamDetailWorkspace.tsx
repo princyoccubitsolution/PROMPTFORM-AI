@@ -119,14 +119,14 @@ export function TeamDetailWorkspace({ teamId, onBack, currentUser }: TeamDetailW
 
     setIsInviting(true);
     try {
-      await api.post(`/teams/${teamId}/members`, {
+      const res = await api.post(`/teams/${teamId}/members`, {
         email: inviteEmail.trim(),
         role: inviteRole
       });
       setIsInviteOpen(false);
       setInviteEmail('');
       await loadTeamDetail();
-      alert('Member added to team workspace successfully!');
+      alert(res?.message || 'Member invited to team workspace successfully!');
     } catch (err: any) {
       alert(err.message || 'Failed to invite member.');
     } finally {
