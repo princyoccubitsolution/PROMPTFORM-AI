@@ -126,7 +126,12 @@ export function TeamDetailWorkspace({ teamId, onBack, currentUser }: TeamDetailW
       setIsInviteOpen(false);
       setInviteEmail('');
       await loadTeamDetail();
-      alert(res?.message || 'Member invited to team workspace successfully!');
+      if (res?.inviteUrl && navigator.clipboard) {
+        navigator.clipboard.writeText(res.inviteUrl).catch(() => {});
+        alert(`${res.message || 'Invitation created successfully!'}\n\nInvitation link has been copied to your clipboard.`);
+      } else {
+        alert(res?.message || 'Member invited to team workspace successfully!');
+      }
     } catch (err: any) {
       alert(err.message || 'Failed to invite member.');
     } finally {

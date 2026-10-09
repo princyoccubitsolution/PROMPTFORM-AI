@@ -680,10 +680,11 @@ router.post('/:id/members', authMiddleware, async (req: AuthenticatedRequest, re
       pending: true,
       inviteId: invite.id,
       token: invite.token,
+      inviteUrl,
       emailSent,
       message: emailSent
         ? `Invitation email sent to ${recipientEmail} as ${role.toUpperCase()}.`
-        : `Invitation created, but SMTP email delivery failed.`
+        : `Invitation created successfully for ${recipientEmail}!`
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
