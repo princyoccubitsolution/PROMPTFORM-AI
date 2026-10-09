@@ -99,6 +99,7 @@ model Team {
   members     TeamMember[]
   forms       Form[]
   activities  Activity[]
+  invites     TeamInvite[]
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 }
@@ -115,6 +116,23 @@ model TeamMember {
 
   @@unique([teamId, userId])
   @@index([userId])
+}
+
+model TeamInvite {
+  id        String   @id @default(uuid())
+  teamId    String
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  email     String
+  role      String   @default("editor") // "admin", "editor", "viewer"
+  token     String   @unique
+  status    String   @default("pending") // "pending", "accepted", "expired", "revoked"
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([token])
+  @@index([teamId])
+  @@index([email])
 }
 
 model Workflow {
