@@ -48,6 +48,10 @@ export function DashboardLayout({ children, activeTab }: DashboardLayoutProps) {
         e.preventDefault();
         setSearchModalOpen(prev => !prev);
       }
+      if (e.key === 'Escape') {
+        setNotificationsOpen(false);
+        setUserPopoverOpen(false);
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     
@@ -132,7 +136,10 @@ export function DashboardLayout({ children, activeTab }: DashboardLayoutProps) {
     <div className="min-h-screen bg-background dark:bg-background text-foreground dark:text-foreground flex flex-col overflow-hidden h-screen">
       
       {/* GLOBAL TOP HEADER */}
-      <header className="h-16 md:h-18 border-b border-border/70 dark:border-white/10 bg-white/70 dark:bg-black/60 backdrop-blur-2xl px-5 md:px-8 flex items-center justify-between flex-shrink-0 relative z-40 transition-all duration-300 shadow-xs">
+      {/* No backdrop-filter below sm: it becomes the containing block for the phone-sized
+          fixed notification panel and breaks its compositing. Raised above the floating
+          action button only while the notification panel is open. */}
+      <header className={`h-16 md:h-18 border-b border-border/70 dark:border-white/10 bg-white/95 dark:bg-black/90 sm:bg-white/70 sm:dark:bg-black/60 sm:backdrop-blur-2xl px-5 md:px-8 flex items-center justify-between flex-shrink-0 relative ${notificationsOpen ? 'z-[60]' : 'z-40'} transition-all duration-300 shadow-xs`}>
         
         {/* Left: Logo */}
         <div className="flex items-center justify-start min-w-0">
@@ -221,10 +228,14 @@ export function DashboardLayout({ children, activeTab }: DashboardLayoutProps) {
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 8, scale: 0.96 }}
                   transition={{ duration: 0.18, ease: "easeOut" }}
-                  className="absolute right-0 mt-3 w-[calc(100vw-2rem)] max-w-96 sm:w-[420px] bg-card dark:bg-zinc-950 rounded-3xl border border-border dark:border-zinc-800 shadow-2xl shadow-black/10 dark:shadow-black/50 z-50 p-4 select-none overflow-hidden"
+                  role="dialog"
+                  aria-label="Notifications"
+                  // Phones: pinned under the header across the viewport. sm+: anchored to the bell.
+                  // Flex column so header/tabs/footer stay put and only the list scrolls.
+                  className="fixed inset-x-3 top-[4.5rem] sm:absolute sm:inset-x-auto sm:top-full sm:right-0 sm:mt-3 sm:w-[min(420px,calc(100vw-24px))] max-h-[calc(100dvh-5.5rem)] sm:max-h-[min(640px,calc(100dvh-6rem))] flex flex-col bg-card dark:bg-zinc-950 rounded-3xl border border-border dark:border-zinc-800 shadow-2xl shadow-black/10 dark:shadow-black/50 z-50 p-4 select-none overflow-hidden origin-top-right"
                 >
                   {/* Top Bar Header */}
-                  <div className="flex justify-between items-center mb-3.5 pb-2.5 border-b border-border/60 dark:border-zinc-800/60">
+                  <div className="shrink-0 flex justify-between items-center gap-3 mb-3.5 pb-2.5 border-b border-border/60 dark:border-zinc-800/60">
                     <div className="flex items-center space-x-2">
                       <div className="p-1.5 rounded-lg bg-primary/10 text-primary">
                         <Bell className="w-4 h-4" />
@@ -241,8 +252,8 @@ export function DashboardLayout({ children, activeTab }: DashboardLayoutProps) {
                     </div>
 
                     {notifications.length > 0 && (
-                      <div className="flex items-center space-x-1.5">
-                        <button 
+                      <div className="flex items-center space-x-1.5 shrink-0">
+                        <button
                           onClick={async () => {
                             try {
                               await api.post('/forms/notifications/live/read-all');
@@ -273,7 +284,7 @@ export function DashboardLayout({ children, activeTab }: DashboardLayoutProps) {
 
                   {/* Filter Tabs */}
                   {notifications.length > 0 && (
-                    <div className="flex items-center space-x-1 mb-3 p-1 rounded-xl bg-muted/60 dark:bg-zinc-900/60 text-[11px] font-semibold">
+                    <div className="shrink-0 flex items-center space-x-1 mb-3 p-1 rounded-xl bg-muted dark:bg-zinc-900 text-[11px] font-semibold">
                       <button
                         onClick={() => setFilterUnreadOnly(false)}
                         className={`flex-1 py-1 px-2.5 rounded-lg transition-all cursor-pointer ${
@@ -298,7 +309,7 @@ export function DashboardLayout({ children, activeTab }: DashboardLayoutProps) {
                   )}
 
                   {/* Notifications List */}
-                  <div className="space-y-2 max-h-80 overflow-y-auto scrollbar-thin pr-0.5">
+                  <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain scrollbar-thin space-y-2 -mr-1.5 pr-1.5 py-0.5">
                     {(() => {
                       const displayedList = filterUnreadOnly 
                         ? notifications.filter(n => !n.read) 
@@ -401,7 +412,7 @@ export function DashboardLayout({ children, activeTab }: DashboardLayoutProps) {
                   </div>
                   
                   {/* Bottom Footer Quick Action */}
-                  <div className="mt-3 pt-2.5 border-t border-border/60 dark:border-zinc-800/60 flex items-center justify-between">
+                  <div className="shrink-0 mt-3 pt-2.5 border-t border-border/60 dark:border-zinc-800/60 flex items-center justify-between">
                     <button
                       onClick={async () => {
                         try {
