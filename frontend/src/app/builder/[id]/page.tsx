@@ -829,7 +829,7 @@ export default function BuilderPage() {
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: 8, scale: 0.96 }}
                     transition={{ duration: 0.18, ease: "easeOut" }}
-                    className="absolute right-0 mt-3 w-[calc(100vw-2rem)] max-w-96 sm:w-[420px] bg-card/95 dark:bg-zinc-950/95 backdrop-blur-xl rounded-3xl border border-border/80 dark:border-zinc-800/80 shadow-2xl z-50 p-4 select-none overflow-hidden"
+                    className="absolute right-0 mt-3 w-[calc(100vw-2rem)] max-w-96 sm:w-[420px] bg-card dark:bg-zinc-950 rounded-3xl border border-border dark:border-zinc-800 shadow-2xl shadow-black/10 dark:shadow-black/50 z-50 p-4 select-none overflow-hidden"
                   >
                     {/* Top Bar Header */}
                     <div className="flex justify-between items-center mb-3.5 pb-2.5 border-b border-border/60 dark:border-zinc-800/60">

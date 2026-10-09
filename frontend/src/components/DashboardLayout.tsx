@@ -132,7 +132,7 @@ export function DashboardLayout({ children, activeTab }: DashboardLayoutProps) {
     <div className="min-h-screen bg-background dark:bg-background text-foreground dark:text-foreground flex flex-col overflow-hidden h-screen">
       
       {/* GLOBAL TOP HEADER */}
-      <header className="h-16 md:h-18 border-b border-border/70 dark:border-white/10 bg-white/70 dark:bg-black/60 backdrop-blur-2xl px-5 md:px-8 flex items-center justify-between flex-shrink-0 z-30 transition-all duration-300 shadow-xs">
+      <header className="h-16 md:h-18 border-b border-border/70 dark:border-white/10 bg-white/70 dark:bg-black/60 backdrop-blur-2xl px-5 md:px-8 flex items-center justify-between flex-shrink-0 relative z-40 transition-all duration-300 shadow-xs">
         
         {/* Left: Logo */}
         <div className="flex items-center justify-start min-w-0">
@@ -221,7 +221,7 @@ export function DashboardLayout({ children, activeTab }: DashboardLayoutProps) {
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 8, scale: 0.96 }}
                   transition={{ duration: 0.18, ease: "easeOut" }}
-                  className="absolute right-0 mt-3 w-[calc(100vw-2rem)] max-w-96 sm:w-[420px] bg-card/95 dark:bg-zinc-950/95 backdrop-blur-xl rounded-3xl border border-border/80 dark:border-zinc-800/80 shadow-2xl z-50 p-4 select-none overflow-hidden"
+                  className="absolute right-0 mt-3 w-[calc(100vw-2rem)] max-w-96 sm:w-[420px] bg-card dark:bg-zinc-950 rounded-3xl border border-border dark:border-zinc-800 shadow-2xl shadow-black/10 dark:shadow-black/50 z-50 p-4 select-none overflow-hidden"
                 >
                   {/* Top Bar Header */}
                   <div className="flex justify-between items-center mb-3.5 pb-2.5 border-b border-border/60 dark:border-zinc-800/60">
@@ -322,7 +322,7 @@ export function DashboardLayout({ children, activeTab }: DashboardLayoutProps) {
 
                       return displayedList.map(n => {
                         const isResponse = n.text?.toLowerCase().includes('response') || n.text?.toLowerCase().includes('submission');
-                        const isTeam = n.text?.toLowerCase().includes('team') || n.text?.toLowerCase().includes('member');
+                        const isTeam = /team|member|invite|workspace|joined/i.test(n.text || '');
                         const isTest = n.text?.toLowerCase().includes('test');
 
                         return (
@@ -340,12 +340,15 @@ export function DashboardLayout({ children, activeTab }: DashboardLayoutProps) {
                                 router.push(`/builder/${n.formId}?tab=responses`);
                               }
                             }}
-                            className={`p-3.5 rounded-2xl text-xs transition-all border relative group cursor-pointer ${
-                              n.read 
-                                ? 'bg-transparent border-transparent text-muted-foreground opacity-75 hover:opacity-100 hover:bg-muted/40' 
-                                : 'bg-primary/5 dark:bg-primary/10 border-primary/20 text-foreground font-semibold shadow-2xs border-l-4 border-l-primary'
+                            className={`p-3 rounded-2xl text-xs transition-colors border relative group cursor-pointer ${
+                              n.read
+                                ? 'bg-card dark:bg-zinc-950 border-border/50 dark:border-zinc-800/60 text-muted-foreground hover:bg-muted/50 dark:hover:bg-zinc-900'
+                                : 'bg-primary/[0.06] dark:bg-primary/10 border-primary/25 text-foreground hover:bg-primary/10'
                             }`}
                           >
+                            {!n.read && (
+                              <span className="absolute top-3 right-3 w-2 h-2 rounded-full bg-primary ring-2 ring-card dark:ring-zinc-950" aria-label="Unread" />
+                            )}
                             <div className="flex items-start space-x-3">
                               <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${
                                 isResponse ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' :
@@ -360,8 +363,8 @@ export function DashboardLayout({ children, activeTab }: DashboardLayoutProps) {
                               </div>
 
                               <div className="flex-1 min-w-0">
-                                <div className="flex items-start justify-between gap-1.5">
-                                  <p className="leading-snug text-foreground dark:text-zinc-100 font-semibold truncate-2-lines">
+                                <div className="flex items-start justify-between gap-1.5 pr-3">
+                                  <p className={`leading-snug break-words [overflow-wrap:anywhere] line-clamp-3 ${n.read ? 'font-medium text-foreground/75 dark:text-zinc-300' : 'font-semibold text-foreground dark:text-zinc-100'}`}>
                                     {n.text}
                                   </p>
                                   <button
@@ -372,14 +375,14 @@ export function DashboardLayout({ children, activeTab }: DashboardLayoutProps) {
                                         setNotifications(prev => prev.filter(item => item.id !== n.id));
                                       } catch (err) {}
                                     }}
-                                    className="opacity-0 group-hover:opacity-100 p-1 hover:text-destructive transition-opacity cursor-pointer shrink-0"
+                                    className="opacity-60 sm:opacity-0 group-hover:opacity-100 focus:opacity-100 p-1 -mt-0.5 rounded-md hover:bg-destructive/10 transition-opacity cursor-pointer shrink-0"
                                     title="Remove alert"
                                   >
                                     <Trash2 className="w-3.5 h-3.5 text-muted-foreground hover:text-destructive" />
                                   </button>
                                 </div>
                                 
-                                <div className="flex items-center justify-between mt-2 pt-1 border-t border-border/40">
+                                <div className="flex items-center justify-between mt-1.5">
                                   <span className="text-[10px] text-muted-foreground font-medium">
                                     {n.time || 'Just now'}
                                   </span>
