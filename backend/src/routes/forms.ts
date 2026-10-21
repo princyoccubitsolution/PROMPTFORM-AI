@@ -10,7 +10,7 @@ import { FormsService } from '../services/formsService';
 import { AnalyticsService } from '../services/analyticsService';
 import { emailService } from '../services/emailService';
 import { logger } from '../lib/logger';
-import { gradeSubmission, gradeQuestion, isAssessmentForm, sanitizeFormForRespondent } from '../lib/assessment/grading';
+import { gradeSubmission, gradeQuestion, isAssessmentForm, requiresStudentIdentity, sanitizeFormForRespondent } from '../lib/assessment/grading';
 import jwt from 'jsonwebtoken';
 
 const router = Router();
@@ -29,9 +29,6 @@ const requesterCanEdit = async (req: Request, form: { id: string; ownerId: strin
     return false;
   }
 };
-
-/** Word-boundary match so "latest" / "contest" do not turn a form into a quiz. */
-const QUIZ_TITLE_PATTERN = /\b(quiz|test|exam|examination|student|assessment)\b/i;
 
 const getFormCacheKey = (id: string) => `form:${id}`;
 const getShareFormCacheKey = (shareId: string) => `form_share:${shareId}`;
@@ -1285,18 +1282,10 @@ router.post('/:id/submit', async (req: Request, res: Response) => {
     const resolvedStudentName = extractStudentName(answersMap, formQuestions, submittedBy || req.body.submittedBy);
     const resolvedEmail = extractStudentEmail(answersMap, formQuestions, email || req.body.email);
 
-    // Auto-detect Quiz or Student Assessment. An explicit settings.isQuiz=false (AI-generated
-    // non-assessment forms) always wins over title heuristics.
-    const isQuizOrStudent = formSettings.isQuiz === false ? false : Boolean(
-      formSettings.isQuiz === true ||
-      form.category === 'quiz' ||
-      form.category === 'education' ||
-      QUIZ_TITLE_PATTERN.test(form.title) ||
-      formQuestions.some((q: any) => {
-        const l = (q.label || '').toLowerCase();
-        return l.includes('enrollment') || l.includes('roll') || l.includes('student id');
-      })
-    );
+    // Student identity (name + enrollment number + email) is demanded only from forms that need
+    // it: explicit settings first, otherwise assessments. Registration, survey, feedback, report,
+    // food or travel forms are never treated as student quizzes because of a word in the title.
+    const isQuizOrStudent = requiresStudentIdentity({ settings: formSettings, category: form.category, title: form.title, questions: formQuestions });
 
     // Validate required questions (skip if forced auto-submit due to timer expiration or anti-cheat violation)
     if (!isForceSubmit) {

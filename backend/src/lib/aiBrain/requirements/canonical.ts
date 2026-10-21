@@ -485,6 +485,8 @@ export function canonicalizeArtifact(raw: any, spec: RequirementSpec, opts: Cano
       };
   settings.isQuiz = isAssessment;
   if (isAssessment) {
+    if (spec.studentIdentity) settings.require_student_identity = spec.studentIdentity.value;
+    else if (settings.require_student_identity === undefined && !isModify) settings.require_student_identity = false;
     if (spec.timeLimitMinutes !== undefined) settings.timer_limit = spec.timeLimitMinutes;
     else if (settings.timer_limit === undefined) settings.timer_limit = 0;
     if (settings.anti_cheat_detection === undefined) settings.anti_cheat_detection = true;
@@ -502,6 +504,9 @@ export function canonicalizeArtifact(raw: any, spec: RequirementSpec, opts: Cano
     delete settings.passing_score;
     delete settings.leaderboardReady;
     delete settings.certificateConfig;
+    delete settings.show_solutions_at_end;
+    delete settings.show_answers_after_submit;
+    settings.require_student_identity = false;
   }
 
   return { title, description, questions, theme, settings, isAssessment };

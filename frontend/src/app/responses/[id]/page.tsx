@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { api } from '@/lib/api';
+import { isAssessmentForm } from '@/lib/formKind';
 
 /* Answers can be strings, arrays (multi-select / ordering) or objects (match the following). */
 const displayAnswer = (val: any): string => {
@@ -52,8 +53,7 @@ export default function ResponsesPage() {
     form && (
       form.settings?.isQuiz === true ||
       form.category === 'quiz' ||
-      /\b(quiz|test|exam)\b/i.test(form.title || '') ||
-      form.questions?.some((q: any) => ((q.validations as any)?.correctAnswer !== undefined || (q.validations as any)?.correct_answer !== undefined))
+      isAssessmentForm(form)
     )
   );
 

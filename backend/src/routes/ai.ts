@@ -9,7 +9,7 @@ import { spellingRecovery } from '../lib/intentEngine';
 import { AIFormBrain, EnterpriseContextEngine } from '../lib/aiBrain';
 import {
   extractRequirementSpec, describeSpec, canonicalFromDb, toQuestionRows, planGeneration, buildGenerationInstruction,
-  runRequirementPipeline, PipelineResult
+  runRequirementPipeline, PipelineResult, buildFallbackForm
 } from '../lib/aiBrain/requirements';
 import { generateUniqueShareId, hasFormAccess, isUUID } from '../lib/utils';
 import { FormsService } from '../services/formsService';
@@ -517,9 +517,13 @@ router.post(['/generate', '/generate-from-file'], optionalAuthMiddleware, upload
     } catch (aiError: any) {
       console.warn('[AI Generate] AI provider unavailable, falling back to the local AIFormBrain engine:', aiError?.message);
       const localContext = { rawPrompt: userPrompt, normalizedPrompt: userPrompt.trim().toLowerCase(), isGreeting: false, isTranslation: Boolean(spec.edit?.translateTo), targetLang: spec.language.name, isRtl: spec.language.isRtl };
+      // Data-collection forms fall back to the profile of the detected purpose (food, travel,
+      // report...); the legacy engine is kept for quizzes and edits.
       const local = isModify
         ? AIFormBrain.processFollowUp(userPrompt, existingDbForm, localContext).formConfig
-        : AIFormBrain.process(userPrompt, parsedDocText).formConfig;
+        : spec.artifactKind === 'form' && !spec.artifactKindDeferred
+          ? buildFallbackForm(spec.domain)
+          : AIFormBrain.process(userPrompt, parsedDocText).formConfig;
       pipelineResult = await runRequirementPipeline({
         spec,
         existing: isModify ? existingCanonical : null,
@@ -924,7 +928,9 @@ router.post('/chat-stream', authMiddleware, subscriptionMiddleware, upload.singl
       const localContext = { rawPrompt, normalizedPrompt: spellingRecovery(rawPrompt), isGreeting: false, isTranslation: Boolean(spec.edit?.translateTo), targetLang: spec.language.name, isRtl: spec.language.isRtl };
       const local = isModify
         ? AIFormBrain.processFollowUp(rawPrompt, existingForm, localContext).formConfig
-        : AIFormBrain.process(rawPrompt, docText).formConfig;
+        : spec.artifactKind === 'form' && !spec.artifactKindDeferred
+          ? buildFallbackForm(spec.domain)
+          : AIFormBrain.process(rawPrompt, docText).formConfig;
       pipelineResult = await runRequirementPipeline({ spec, existing: isModify ? existingCanonical : null, initialRaw: local, engine: 'local-fallback' });
     }
 

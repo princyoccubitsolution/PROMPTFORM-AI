@@ -5,4 +5,5 @@ export { canonicalizeArtifact, canonicalFromDb, toModelFacing, toQuestionRows, r
 export { repairAndVerify, rescalePoints, gradedQuestions, markUnverifiedAnswers } from './verifier';
 export { buildGenerationInstruction, planGeneration, buildCreatePrompt, buildModifyPrompt } from './promptBuilder';
 export { runRequirementPipeline } from './pipeline';
+export { DOMAIN_PROFILES, buildFallbackForm, profileFor } from './domainProfiles';
 export type { ModelCaller, PipelineOptions, PipelineResult } from './pipeline';

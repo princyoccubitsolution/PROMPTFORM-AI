@@ -8,9 +8,9 @@
 import assert from 'assert';
 import {
   extractRequirementSpec, canonicalizeArtifact, repairAndVerify, runRequirementPipeline, planGeneration,
-  canonicalFromDb, toQuestionRows, rescalePoints, resolveOption, RequirementSpec, CanonicalForm
+  canonicalFromDb, toQuestionRows, rescalePoints, resolveOption, buildFallbackForm, buildGenerationInstruction, CanonicalForm
 } from '../lib/aiBrain/requirements';
-import { gradeSubmission, sanitizeFormForRespondent } from '../lib/assessment/grading';
+import { gradeSubmission, isAssessmentForm, requiresStudentIdentity, sanitizeFormForRespondent } from '../lib/assessment/grading';
 import { sanitizeFormTitle } from '../lib/titleSanitizer';
 
 type TestFn = () => void | Promise<void>;
@@ -567,7 +567,139 @@ test('respondents never receive answer keys or the form password', () => {
   assert.strictEqual((safe.questions![0] as any).correctAnswer, undefined);
 });
 
-/* --------------------------------------------------------------- 6. misc */
+/* ------------------------------------------- 6. form type-wise relevance */
+
+const kindAndDomain = (p: string) => { const s = extractRequirementSpec(p); return `${s.artifactKind}/${s.domain}`; };
+
+test('form types are classified from the prompt', () => {
+  assert.strictEqual(kindAndDomain('Create a food order form for my restaurant'), 'form/food_order');
+  assert.strictEqual(kindAndDomain('Create a travel booking form for a Goa trip'), 'form/travel');
+  assert.strictEqual(kindAndDomain('Customer satisfaction survey for my salon'), 'form/customer_feedback');
+  assert.strictEqual(kindAndDomain('Feedback form for our hotel stay'), 'form/customer_feedback');
+  assert.strictEqual(kindAndDomain('Restaurant feedback form'), 'form/restaurant_feedback');
+  assert.strictEqual(kindAndDomain('College event registration form'), 'form/event_registration');
+  assert.strictEqual(kindAndDomain('Create an incident report form for our factory'), 'form/report');
+  assert.strictEqual(kindAndDomain('Monthly sales report form'), 'form/report');
+  assert.strictEqual(kindAndDomain('Student progress report form'), 'form/report');
+  assert.strictEqual(kindAndDomain('Job application form for a sales executive'), 'form/job_application');
+  assert.strictEqual(kindAndDomain('Python quiz with 5 MCQs'), 'assessment/assessment');
+});
+
+test('quiz student identity only when applicable', () => {
+  assert.strictEqual(extractRequirementSpec('ધોરણ ૬ માટે ૫૦ ગુણનો વિજ્ઞાનનો પ્રશ્નપત્ર બનાવો').studentIdentity?.value, true);
+  assert.strictEqual(extractRequirementSpec('Class 10 science exam with 20 MCQs').studentIdentity?.value, true);
+  assert.strictEqual(extractRequirementSpec('GTA V trivia quiz with 10 questions').studentIdentity?.value, false);
+  assert.strictEqual(extractRequirementSpec('JavaScript quiz with 10 MCQs').studentIdentity?.value, false);
+  assert.strictEqual(extractRequirementSpec('JavaScript quiz with 10 MCQs and enrollment number').studentIdentity?.value, true);
+  assert.strictEqual(extractRequirementSpec('Class 10 maths test without student details').studentIdentity?.value, false);
+  assert.strictEqual(extractRequirementSpec('Food order form').studentIdentity, undefined);
+});
+
+test('saved settings carry the identity flag; forms never do', () => {
+  const trivia = canonicalizeArtifact({ questions: [mcq('Capital of France?', ['Paris', 'Rome'], 'Paris')] }, extractRequirementSpec('Geography trivia quiz with 1 MCQ'));
+  assert.strictEqual(trivia.settings.isQuiz, true);
+  assert.strictEqual(trivia.settings.require_student_identity, false);
+  assert.strictEqual(trivia.settings.timer_limit, 0, 'no timer unless requested');
+  const exam = canonicalizeArtifact({ questions: [mcq('2+2?', ['3', '4'], '4')] }, extractRequirementSpec('Class 5 maths exam with 1 MCQ and a 30 minute time limit'));
+  assert.strictEqual(exam.settings.require_student_identity, true);
+  assert.strictEqual(exam.settings.timer_limit, 30);
+  const food = canonicalizeArtifact({ questions: [{ type: 'name', label: 'Name' }], settings: { timer_limit: 15, anti_cheat_detection: true, passing_score: 40 } }, extractRequirementSpec('Food order form'));
+  assert.strictEqual(food.settings.isQuiz, false);
+  assert.strictEqual(food.settings.require_student_identity, false);
+  assert.strictEqual(food.settings.timer_limit, 0);
+  assert.strictEqual(food.settings.anti_cheat_detection, false);
+  assert.strictEqual(food.settings.passing_score, undefined);
+});
+
+test('education and quiz fields are removed from unrelated forms', () => {
+  const cases: Array<[string, string[]]> = [
+    ['Hotel booking form', ['Guest Name', 'Enrollment Number', 'Upload Marksheet', 'Check-in Date']],
+    ['Travel booking form for a Goa trip', ['Traveler Name', 'Roll No', 'Destination', 'Hall Ticket Number']],
+    ['Customer satisfaction survey', ['Overall Satisfaction', 'Your Score', 'Total Marks', 'Comments']],
+    ['Food order form', ['Full Name', 'Student ID', 'Menu Items']]
+  ];
+  for (const [prompt, labels] of cases) {
+    const spec = extractRequirementSpec(prompt);
+    const r = repairAndVerify(canonicalizeArtifact({ questions: labels.map(l => ({ type: 'short_text', label: l })) }, spec), spec, null);
+    const left = r.form.questions.map(q => q.label);
+    for (const bad of ['Enrollment Number', 'Upload Marksheet', 'Roll No', 'Hall Ticket Number', 'Your Score', 'Total Marks', 'Student ID']) {
+      assert.ok(!left.includes(bad), `${prompt}: "${bad}" should be removed (left: ${left.join(', ')})`);
+    }
+    assert.ok(left.length >= 2, `${prompt}: relevant fields kept`);
+  }
+});
+
+test('education fields stay when the form is about students or the user asked', () => {
+  const keep = (prompt: string, label: string) => {
+    const spec = extractRequirementSpec(prompt);
+    const r = repairAndVerify(canonicalizeArtifact({ questions: [{ type: 'name', label: 'Name' }, { type: 'short_text', label }] }, spec), spec, null);
+    return r.form.questions.some(q => q.label === label);
+  };
+  assert.strictEqual(keep('Student progress report form', 'Roll Number'), true);
+  assert.strictEqual(keep('School admission form', 'Upload Previous Marksheet'), true);
+  assert.strictEqual(keep('Workshop registration form with name and enrollment number', 'Enrollment Number'), true);
+  assert.strictEqual(keep('Incident report form for our factory', 'Roll Number'), false);
+  assert.strictEqual(keep('College fest registration form', 'Student ID / Roll Number'), false, 'a college fest is not an education purpose');
+  assert.strictEqual(keep('Exam registration form for students', 'Roll Number'), true);
+});
+
+test('trivia quiz drops AI-added enrollment field; class exam keeps identity', () => {
+  const trivia = extractRequirementSpec('Football trivia quiz with 1 MCQ');
+  const r = repairAndVerify(canonicalizeArtifact({ questions: [{ type: 'short_text', label: 'Enrollment Number' }, mcq('Who won the 2022 World Cup?', ['Argentina', 'France'], 'Argentina')] }, trivia), trivia, null);
+  assert.deepStrictEqual(r.form.questions.map(q => q.label), ['Who won the 2022 World Cup?']);
+  const exam = extractRequirementSpec('Class 8 science exam with 1 MCQ');
+  const r2 = repairAndVerify(canonicalizeArtifact({ questions: [{ type: 'short_text', label: 'Roll Number' }, mcq('Unit of force?', ['Newton', 'Joule'], 'Newton')] }, exam), exam, null);
+  assert.strictEqual(r2.form.questions.length, 2);
+});
+
+test('fallback (AI unavailable) forms are purpose-specific and clean', async () => {
+  const expectations: Array<[string, RegExp]> = [
+    ['Create a food order form for my restaurant', /menu items|order type/i],
+    ['Create a travel booking form for a Goa trip', /destination|departure/i],
+    ['Create an incident report form for our factory', /date of incident|describe what happened/i],
+    ['Feedback form for our hotel stay', /satisfaction|improve/i],
+    ['College event registration form', /ticket|sessions/i]
+  ];
+  for (const [prompt, mustHave] of expectations) {
+    const spec = extractRequirementSpec(prompt);
+    const { form } = await runRequirementPipeline({ spec, initialRaw: buildFallbackForm(spec.domain), engine: 'local-fallback' });
+    const labels = form.questions.map(q => q.label).join(' | ');
+    assert.ok(mustHave.test(labels), `${prompt}: ${labels}`);
+    assert.ok(!/enrol|roll no|marksheet|leaving certificate|marks|score/i.test(labels), `${prompt}: no education / quiz fields (${labels})`);
+    assert.ok(form.questions.every(q => q.validations.points === undefined && q.validations.correctAnswer === undefined));
+    assert.strictEqual(form.settings.isQuiz, false);
+    assert.strictEqual(form.settings.timer_limit, 0);
+  }
+});
+
+test('AI instructions carry purpose guidance and identity rules', () => {
+  const food = extractRequirementSpec('Create a food order form');
+  const foodText = buildGenerationInstruction(food, planGeneration(food));
+  assert.ok(/Typical fields for a food ordering form/i.test(foodText));
+  assert.ok(/Never add quiz settings or fields/i.test(foodText));
+  assert.ok(/enrollment \/ roll number/i.test(foodText));
+  const trivia = extractRequirementSpec('Cricket trivia quiz with 5 MCQs');
+  const triviaText = buildGenerationInstruction(trivia, planGeneration(trivia));
+  assert.ok(/Do NOT add student name, enrollment/i.test(triviaText));
+  assert.ok(/timer_limit = 0/i.test(triviaText));
+});
+
+test('submit-time rules: identity only for quizzes that need it', () => {
+  // Registration with "College" in the title used to demand enrollment numbers.
+  assert.strictEqual(requiresStudentIdentity({ title: 'College Fest Registration', settings: {}, questions: [{ validations: {} }] }), false);
+  assert.strictEqual(requiresStudentIdentity({ title: 'Student Feedback Survey', category: 'education', settings: {} }), false);
+  assert.strictEqual(requiresStudentIdentity({ title: 'Food Order', settings: { isQuiz: false } }), false);
+  // Legacy quizzes keep their behaviour; explicit settings win.
+  assert.strictEqual(requiresStudentIdentity({ title: 'Python Quiz', settings: {} }), true);
+  assert.strictEqual(requiresStudentIdentity({ title: 'Python Quiz', settings: { isQuiz: true, require_student_identity: false } }), false);
+  // Template placeholders (points: 1, correct_answer: "") are not a quiz.
+  const template = { settings: {}, questions: [{ validations: { points: 1, correct_answer: '' } }, { validations: { points: 1, correctAnswer: '' } }] };
+  assert.strictEqual(isAssessmentForm(template), false);
+  // Sanitised legacy quizzes are still recognised through isGraded.
+  assert.strictEqual(isAssessmentForm({ settings: {}, questions: [{ validations: { isGraded: true, points: 2 } }] }), true);
+});
+
+/* --------------------------------------------------------------- 7. misc */
 
 test('title sanitizer keeps Gujarati titles and test/exam titles intact', () => {
   assert.strictEqual(sanitizeFormTitle('ધોરણ 6 વિજ્ઞાન પ્રશ્નપત્ર'), 'ધોરણ 6 વિજ્ઞાન પ્રશ્નપત્ર');

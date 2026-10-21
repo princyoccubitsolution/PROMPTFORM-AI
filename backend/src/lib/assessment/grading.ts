@@ -50,13 +50,47 @@ function parseObj(v: any): any {
   return v && typeof v === 'object' ? v : {};
 }
 
+function hasAnswerKey(q: any): boolean {
+  const v = parseObj(q.validations);
+  if (v.isGraded === true) return true;
+  const ans = v.correctAnswer ?? v.correct_answer;
+  if (ans === undefined || ans === null) return false;
+  if (Array.isArray(ans)) return ans.length > 0;
+  if (typeof ans === 'object') return Object.keys(ans).length > 0;
+  return String(ans).trim() !== '';
+}
+
+/**
+ * Single rule for "is this a graded quiz/exam". An explicit settings.isQuiz always wins
+ * (set by the AI generator and the builder's quiz toggle). Legacy forms without the flag are
+ * assessments only when they carry real answer keys — empty placeholders from templates or
+ * stray points do not count.
+ */
 export function isAssessmentForm(form: { settings?: any; category?: string | null; questions?: any[] }): boolean {
   const settings = parseObj(form.settings);
   if (settings.isQuiz === true) return true;
   if (settings.isQuiz === false) return false;
   const cat = String(form.category || settings.category || '').trim().toUpperCase();
   if (cat === 'QUIZ' || cat === 'ASSESSMENT') return true;
-  return (form.questions || []).some((q: any) => Boolean(parseObj(q.validations).assessmentType));
+  const questions = form.questions || [];
+  if (questions.some((q: any) => Boolean(parseObj(q.validations).assessmentType))) return true;
+  const keyed = questions.filter(hasAnswerKey).length;
+  return keyed > 0 && keyed * 2 >= questions.length;
+}
+
+/**
+ * Whether respondents must give student identity (name, enrollment / roll number, email).
+ * Explicit settings.require_student_identity wins; otherwise only assessments ask for it
+ * (legacy quizzes keep their previous behaviour). Registration, survey, feedback, report,
+ * food or travel forms never get enrollment fields injected.
+ */
+export function requiresStudentIdentity(form: { settings?: any; category?: string | null; title?: string | null; questions?: any[] }): boolean {
+  const settings = parseObj(form.settings);
+  if (typeof settings.require_student_identity === 'boolean') return settings.require_student_identity;
+  if (settings.isQuiz === false) return false;
+  if (settings.isQuiz === true) return true;
+  if (isAssessmentForm(form)) return true;
+  return /\b(quiz|exam|examination|test|assessment)\b/i.test(String(form.title || ''));
 }
 
 function norm(s: any): string {

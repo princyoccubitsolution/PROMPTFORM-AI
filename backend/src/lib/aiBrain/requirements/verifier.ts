@@ -2,6 +2,7 @@ import {
   AssessmentQuestionKind, CanonicalForm, CanonicalQuestion, DifficultyLevel, RequirementCheck, RequirementSpec, VerificationIssue
 } from './types';
 import { CHOICE_TYPES } from './canonical';
+import { EDUCATION_CONTEXT, EDUCATION_ONLY_PATTERN, QUIZ_ONLY_PATTERN } from './domainProfiles';
 import { distributeByWeights } from './specExtractor';
 import { AUTO_GRADED_KINDS, DIFFICULTY_ORDER, EDUCATION_ONLY_FIELDS, detectFieldKey, kindLabel, scriptProfile } from './vocabulary';
 
@@ -334,16 +335,33 @@ export function repairAndVerify(input: CanonicalForm, spec: RequirementSpec, exi
     if (form.questions.length < before) repairs.push(`Removed ${before - form.questions.length} question(s) of excluded types: ${excludedKinds.map(kindLabel).join(', ')}.`);
   }
 
-  // Student roll / enrollment numbers only belong to education forms.
-  if (!form.isAssessment && !['student_admission', 'registration'].includes(spec.domain)) {
-    const allowed = new Set([...spec.requestedFields, ...(spec.edit?.addFieldKeys || [])]);
-    const existingKeys = new Set((existing?.questions || []).map(fieldKeyOf));
-    const before = form.questions.length;
+  // Education-only fields (enrollment / roll numbers, marksheets, hall tickets) and quiz-only fields
+  // (score, marks obtained) never leak into food, travel, survey, feedback, registration or report
+  // forms. They stay when the user asked for them, when the form is about students, or when the form
+  // being edited already had them.
+  {
+    const educationContext = EDUCATION_CONTEXT.test(spec.rawPrompt) || spec.domain === 'student_admission';
+    const allowEducation = form.isAssessment ? Boolean(spec.studentIdentity?.value) || isModify : educationContext;
+    const requestedKeys = new Set([...spec.requestedFields, ...(spec.edit?.addFieldKeys || [])]);
+    const existingIds = new Set((existing?.questions || []).map(q => q.id).filter(Boolean));
+    const existingLabels = new Set((existing?.questions || []).map(q => q.label.trim().toLowerCase()));
+    const mentionedInPrompt = (label: string) => {
+      const m = label.match(EDUCATION_ONLY_PATTERN) || label.match(QUIZ_ONLY_PATTERN);
+      return Boolean(m && spec.normalizedPrompt.includes(m[0].toLowerCase()));
+    };
+    const keep = (q: CanonicalQuestion) => (q.id && existingIds.has(q.id)) || existingLabels.has(q.label.trim().toLowerCase()) || mentionedInPrompt(q.label);
+    let removedEducation = 0;
+    let removedQuiz = 0;
     form.questions = form.questions.filter(q => {
+      if (form.isAssessment && kindOf(q)) return true; // graded questions are never identity fields
       const key = fieldKeyOf(q);
-      return !(key && EDUCATION_ONLY_FIELDS.includes(key) && !allowed.has(key) && !existingKeys.has(key));
+      const isEducationField = (key && EDUCATION_ONLY_FIELDS.includes(key)) || EDUCATION_ONLY_PATTERN.test(q.label);
+      if (isEducationField && !allowEducation && !(key && requestedKeys.has(key)) && !keep(q)) { removedEducation++; return false; }
+      if (!form.isAssessment && !educationContext && QUIZ_ONLY_PATTERN.test(q.label) && !keep(q)) { removedQuiz++; return false; }
+      return true;
     });
-    if (form.questions.length < before) repairs.push('Removed student roll / enrollment number fields that do not belong in this form.');
+    if (removedEducation) repairs.push(`Removed ${removedEducation} student enrollment / education field(s) that do not belong in this form.`);
+    if (removedQuiz) repairs.push(`Removed ${removedQuiz} quiz / score field(s) that do not belong in a non-assessment form.`);
   }
 
   // Mandatory / optional flags.

@@ -32,6 +32,10 @@ export interface FormSettings {
   auto_responder_subject?: string;
   auto_responder_message?: string;
   webhook_url?: string;
+  /** Graded quiz / exam: enables marks, answer keys and scoring. */
+  isQuiz?: boolean;
+  /** Quizzes only: ask respondents for name, enrollment number and email. */
+  require_student_identity?: boolean;
 }
 
 export interface FormTheme {

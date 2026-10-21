@@ -14,6 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Input } from '@/components/ui/Input';
 import { CustomSelect } from '@/components/ui/CustomSelect';
 import { api } from '@/lib/api';
+import { isAssessmentForm, questionPoints, requiresStudentIdentity } from '@/lib/formKind';
 
 /* -------------------------------------------------------------------------- */
 /* SIGNATURE PAD COMPONENT                                                    */
@@ -169,21 +170,9 @@ const formatAnswer = (ans: any): string => {
   return String(ans);
 };
 
-/* Word-boundary title check so "latest" / "contest" never turn a form into a quiz. */
-const isQuizOrStudentForm = (data: any, qs: any[]): boolean => {
-  const settings = data?.settings || {};
-  if (settings.isQuiz === false) return false;
-  return Boolean(
-    settings.isQuiz === true ||
-    data?.category === 'quiz' ||
-    data?.category === 'education' ||
-    /\b(quiz|exam|test|student|assessment|class|college|school)\b/i.test(data?.title || '') ||
-    qs.some((q: any) => {
-      const l = (q.label || '').toLowerCase();
-      return l.includes('enrollment') || l.includes('roll') || l.includes('student id');
-    })
-  );
-};
+/* Student identity (enrollment no. etc.) is only collected for quizzes that need it — never for
+   registration, survey, feedback, report, food or travel forms because of a word in the title. */
+const isQuizOrStudentForm = (data: any, qs: any[]): boolean => requiresStudentIdentity(data, qs);
 
 /* -------------------------------------------------------------------------- */
 /* MAIN RESPONDER PAGE                                                        */
@@ -1156,16 +1145,15 @@ export default function PublicFormPage() {
   };
 
   const isQuizForm = (form as any)?.settings?.isQuiz === false ? false : Boolean(
-    (form as any)?.settings?.isQuiz === true ||
     (form as any)?.formType === 'QUIZ' ||
     (form as any)?.isGraded === true ||
     (form as any)?.settings?.formType === 'QUIZ' ||
     (form as any)?.settings?.isGraded === true ||
     (form as any)?.isQuiz === true ||
-    (form as any)?.settings?.isQuiz === true ||
-    String(form?.category || '').toUpperCase().includes('QUIZ') ||
-    String((form?.settings as any)?.category || '').toUpperCase().includes('QUIZ')
+    isAssessmentForm(form, questions)
   );
+  // Grouping identity questions into a separate non-graded card only makes sense in quizzes.
+  const identityHeading = requiresStudentIdentity(form, questions) ? 'Student Information' : 'Your Details';
 
   /* -------------------------------------------------------------------------- */
   /* QUIZ SCORING CALCULATION                                                   */
@@ -2432,7 +2420,7 @@ export default function PublicFormPage() {
                 {form?.settings?.timer_limit > 0 && (
                   <span className="px-3 py-1.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200 flex items-center gap-1.5">
                     <Clock className="w-3.5 h-3.5 text-rose-500" />
-                    Timed Exam ({form.settings.timer_limit} mins)
+                    {isQuizForm ? 'Timed Exam' : 'Time Limit'} ({form.settings.timer_limit} mins)
                   </span>
                 )}
                 {form?.settings?.anti_cheat_detection && (
@@ -2596,8 +2584,8 @@ export default function PublicFormPage() {
 
             {/* Questions Vertical Stack */}
             {(() => {
-              const identityQuestions = visibleQuestions.filter(q => isStudentIdentityField(q));
-              const gradedQuestions = visibleQuestions.filter(q => !isStudentIdentityField(q));
+              const identityQuestions = isQuizForm ? visibleQuestions.filter(q => isStudentIdentityField(q)) : [];
+              const gradedQuestions = isQuizForm ? visibleQuestions.filter(q => !isStudentIdentityField(q)) : visibleQuestions;
 
               return (
                 <>
@@ -2606,7 +2594,7 @@ export default function PublicFormPage() {
                       <div className="flex items-center justify-between border-b border-slate-200/80 pb-3">
                         <div className="flex items-center gap-2">
                           <User className="w-4 h-4 text-indigo-600" />
-                          <h3 className="text-sm font-bold text-slate-900">Student Information</h3>
+                          <h3 className="text-sm font-bold text-slate-900">{identityHeading}</h3>
                         </div>
                         <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-slate-200/80 text-slate-600">
                           Non-Graded (0 Marks)
@@ -2657,9 +2645,14 @@ export default function PublicFormPage() {
                             <p className="text-sm sm:text-base font-semibold text-slate-900 leading-snug">
                               {gIdx + 1}. {q.label} {q.required && <span className="text-rose-500 font-bold">*</span>}
                             </p>
-                            <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200/60 shrink-0">
-                              {q.points || 2} Marks
-                            </span>
+                            {(() => {
+                              const pts = questionPoints(form, q, questions);
+                              return pts !== null ? (
+                                <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200/60 shrink-0">
+                                  {pts} {pts === 1 ? 'Mark' : 'Marks'}
+                                </span>
+                              ) : null;
+                            })()}
                           </div>
 
                           <div className="pt-1">
@@ -2710,8 +2703,8 @@ export default function PublicFormPage() {
         {/* MODE 2: ONE-BY-ONE WIZARD VIEW                                            */}
         {/* ========================================================================= */}
         {layoutMode === 'one-by-one' && (() => {
-          const identityQuestions = visibleQuestions.filter(q => isStudentIdentityField(q));
-          const gradedQuestions = visibleQuestions.filter(q => !isStudentIdentityField(q));
+          const identityQuestions = isQuizForm ? visibleQuestions.filter(q => isStudentIdentityField(q)) : [];
+          const gradedQuestions = isQuizForm ? visibleQuestions.filter(q => !isStudentIdentityField(q)) : visibleQuestions;
           const actualQuestions = gradedQuestions.length > 0 ? gradedQuestions : visibleQuestions;
 
           return (
@@ -2722,7 +2715,7 @@ export default function PublicFormPage() {
                   <div className="flex items-center justify-between border-b border-slate-200/80 pb-3">
                     <div className="flex items-center gap-2">
                       <User className="w-4 h-4 text-indigo-600" />
-                      <h3 className="text-sm font-bold text-slate-900">Student & Candidate Information</h3>
+                      <h3 className="text-sm font-bold text-slate-900">{identityHeading}</h3>
                     </div>
                     <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-slate-200/80 text-slate-600">
                       Non-Graded Details
@@ -2773,9 +2766,14 @@ export default function PublicFormPage() {
                           Question {currentQuestionIndex + 1}
                         </span>
                         <div className="flex items-center gap-2">
-                          <span className="text-[11px] font-extrabold px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200/60">
-                            {q.points || 2} Marks
-                          </span>
+                          {(() => {
+                            const pts = questionPoints(form, q, questions);
+                            return pts !== null ? (
+                              <span className="text-[11px] font-extrabold px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200/60">
+                                {pts} {pts === 1 ? 'Mark' : 'Marks'}
+                              </span>
+                            ) : null;
+                          })()}
                           {q.required && <span className="text-xs font-bold text-rose-500">* Required</span>}
                         </div>
                       </div>

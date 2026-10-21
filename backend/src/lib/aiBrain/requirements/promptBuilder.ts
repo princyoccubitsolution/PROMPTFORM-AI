@@ -2,6 +2,7 @@ import { AssessmentQuestionKind, CanonicalForm, DifficultyLevel, RequirementSpec
 import { toModelFacing } from './canonical';
 import { capitalize, distributeByWeights } from './specExtractor';
 import { DIFFICULTY_ORDER, kindLabel } from './vocabulary';
+import { EDUCATION_CONTEXT, profileFor } from './domainProfiles';
 
 /** Large papers are generated in batches so the model's output never gets truncated. */
 export const BATCH_SIZE = 20;
@@ -106,6 +107,20 @@ export function hardRequirements(spec: RequirementSpec, plan: GenerationPlan): s
   if (spec.artifactKind === 'assessment') {
     r.push(spec.includeAnswerKey ? 'Every question needs a verified answer key (correctAnswer, or modelAnswer + rubric for descriptive/coding).' : 'The user asked for NO answer key: leave correctAnswer empty.');
     if (spec.includeExplanations) r.push('Give a short explanation / solution for every question.');
+    r.push(spec.studentIdentity?.value
+      ? 'Student name, enrollment number and email are collected automatically by the platform: do NOT add them as questions.'
+      : 'Do NOT add student name, enrollment / roll number or other identity questions unless the user asked for them.');
+    if (!spec.timeLimitMinutes) r.push('No time limit was requested: keep settings.timer_limit = 0.');
+  } else if (!spec.artifactKindDeferred) {
+    const profile = profileFor(spec.domain);
+    const feedbackSubject = spec.purpose.match(/^Feedback about (.+)$/i)?.[1];
+    if (feedbackSubject) {
+      r.push(`This is feedback about ${feedbackSubject}: ask about the specific aspects of ${feedbackSubject} the respondent experienced (ratings plus open comments), not generic "product / service" questions.`);
+    } else if (spec.domain !== 'general') {
+      r.push(`Typical fields for a ${spec.purpose.toLowerCase()} form (a starting point — adapt to the request, drop what does not fit, add what the user asked for): ${profile.typical.map(f => f.label).join('; ')}.`);
+    }
+    r.push(`Every field must be relevant to ${spec.purpose.toLowerCase()}. Never add quiz settings or fields (marks, score, correct answers, timers, passing marks)${EDUCATION_CONTEXT.test(spec.rawPrompt) ? '' : ', or student fields (enrollment / roll number, marksheets, school details)'}.`);
+    r.push('Optional extras (photo uploads, signatures, social links, demographic questions) only when they clearly serve the purpose; mark them optional.');
   }
   return r;
 }

@@ -232,7 +232,11 @@ function DashboardContent() {
     setIsGeneratingForm(true);
     try {
       const data = await api.post('/ai/generate', { prompt: generatorPrompt });
-      if (user) {
+      if (data?.status === 'clarify' || data?.status === 'converse') {
+        alert(data.message || 'Please describe the form you want in a little more detail.');
+        return;
+      }
+      if (user && data.creditsRemaining !== undefined) {
         setUser({ ...user, credits: data.creditsRemaining });
       }
       setGeneratedFormPreview(data.form);

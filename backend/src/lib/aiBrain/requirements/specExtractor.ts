@@ -70,6 +70,7 @@ const PROGRAMMING_LANGUAGES: Array<{ name: string; pattern: string }> = [
 ];
 
 const DOMAINS: Array<{ domain: string; purpose: string; pattern: string }> = [
+  { domain: 'report', purpose: 'Report submission', pattern: "(?:incident|accident|injury|expense|bug|daily|weekly|monthly|quarterly|annual|progress|inspection|maintenance|safety|site|field|sales|status|activity|work|damage|lost(?:\\s+(?:and|&)\\s+found)?|police|audit|visit|shift|attendance|performance|project|issue|hazard|near[\\s-]?miss|lab|medical|health)\\s+reports?|reports?\\s+(?:form|submission|template)|report\\s+(?:an?\\s+)?(?:incident|issue|bug|problem|accident|hazard)|reporting\\s+form|રિપોર્ટ|अहवाल|रिपोर्ट" },
   { domain: 'food_order', purpose: 'Food ordering', pattern: "(?:food|meal|pizza|burger|tiffin|biryani|thali|lunch|dinner|breakfast|cake|bakery|grocery)\\s+(?:order\\w*|delivery|pre-?order)|order(?:ing)?\\s+(?:food|meals?|pizza|lunch|dinner)|restaurant\\s+order\\w*|takeaway|take-?out|home\\s+delivery|food\\s+delivery|catering\\s+order|menu\\s+order|જમવાનો\\s+ઓર્ડર|ખાવાનો\\s+ઓર્ડર|खाना\\s+ऑर्डर" },
   { domain: 'table_reservation', purpose: 'Restaurant table reservation', pattern: 'table\\s+(?:booking|reservation)|reserve\\s+a\\s+table' },
   { domain: 'restaurant_feedback', purpose: 'Restaurant / dining feedback', pattern: "(?:restaurant|cafe|café|dining|food|hotel\\s+food)\\s+(?:feedback|review|survey|rating|experience)|(?:feedback|review|survey)\\s+(?:for|of|about)\\s+(?:my\\s+|our\\s+|the\\s+)?(?:restaurant|cafe|café|food)" },
@@ -428,10 +429,43 @@ function detectArtifactKind(norm: string, kinds: KindCountResult, marks: { total
   return { kind: 'form', source: hint !== 'auto' ? 'explicit' : 'inferred', deferred: false, reason: 'No quiz/exam was requested, so this is a data-collection form (no marks or answers).' };
 }
 
+const FEEDBACK_WORDS = 'feedback|survey|review|reviews|rating|ratings|satisfaction|nps|net\\s+promoter|opinion|experience\\s+form|પ્રતિસાદ|અભિપ્રાય|સર્વે|प्रतिक्रिया|सर्वे';
+/** Booking-style purposes that become feedback forms when the user asks for feedback about them. */
+const SUBJECT_DOMAINS = ['hotel_booking', 'travel', 'table_reservation', 'food_order', 'event_registration', 'wedding', 'medical_appointment', 'appointment_booking', 'real_estate', 'service_request', 'product_return', 'job_application', 'student_admission', 'registration'];
+
 function detectDomain(norm: string, artifactKind: ArtifactKind): { domain: string; purpose: string } {
   if (artifactKind === 'assessment') return { domain: 'assessment', purpose: 'Graded assessment' };
-  for (const d of DOMAINS) if (hasWord(norm, d.pattern)) return { domain: d.domain, purpose: d.purpose };
-  return { domain: 'general', purpose: 'Custom data-collection form' };
+  const first = DOMAINS.find(d => hasWord(norm, d.pattern));
+  if (!first) {
+    if (hasWord(norm, FEEDBACK_WORDS)) return { domain: 'customer_feedback', purpose: 'Customer feedback / satisfaction survey' };
+    return { domain: 'general', purpose: 'Custom data-collection form' };
+  }
+  // "Feedback form for our hotel stay" is feedback about a hotel, not a hotel booking.
+  if (SUBJECT_DOMAINS.includes(first.domain) && hasWord(norm, FEEDBACK_WORDS)) {
+    if (first.domain === 'food_order' || first.domain === 'table_reservation') {
+      return { domain: 'restaurant_feedback', purpose: 'Restaurant / dining feedback' };
+    }
+    const subject = first.purpose.toLowerCase().replace(/\s*\/.*$/, '').replace(/\s+(?:booking|registration|request|application|inquiry|rsvp)$/, '');
+    return { domain: 'customer_feedback', purpose: `Feedback about ${subject}` };
+  }
+  return { domain: first.domain, purpose: first.purpose };
+}
+
+/**
+ * Whether a graded paper should collect student identity (name, enrollment / roll number, email).
+ * Class / school / college / exam papers do; general-knowledge quizzes, trivia and skill checks do not,
+ * unless the user asks for it.
+ */
+function detectStudentIdentity(norm: string, audience: string | undefined, requestedFields: string[], excludedFields: string[]): { value: boolean; explicit: boolean } {
+  if (excludedFields.includes('roll_number') || /\b(?:no|without|skip|don'?t\s+(?:ask|collect|need))\s+(?:any\s+)?(?:student\s+)?(?:details|identity|info(?:rmation)?|enrol(?:l)?ment(?:\s+(?:no|number))?|roll\s*(?:no|number)?)\b|\banonymous\b/iu.test(norm)) {
+    return { value: false, explicit: true };
+  }
+  if (requestedFields.includes('roll_number') || hasWord(norm, 'enrol(?:l)?ment\\s*(?:no\\.?|number)?|roll\\s*(?:no\\.?|number)|student\\s+id|student\\s+details')) {
+    return { value: true, explicit: true };
+  }
+  const education = Boolean(audience && /^(?:class|\d|b|m|bca|mca|mba|bba)/i.test(audience)) ||
+    hasWord(norm, 'students?|class|grade|std|standard|school|college|university|semester|exam(?:ination)?s?|board\\s+exam|mid[\\s-]?term|unit\\s+test|class\\s+test|question\\s+paper|ધોરણ|વિદ્યાર્થી|વિદ્યાર્થીઓ|શાળા|પરીક્ષા|પ્રશ્નપત્ર|छात्र|कक्षा|परीक्षा|प्रश्नपत्र|विद्यालय');
+  return { value: education, explicit: false };
 }
 
 function extractTitle(raw: string): string | undefined {
@@ -886,6 +920,20 @@ export function extractRequirementSpec(prompt: string, ctx: SpecContext = {}): R
     assumptions.push(kindInfo.reason);
   }
 
+  let studentIdentity: RequirementSpec['studentIdentity'];
+  if (artifactKind === 'assessment') {
+    const si = detectStudentIdentity(norm, audience, fields.requested, fields.excluded);
+    // In edits only an explicit request changes the existing setting.
+    if (!isModify || si.explicit) {
+      studentIdentity = si;
+      if (!isModify && !si.explicit) {
+        assumptions.push(si.value
+          ? 'Students will be asked for their name, enrollment / roll number and email before submitting (class / exam paper). Say "without student details" to turn this off.'
+          : 'No student enrollment details are collected (not a class or exam paper). Say "with enrollment number" to collect them.');
+      }
+    }
+  }
+
   /* ---------------- edit intent ---------------- */
   const edit = isModify ? extractEditIntent(norm, existingCount, kinds, langInfo, prog) : undefined;
   if (isModify && totalMarks === undefined && marks.totalMarks !== undefined && isExistingAssessment(existing)) {
@@ -956,6 +1004,7 @@ export function extractRequirementSpec(prompt: string, ctx: SpecContext = {}): R
     timeLimitMinutes,
     negativeMarking,
     passingScore,
+    studentIdentity,
     programmingLanguage,
     includeAnswerKey,
     includeExplanations,
@@ -1017,6 +1066,7 @@ export function describeSpec(spec: RequirementSpec): string[] {
   if (spec.timeLimitMinutes) out.push(`Time limit: ${spec.timeLimitMinutes} minutes`);
   if (spec.negativeMarking) out.push(`Negative marking: -${spec.negativeMarking} per wrong answer`);
   if (spec.passingScore) out.push(`Passing score: ${spec.passingScore.value}${spec.passingScore.unit === 'percent' ? '%' : ' marks'}`);
+  if (spec.studentIdentity) out.push(spec.studentIdentity.value ? 'Collect student name, enrollment number and email' : 'No student enrollment details');
   if (spec.programmingLanguage && spec.artifactKind === 'assessment') out.push(`Programming language: ${spec.programmingLanguage}`);
   if (spec.edit) {
     const e = spec.edit;

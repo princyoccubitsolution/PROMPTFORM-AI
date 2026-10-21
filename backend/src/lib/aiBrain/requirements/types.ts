@@ -145,6 +145,8 @@ export interface RequirementSpec {
   timeLimitMinutes?: number;
   negativeMarking?: number;
   passingScore?: { value: number; unit: 'percent' | 'marks' };
+  /** Assessments only: collect student name / enrollment number / email from respondents. */
+  studentIdentity?: { value: boolean; explicit: boolean };
   programmingLanguage?: string;
   includeAnswerKey: boolean;
   includeExplanations: boolean;

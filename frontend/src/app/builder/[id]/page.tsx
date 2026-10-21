@@ -19,6 +19,7 @@ import { Switch } from '@/components/ui/Switch';
 import { useTheme } from 'next-themes';
 import { useFormStore, Question } from '@/store/useFormStore';
 import { api, getBaseUrl } from '@/lib/api';
+import { isAssessmentForm, requiresStudentIdentity } from '@/lib/formKind';
 import { Modal } from '@/components/ui/Modal';
 import { ShareModal } from '@/components/ShareModal';
 import { FormCollaboratorsModal } from '@/components/FormCollaboratorsModal';
@@ -544,7 +545,8 @@ export default function BuilderPage() {
       label: q.label,
       required: q.required,
       options: q.options,
-      validations: { points: 1, correct_answer: "", correctAnswer: "" },
+      // Template forms are data-collection forms: no marks or answer-key placeholders.
+      validations: {},
       logic: {}
     }));
 
@@ -710,7 +712,9 @@ export default function BuilderPage() {
   let highestScore = 0;
 
   const getQCorrectAns = (q: Question) => q.validations?.correct_answer ?? q.validations?.correctAnswer;
-  const hasQuiz = store.questions.some(q => Boolean(getQCorrectAns(q)));
+  // Same rule as the public form and the backend: explicit quiz flag, else real answer keys.
+  const isQuizMode = isAssessmentForm({ settings: store.settings }, store.questions);
+  const hasQuiz = isQuizMode && store.questions.some(q => Boolean(getQCorrectAns(q)));
 
   if (hasQuiz) {
     responses.forEach(r => {
@@ -1875,8 +1879,8 @@ export default function BuilderPage() {
                         </div>
                       )}
 
-                      {/* Quiz & Scoring Configurations */}
-                      {['short_text', 'mcq', 'dropdown', 'checkbox'].includes(selectedQuestion.type) && (
+                      {/* Quiz & Scoring Configurations (only when the form is a graded quiz) */}
+                      {isQuizMode && ['short_text', 'mcq', 'dropdown', 'checkbox'].includes(selectedQuestion.type) && (
                         <div className="space-y-3 pt-3.5 border-t border-border dark:border-border mt-2">
                           <label className="block text-xs font-medium text-muted-foreground dark:text-zinc-350 uppercase tracking-wide">Quiz & Grading Settings</label>
                           
@@ -2181,6 +2185,32 @@ export default function BuilderPage() {
                       onChange={(chk) => store.updateSettings({ limit_responses: chk })}
                     />
                   </div>
+
+                  <div className="flex justify-between items-center py-2.5 border-b border-zinc-100 dark:border-border">
+                    <div>
+                      <span className="text-xs font-semibold text-zinc-655 dark:text-zinc-350 uppercase tracking-wide block">Graded Quiz Mode</span>
+                      <span className="text-[10px] text-muted-foreground font-normal">Marks, answer keys and scores. Leave off for surveys, registrations, orders and reports.</span>
+                    </div>
+                    <Switch
+                      checked={isQuizMode}
+                      onChange={(chk) => store.updateSettings(chk
+                        ? { isQuiz: true }
+                        : { isQuiz: false, require_student_identity: false })}
+                    />
+                  </div>
+
+                  {isQuizMode && (
+                    <div className="flex justify-between items-center py-2.5 border-b border-zinc-100 dark:border-border">
+                      <div>
+                        <span className="text-xs font-semibold text-zinc-655 dark:text-zinc-350 uppercase tracking-wide block">Collect Student Identity</span>
+                        <span className="text-[10px] text-muted-foreground font-normal">Ask for name, enrollment / roll number and email before submitting</span>
+                      </div>
+                      <Switch
+                        checked={requiresStudentIdentity({ settings: store.settings, title: store.title }, store.questions)}
+                        onChange={(chk) => store.updateSettings({ require_student_identity: chk })}
+                      />
+                    </div>
+                  )}
 
                   <div className="flex justify-between items-center py-2.5 border-b border-zinc-100 dark:border-border">
                     <span className="text-xs font-semibold text-zinc-655 dark:text-zinc-350 uppercase tracking-wide">Anti-Cheat focus warnings</span>
@@ -3218,7 +3248,7 @@ export default function BuilderPage() {
               let totalPossiblePoints = 0;
               let earnedPoints = 0;
               const getQCorrectAns = (q: Question) => q.validations?.correct_answer ?? q.validations?.correctAnswer;
-              const hasQuizData = store.questions.some(q => Boolean(getQCorrectAns(q)));
+              const hasQuizData = isQuizMode && store.questions.some(q => Boolean(getQCorrectAns(q)));
 
               if (!hasQuizData) return null;
 
