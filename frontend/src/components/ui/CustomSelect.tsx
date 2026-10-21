@@ -1,6 +1,20 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, Check, Search, X } from 'lucide-react';
+
+interface PopoverPosition {
+  left: number;
+  width: number;
+  /** Distance from the viewport top (opening downwards) or bottom (opening upwards). */
+  offset: number;
+  placement: 'bottom' | 'top';
+  maxHeight: number;
+}
+
+const POPOVER_GAP = 6;
+const POPOVER_MAX_HEIGHT = 300;
+const VIEWPORT_MARGIN = 8;
 
 export interface SelectOption {
   value: string;
@@ -41,8 +55,42 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [position, setPosition] = useState<PopoverPosition | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // The option list is rendered in a portal with fixed positioning so it is never clipped by
+  // a parent with overflow: hidden (question cards, modals, scroll panels). It opens upwards
+  // when there is not enough room below the trigger.
+  const updatePosition = useCallback(() => {
+    const trigger = buttonRef.current;
+    if (!trigger) return;
+    const rect = trigger.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom - POPOVER_GAP - VIEWPORT_MARGIN;
+    const spaceAbove = rect.top - POPOVER_GAP - VIEWPORT_MARGIN;
+    const placement: 'bottom' | 'top' = spaceBelow < Math.min(POPOVER_MAX_HEIGHT, 200) && spaceAbove > spaceBelow ? 'top' : 'bottom';
+    const available = placement === 'bottom' ? spaceBelow : spaceAbove;
+    setPosition({
+      left: rect.left,
+      width: rect.width,
+      offset: placement === 'bottom' ? rect.bottom + POPOVER_GAP : window.innerHeight - rect.top + POPOVER_GAP,
+      placement,
+      maxHeight: Math.max(140, Math.min(POPOVER_MAX_HEIGHT, available))
+    });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!isOpen) return;
+    updatePosition();
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
+  }, [isOpen, updatePosition]);
 
   // Normalize options array into SelectOption format
   const normalizedOptions: SelectOption[] = options.map((opt) => {
@@ -67,9 +115,9 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
   // Close dropdown on click outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
+      const target = event.target as Node;
+      if (containerRef.current?.contains(target) || popoverRef.current?.contains(target)) return;
+      setIsOpen(false);
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -110,6 +158,11 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
     md: 'h-9 md:h-10 text-xs md:text-sm px-3 rounded-xl',
     lg: 'h-11 md:h-12 text-sm md:text-base px-4 rounded-xl'
   };
+  const optionTextMap = {
+    sm: 'text-xs',
+    md: 'text-xs md:text-sm',
+    lg: 'text-sm md:text-base'
+  };
 
   return (
     <div className={`w-full relative select-none ${className}`} ref={containerRef} id={id}>
@@ -121,8 +174,11 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
 
       {/* Trigger Button */}
       <button
+        ref={buttonRef}
         type="button"
         disabled={disabled}
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
         onClick={() => !disabled && setIsOpen((prev) => !prev)}
         className={`w-full flex items-center justify-between gap-2 border font-semibold transition-all duration-200 outline-none text-left cursor-pointer
           bg-background dark:bg-zinc-900/90 text-foreground dark:text-zinc-100 border-border dark:border-zinc-800 hover:border-primary/40 focus:border-primary focus:ring-2 focus:ring-primary/20
@@ -149,16 +205,24 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
         />
       </button>
 
-      {/* Dropdown Popover */}
+      {/* Dropdown Popover (portal: never clipped by overflow-hidden parents) */}
+      {typeof document !== 'undefined' && createPortal(
       <AnimatePresence>
-        {isOpen && (
+        {isOpen && position && (
           <motion.div
-            initial={{ opacity: 0, y: -6, scale: 0.98 }}
+            ref={popoverRef}
+            role="listbox"
+            initial={{ opacity: 0, y: position.placement === 'bottom' ? -6 : 6, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -6, scale: 0.98 }}
+            exit={{ opacity: 0, y: position.placement === 'bottom' ? -6 : 6, scale: 0.98 }}
             transition={{ duration: 0.15, ease: 'easeOut' }}
-            className="absolute left-0 right-0 top-[full] mt-1.5 z-[999] bg-card dark:bg-zinc-900 border border-border dark:border-zinc-800 rounded-xl shadow-2xl backdrop-blur-xl overflow-hidden text-xs font-semibold"
-            style={{ maxHeight: '280px' }}
+            className={`fixed z-[9999] bg-card dark:bg-zinc-900 text-foreground border border-border dark:border-zinc-800 rounded-xl shadow-2xl overflow-hidden font-medium flex flex-col ${optionTextMap[size]}`}
+            style={{
+              left: position.left,
+              width: position.width,
+              maxHeight: position.maxHeight,
+              ...(position.placement === 'bottom' ? { top: position.offset } : { bottom: position.offset })
+            }}
           >
             {/* Search Input Bar */}
             {isSearchable && (
@@ -185,7 +249,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
             )}
 
             {/* Options List */}
-            <div className="p-1.5 overflow-y-auto max-h-56 space-y-0.5 custom-scrollbar">
+            <div className="p-1.5 overflow-y-auto flex-1 min-h-0 space-y-0.5 custom-scrollbar">
               {filteredOptions.length === 0 ? (
                 <div className="py-4 text-center text-xs text-muted-foreground">
                   No matching options found
@@ -197,9 +261,11 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
                     <button
                       key={String(opt.value)}
                       type="button"
+                      role="option"
+                      aria-selected={isSelected}
                       disabled={opt.disabled}
                       onClick={() => handleSelect(String(opt.value), opt.disabled)}
-                      className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-left transition-colors duration-150 cursor-pointer ${
+                      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-left transition-colors duration-150 cursor-pointer ${
                         opt.disabled ? 'opacity-40 cursor-not-allowed' : ''
                       } ${
                         isSelected
@@ -227,7 +293,9 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
             </div>
           </motion.div>
         )}
-      </AnimatePresence>
+      </AnimatePresence>,
+      document.body
+      )}
 
       {error && <p className="mt-1 text-xs text-destructive font-medium">{error}</p>}
     </div>
