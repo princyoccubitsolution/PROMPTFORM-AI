@@ -154,6 +154,37 @@ const shuffleArray = <T,>(array: T[]): T[] => {
   return result;
 };
 
+/* Answers may be strings, arrays (multi-select, ordering) or objects (matching). */
+const isEmptyAnswer = (ans: any): boolean => {
+  if (ans === undefined || ans === null) return true;
+  if (Array.isArray(ans)) return ans.length === 0;
+  if (typeof ans === 'object') return Object.values(ans).every(v => v === undefined || v === null || String(v).trim() === '');
+  return String(ans).trim() === '';
+};
+
+const formatAnswer = (ans: any): string => {
+  if (ans === undefined || ans === null || ans === '') return '(No Answer)';
+  if (Array.isArray(ans)) return ans.join(', ');
+  if (typeof ans === 'object') return Object.entries(ans).map(([k, v]) => `${k} → ${v}`).join('; ');
+  return String(ans);
+};
+
+/* Word-boundary title check so "latest" / "contest" never turn a form into a quiz. */
+const isQuizOrStudentForm = (data: any, qs: any[]): boolean => {
+  const settings = data?.settings || {};
+  if (settings.isQuiz === false) return false;
+  return Boolean(
+    settings.isQuiz === true ||
+    data?.category === 'quiz' ||
+    data?.category === 'education' ||
+    /\b(quiz|exam|test|student|assessment|class|college|school)\b/i.test(data?.title || '') ||
+    qs.some((q: any) => {
+      const l = (q.label || '').toLowerCase();
+      return l.includes('enrollment') || l.includes('roll') || l.includes('student id');
+    })
+  );
+};
+
 /* -------------------------------------------------------------------------- */
 /* MAIN RESPONDER PAGE                                                        */
 /* -------------------------------------------------------------------------- */
@@ -171,6 +202,10 @@ export default function PublicFormPage() {
   // Access & Security state
   const [passwordInput, setPasswordInput] = useState("");
   const [isLocked, setIsLocked] = useState(false);
+  const [isUnlocking, setIsUnlocking] = useState(false);
+  const [unlockError, setUnlockError] = useState("");
+  // Results graded by the server (answer keys are never sent to respondents).
+  const [serverQuizResults, setServerQuizResults] = useState<any>(null);
   const [collectedEmail, setCollectedEmail] = useState("");
   const [emailProvided, setEmailProvided] = useState(false);
   const [hasStarted, setHasStarted] = useState(false);
@@ -230,12 +265,19 @@ export default function PublicFormPage() {
   }, [formId]);
 
   // Load form from API
-  const loadForm = async () => {
+  const loadForm = async (passcode?: string) => {
     setIsLoading(true);
     setErrorStatus(null);
     setErrorMessage("");
     try {
-      const data = await api.get(`/forms/${formId}`);
+      // The passcode travels in a header (never in the URL); the server only returns questions when it matches.
+      const data = await api.get(`/forms/${formId}`, passcode ? { 'x-form-password': passcode } : undefined);
+      if (passcode && (data.passwordRequired || data.isLocked)) {
+        setUnlockError("Incorrect passcode. Please try again.");
+        setIsLocked(true);
+        setIsLoading(false);
+        return;
+      }
       const parsedSettings = typeof data.settings === 'string'
         ? (() => { try { return JSON.parse(data.settings); } catch (_) { return {}; } })()
         : (data.settings || {});
@@ -253,15 +295,7 @@ export default function PublicFormPage() {
       let loadedQuestions = normalizedData.questions || [];
 
       // Detect if this is a Quiz or Student Assessment
-      const isQuizOrStudent = Boolean(
-        normalizedData.category === 'quiz' || 
-        normalizedData.category === 'education' ||
-        (normalizedData.title || '').toLowerCase().match(/(quiz|exam|test|student|assessment|class|college|school)/i) ||
-        loadedQuestions.some((q: any) => {
-          const l = (q.label || '').toLowerCase();
-          return l.includes('enrollment') || l.includes('roll') || l.includes('student id');
-        })
-      );
+      const isQuizOrStudent = isQuizOrStudentForm(normalizedData, loadedQuestions);
 
       // Check if already submitted in this browser session (or single response limit active)
       const searchParams = new URLSearchParams(window.location.search);
@@ -287,6 +321,10 @@ export default function PublicFormPage() {
             try {
               const parsed = JSON.parse(savedAnswers);
               setAnswers(parsed);
+              const savedResults = localStorage.getItem(`promptform_quiz_results_${normalizedData.id}`);
+              if (savedResults) {
+                try { setServerQuizResults(JSON.parse(savedResults)); } catch (_) {}
+              }
               setSubmitted(true);
               setIsLoading(false);
               return;
@@ -464,15 +502,18 @@ export default function PublicFormPage() {
         }
       }
 
-      // Analytics page view registration
-      api.post(`/analytics/form/${data.id}/view`, {
+      // Analytics page view registration (once; not again when re-loading after unlock)
+      if (!passcode) api.post(`/analytics/form/${data.id}/view`, {
         deviceType: typeof window !== 'undefined' && window.innerWidth < 768 ? "mobile" : "desktop",
         country: "US"
       }).catch(() => {});
 
-      // Passcode protection check
-      if (data.settings?.password) {
+      // Passcode protection: the server decides (it never sends the passcode itself).
+      if (data.passwordRequired || data.isLocked) {
         setIsLocked(true);
+      } else {
+        setIsLocked(false);
+        setUnlockError("");
       }
 
       // Email collection check
@@ -824,7 +865,7 @@ export default function PublicFormPage() {
   }, [visibleQuestions, emailProvided, isLocked]);
 
   const handleChatAnswerSubmit = (value: any) => {
-    if (value === undefined || value === null || String(value).trim() === "") {
+    if (isEmptyAnswer(value)) {
       return;
     }
 
@@ -834,7 +875,7 @@ export default function PublicFormPage() {
     const newAnswers = { ...answers, [currentQ.id]: value };
     setAnswers(newAnswers);
 
-    let userDisplayText = String(value);
+    let userDisplayText = formatAnswer(value);
     if (currentQ.type === 'password') {
       userDisplayText = '••••••••';
     } else if (currentQ.type === 'signature') {
@@ -896,15 +937,7 @@ export default function PublicFormPage() {
     if (isSubmitting) return;
 
     // Detect if this is a Quiz or Student Assessment
-    const isQuizOrStudent = Boolean(
-      form?.category === 'quiz' || 
-      form?.category === 'education' ||
-      (form?.title || '').toLowerCase().match(/(quiz|exam|test|student|assessment|class|college|school)/i) ||
-      questions.some((q: any) => {
-        const l = (q.label || '').toLowerCase();
-        return l.includes('enrollment') || l.includes('roll') || l.includes('student id');
-      })
-    );
+    const isQuizOrStudent = isQuizOrStudentForm(form, questions);
 
     // Extract Student Enrollment Number
     let enrollmentToSubmit = answers['field_enrollment_no'] || answers['enrollment_no'] || answers['enrollment'] || answers['roll_no'] || answers['student_id'] || '';
@@ -977,7 +1010,9 @@ export default function PublicFormPage() {
       visibleQuestions.forEach(q => {
         if (q.required) {
           const ans = answers[q.id];
-          if (ans === undefined || ans === null || String(ans).trim() === '' || (Array.isArray(ans) && ans.length === 0)) {
+          const leftItems: string[] = Array.isArray(q.validations?.matchLeft) ? q.validations.matchLeft : [];
+          const incompleteMatch = q.type === 'matching' && leftItems.some(l => !ans || !ans[l]);
+          if (isEmptyAnswer(ans) || incompleteMatch) {
             missing.push(q.label || `Question ${q.orderIndex + 1}`);
             if (!newErrors[q.id]) {
               newErrors[q.id] = "This question is required";
@@ -1049,7 +1084,11 @@ export default function PublicFormPage() {
     }
 
     try {
-      await api.post(`/forms/${form?.id || formId}/submit`, payload);
+      const submitResult = await api.post(`/forms/${form?.id || formId}/submit`, payload);
+      if (submitResult?.quizResults) {
+        setServerQuizResults(submitResult.quizResults);
+        try { localStorage.setItem(`promptform_quiz_results_${form?.id || formId}`, JSON.stringify(submitResult.quizResults)); } catch (_) {}
+      }
       setSubmitted(true);
       if (typeof window !== 'undefined') {
         localStorage.removeItem(`promptform_form_timer_start_${form?.id || formId}`);
@@ -1116,7 +1155,8 @@ export default function PublicFormPage() {
     return false;
   };
 
-  const isQuizForm = Boolean(
+  const isQuizForm = (form as any)?.settings?.isQuiz === false ? false : Boolean(
+    (form as any)?.settings?.isQuiz === true ||
     (form as any)?.formType === 'QUIZ' ||
     (form as any)?.isGraded === true ||
     (form as any)?.settings?.formType === 'QUIZ' ||
@@ -1390,12 +1430,15 @@ export default function PublicFormPage() {
             <CardDescription className="text-xs text-slate-500 mt-1">This questionnaire is protected with a security passcode.</CardDescription>
           </CardHeader>
           <CardContent className="pb-8">
-            <form onSubmit={(e) => {
+            <form onSubmit={async (e) => {
               e.preventDefault();
-              if (passwordInput === form?.settings?.password) {
-                setIsLocked(false);
-              } else {
-                alert("Incorrect passcode. Access denied.");
+              if (!passwordInput.trim() || isUnlocking) return;
+              setIsUnlocking(true);
+              setUnlockError("");
+              try {
+                await loadForm(passwordInput);
+              } finally {
+                setIsUnlocking(false);
               }
             }} className="space-y-4">
               <Input
@@ -1406,8 +1449,9 @@ export default function PublicFormPage() {
                 required
                 className="h-11 rounded-xl text-center tracking-widest text-sm"
               />
-              <Button type="submit" style={{ backgroundColor: primaryColor }} className="w-full h-11 text-white font-semibold rounded-xl">
-                Unlock Questionnaire
+              {unlockError && <p className="text-xs font-medium text-rose-600 text-center" role="alert">{unlockError}</p>}
+              <Button type="submit" disabled={isUnlocking} style={{ backgroundColor: primaryColor }} className="w-full h-11 text-white font-semibold rounded-xl">
+                {isUnlocking ? 'Checking...' : 'Unlock Questionnaire'}
               </Button>
             </form>
           </CardContent>
@@ -1463,9 +1507,11 @@ export default function PublicFormPage() {
   /* THANK YOU / QUIZ SCORE SUBMITTED SCREEN                                    */
   /* -------------------------------------------------------------------------- */
   if (submitted) {
-    const quizResults = calculateQuizResults();
-    const hasQuiz = isQuizForm && quizResults.totalPossiblePoints > 0;
+    // Server-graded results are authoritative; the local calculation only runs in owner preview.
+    const quizResults: any = serverQuizResults || calculateQuizResults();
+    const hasQuiz = (Boolean(serverQuizResults?.isQuiz) || isQuizForm) && quizResults.totalPossiblePoints > 0;
     const scorePct = hasQuiz ? Math.round((quizResults.earnedPoints / quizResults.totalPossiblePoints) * 100) : 0;
+    const pendingManual = Number(quizResults.pendingManualPoints) || 0;
 
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
@@ -1496,6 +1542,11 @@ export default function PublicFormPage() {
                     {scorePct}% Score • {scorePct >= 80 ? 'Grade A (Distinction)' : scorePct >= 50 ? 'Grade B (Pass)' : 'Needs Improvement'}
                   </span>
                 </div>
+                {pendingManual > 0 && (
+                  <p className="text-[11px] text-slate-500 mt-2">
+                    {pendingManual} mark(s) from descriptive / coding answers are awaiting review by the examiner and are not included yet.
+                  </p>
+                )}
               </div>
 
               {/* Questions breakdown */}
@@ -1509,17 +1560,19 @@ export default function PublicFormPage() {
                           {qIdx + 1}. {item.questionLabel}
                         </p>
                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded shrink-0 ml-2 ${
-                          item.isCorrect ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'
+                          item.gradingMode === 'manual'
+                            ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                            : item.isCorrect ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'
                         }`}>
-                          {item.earned} / {item.points} Pts
+                          {item.gradingMode === 'manual' ? `Pending review • ${item.points} Pts` : `${item.earned} / ${item.points} Pts`}
                         </span>
                       </div>
-                      <p className="text-xs text-slate-600">
-                        Your Answer: <span className={item.isCorrect ? 'text-emerald-700 font-semibold' : 'text-rose-600 font-semibold'}>{item.studentAnswer}</span>
+                      <p className="text-xs text-slate-600 whitespace-pre-wrap break-words">
+                        Your Answer: <span className={item.gradingMode === 'manual' ? 'text-slate-800 font-semibold' : item.isCorrect ? 'text-emerald-700 font-semibold' : 'text-rose-600 font-semibold'}>{formatAnswer(item.studentAnswer)}</span>
                       </p>
-                      {!item.isCorrect && item.correctAnswer && (
-                        <p className="text-xs text-emerald-700 font-medium">
-                          ✓ Correct: <span className="font-semibold underline">{item.correctAnswer}</span>
+                      {item.gradingMode !== 'manual' && !item.isCorrect && item.correctAnswer !== undefined && item.correctAnswer !== null && item.correctAnswer !== '' && (
+                        <p className="text-xs text-emerald-700 font-medium whitespace-pre-wrap break-words">
+                          ✓ Correct: <span className="font-semibold underline">{formatAnswer(item.correctAnswer)}</span>
                         </p>
                       )}
                       {item.explanation && (
@@ -1555,7 +1608,100 @@ export default function PublicFormPage() {
   /* -------------------------------------------------------------------------- */
   /* RENDER QUESTION INPUT CONTROLS                                             */
   /* -------------------------------------------------------------------------- */
-  const renderQuestionControl = (q: any, isFocused = false) => {
+  /* Supporting material shown above the input: scenario text, code, coding examples. */
+  const renderQuestionContext = (q: any) => {
+    const v = q.validations || {};
+    const examples: any[] = Array.isArray(v.examples) ? v.examples : [];
+    if (!v.description && !v.codeSnippet && examples.length === 0 && !v.constraints) return null;
+    return (
+      <div className="space-y-2 mb-3">
+        {v.description && <p className="text-xs text-slate-600 whitespace-pre-wrap leading-relaxed">{v.description}</p>}
+        {v.codeSnippet && (
+          <pre className="text-xs font-mono bg-slate-900 text-emerald-300 rounded-xl p-3 overflow-x-auto whitespace-pre" aria-label={`${v.programmingLanguage || 'Code'} snippet`}>
+            <code>{v.codeSnippet}</code>
+          </pre>
+        )}
+        {v.constraints && <p className="text-[11px] text-slate-500 whitespace-pre-wrap"><b>Constraints:</b> {v.constraints}</p>}
+        {examples.length > 0 && (
+          <div className="space-y-1">
+            {examples.map((ex: any, i: number) => (
+              <pre key={i} className="text-[11px] font-mono bg-slate-50 text-slate-700 border border-slate-200 rounded-lg p-2 whitespace-pre-wrap">
+                {`Example ${i + 1}\nInput:  ${ex.input}\nOutput: ${ex.output}`}
+              </pre>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderQuestionControl = (q: any, isFocused = false) => (
+    <>
+      {renderQuestionContext(q)}
+      {renderQuestionInput(q, isFocused)}
+    </>
+  );
+
+  const renderQuestionInput = (q: any, isFocused = false) => {
+    // Match the following: one dropdown per left-column item.
+    if (q.type === 'matching') {
+      const left: string[] = Array.isArray(q.validations?.matchLeft) ? q.validations.matchLeft : [];
+      const current: Record<string, string> = answers[q.id] && typeof answers[q.id] === 'object' ? answers[q.id] : {};
+      return (
+        <div className="space-y-2 w-full">
+          {left.map((item) => (
+            <div key={item} className="grid grid-cols-1 sm:grid-cols-2 gap-2 items-center">
+              <span className="text-sm font-medium text-slate-800 break-words">{item}</span>
+              <select
+                aria-label={`Match for ${item}`}
+                value={current[item] || ''}
+                onChange={(e) => {
+                  setAnswers({ ...answers, [q.id]: { ...current, [item]: e.target.value } });
+                  if (validationErrors[q.id]) setValidationErrors(prev => ({ ...prev, [q.id]: "" }));
+                }}
+                className="w-full h-11 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 rounded-xl text-sm px-3 text-slate-900 dark:text-zinc-100"
+              >
+                <option value="">Select a match…</option>
+                {(q.options || []).map((opt: string) => <option key={opt} value={opt}>{opt}</option>)}
+              </select>
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    // Ordering: arrange items with up / down buttons.
+    if (q.type === 'ordering') {
+      const order: string[] = Array.isArray(answers[q.id]) && answers[q.id].length === (q.options || []).length ? answers[q.id] : [...(q.options || [])];
+      const move = (from: number, to: number) => {
+        if (to < 0 || to >= order.length) return;
+        const next = [...order];
+        const [item] = next.splice(from, 1);
+        next.splice(to, 0, item);
+        setAnswers({ ...answers, [q.id]: next });
+        if (validationErrors[q.id]) setValidationErrors(prev => ({ ...prev, [q.id]: "" }));
+      };
+      return (
+        <ol className="space-y-2 w-full">
+          {order.map((item, idx) => (
+            <li key={item} className="flex items-center gap-2 p-2.5 bg-white border border-slate-200/90 rounded-xl">
+              <span className="w-6 h-6 rounded-md bg-slate-100 text-slate-700 text-xs font-bold flex items-center justify-center shrink-0">{idx + 1}</span>
+              <span className="flex-1 text-sm font-medium text-slate-700 break-words">{item}</span>
+              <button type="button" aria-label={`Move ${item} up`} disabled={idx === 0} onClick={() => move(idx, idx - 1)} className="px-2 py-1 text-xs text-slate-700 rounded-md border border-slate-200 hover:bg-slate-50 disabled:opacity-30">↑</button>
+              <button type="button" aria-label={`Move ${item} down`} disabled={idx === order.length - 1} onClick={() => move(idx, idx + 1)} className="px-2 py-1 text-xs text-slate-700 rounded-md border border-slate-200 hover:bg-slate-50 disabled:opacity-30">↓</button>
+            </li>
+          ))}
+          {!Array.isArray(answers[q.id]) && (
+            <li>
+              <button type="button" onClick={() => setAnswers({ ...answers, [q.id]: order })} className="text-xs font-semibold text-indigo-600 hover:underline">
+                Confirm this order
+              </button>
+            </li>
+          )}
+        </ol>
+      );
+    }
+
     const isAlphanumericId = /roll|enrollment|student id|id number|registration|code/i.test(q.label || '');
     const isStrictNumeric = (q.type === 'amount' || q.type === 'price' || q.type === 'number') && !isAlphanumericId;
     const inputType = q.type === 'email' ? 'email' : q.type === 'phone' ? 'tel' : q.type === 'website' ? 'url' : isStrictNumeric ? 'number' : 'text';
@@ -1643,12 +1789,14 @@ export default function PublicFormPage() {
 
     // Long text / Paragraph / Feedback / Address
     if (['long_text', 'feedback', 'address', 'paragraph', 'textarea', 'comments', 'description', 'message'].includes(q.type)) {
+      const isCodeAnswer = ['coding', 'debugging', 'sql'].includes(q.validations?.assessmentType);
       return (
         <div className="relative w-full">
           {q.type === 'address' && <MapPin className="absolute left-3.5 top-3.5 w-4 h-4 text-slate-400" />}
           <textarea
-            rows={4}
-            placeholder={q.type === 'address' ? 'Street, Apartment, City, State, ZIP...' : 'Type your answer here...'}
+            rows={isCodeAnswer ? 8 : 4}
+            spellCheck={!isCodeAnswer}
+            placeholder={q.type === 'address' ? 'Street, Apartment, City, State, ZIP...' : isCodeAnswer ? `Write your ${q.validations?.programmingLanguage || ''} answer here...` : (q.validations?.placeholder || 'Type your answer here...')}
             value={answers[q.id] || ""}
             onChange={(e) => {
               setAnswers({ ...answers, [q.id]: e.target.value });
@@ -1659,7 +1807,7 @@ export default function PublicFormPage() {
               validationErrors[q.id] 
                 ? 'border-rose-400 focus:ring-2 focus:ring-rose-200' 
                 : 'border-slate-200 dark:border-zinc-700 hover:border-slate-300 dark:hover:border-zinc-600 focus:border-indigo-600 focus:ring-4 focus:ring-indigo-50 dark:focus:ring-indigo-950/40'
-            } ${q.type === 'address' ? 'pl-10 pr-4' : 'px-4'}`}
+            } ${q.type === 'address' ? 'pl-10 pr-4' : 'px-4'} ${isCodeAnswer ? 'font-mono text-xs' : ''}`}
           />
         </div>
       );
@@ -2813,6 +2961,25 @@ export default function PublicFormPage() {
               {currentQuestionIndex < visibleQuestions.length ? (
                 (() => {
                   const currentQ = visibleQuestions[currentQuestionIndex];
+
+                  // Structured answers (matching, ordering, multi-select) use the full control plus a send button.
+                  if (['matching', 'ordering', 'checkbox', 'multiple_options'].includes(currentQ.type)) {
+                    const pending = answers[currentQ.id] ?? (currentQ.type === 'ordering' ? [...(currentQ.options || [])] : undefined);
+                    return (
+                      <div className="space-y-3">
+                        {renderQuestionControl(currentQ, true)}
+                        <Button
+                          type="button"
+                          disabled={isEmptyAnswer(pending)}
+                          onClick={() => handleChatAnswerSubmit(pending)}
+                          style={{ backgroundColor: primaryColor }}
+                          className="w-full h-10 text-white text-xs font-semibold rounded-xl disabled:opacity-40"
+                        >
+                          Send answer
+                        </Button>
+                      </div>
+                    );
+                  }
 
                   // If option-based question, display click pills
                   if (['mcq', 'one_option', 'gender', 'dropdown', 'country', 'radio', 'single_choice', 'select'].includes(currentQ.type)) {

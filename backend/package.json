@@ -9,6 +9,7 @@
     "postinstall": "prisma generate",
     "start": "node dist/index.js",
     "test": "ts-node src/scripts/runTests.ts",
+    "test:ai": "ts-node --transpile-only src/scripts/testRequirementPipeline.ts",
     "test:cloud": "node src/scripts/testLiveCloud.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",

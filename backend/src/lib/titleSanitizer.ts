@@ -15,6 +15,12 @@ export function sanitizeFormTitle(rawTitle: string, rawPrompt?: string, topic?: 
   let cleaned = (rawTitle || topic || '').trim();
   if (!cleaned) cleaned = 'Custom AI Form';
 
+  // Titles in non-Latin scripts (Gujarati, Hindi, ...) are kept as written: the English
+  // heuristics below would truncate them or append " Form".
+  if (/[^\u0000-ɏ\s\d\p{P}\p{S}]/u.test(cleaned) && cleaned.length <= 120) {
+    return cleaned;
+  }
+
   // Check if raw title is heavily contaminated with prompt instructions (e.g., "Analysis This Pdf", "Attached Syllabus Photo Paper")
   const isPromptPolluted = /\b(analysis\s+this|analysis\s+pdf|extract\s+from|created\s+a\s+quiz|generate\s+from\s+pdf|attached\s+syllabus|syllabus\s+photo|photo\s+paper|analyze\s+the|attached|syllabus|generate\s+a|exam\s+paper\s+for)\b/i.test(cleaned);
   if (isPromptPolluted) {
@@ -52,17 +58,8 @@ export function sanitizeFormTitle(rawTitle: string, rawPrompt?: string, topic?: 
     cleaned = topic && !/\b(analysis|pdf|doc|document)\b/i.test(topic) ? `${topic} Quiz` : "Knowledge Assessment Quiz";
   } else {
     const lower = cleaned.toLowerCase();
-    if (
-      !lower.includes("form") && 
-      !lower.includes("quiz") && 
-      !lower.includes("survey") && 
-      !lower.includes("rsvp") && 
-      !lower.includes("application") && 
-      !lower.includes("assessment") && 
-      !lower.includes("sheet") &&
-      !lower.includes("tracker") &&
-      !lower.includes("portal")
-    ) {
+    const artifactNouns = /\b(form|quiz|survey|rsvp|application|assessment|sheet|tracker|portal|test|exam|examination|paper|questionnaire|poll|booking|reservation|order|registration|request|checklist|log|intake|ticket|report|evaluation|inquiry|enquiry|feedback|worksheet|challenge|trivia)\b/i;
+    if (!artifactNouns.test(lower)) {
       cleaned = `${cleaned} Form`;
     }
   }

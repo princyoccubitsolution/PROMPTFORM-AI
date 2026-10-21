@@ -147,29 +147,16 @@ export class EnterpriseQualityReviewer {
               quizHealedCount++;
             }
 
-            // Ensure options array exists and has at least 4 items for general MCQs
+            // Choice questions keep the options they were given. Placeholder options
+            // ("Option A") and invented answers are never added: the requirement verifier
+            // reports missing options / answers instead of hiding them.
             if (q.type === 'mcq' || q.type === 'one_option' || q.type === 'dropdown' || q.type === 'checkbox') {
               if (!Array.isArray(q.options)) q.options = [];
-              const isTrueFalseQuestion = (q.options.length === 2 && q.options.some((o: string) => o.toLowerCase().includes('true')) && q.options.some((o: string) => o.toLowerCase().includes('false'))) || lowerLabel.includes("true or false") || lowerLabel.includes("true/false") || lowerLabel.includes("(true/false)");
-              if (q.options.length < 4 && !isTrueFalseQuestion) {
-                const fallbackChoices = ["Option A", "Option B", "Option C", "Option D"];
-                while (q.options.length < 4) {
-                  q.options.push(fallbackChoices[q.options.length] || `Option ${q.options.length + 1}`);
-                }
-                quizHealedCount++;
-              }
             }
           }
 
-          // Ensure evaluation properties exist
-          if (!q.correctAnswer && Array.isArray(q.options) && q.options.length > 0) {
-            q.correctAnswer = q.options[0];
-          }
           if (q.points === undefined) {
             q.points = 2;
-          }
-          if (!q.explanation && q.correctAnswer) {
-            q.explanation = `Option '${q.correctAnswer}' is the verified correct answer for "${q.label}".`;
           }
           if (!q.difficulty) {
             q.difficulty = config.understandingSummary?.difficulty || "Intermediate";

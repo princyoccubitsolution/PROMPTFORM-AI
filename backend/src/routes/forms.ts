@@ -10,8 +10,28 @@ import { FormsService } from '../services/formsService';
 import { AnalyticsService } from '../services/analyticsService';
 import { emailService } from '../services/emailService';
 import { logger } from '../lib/logger';
+import { gradeSubmission, gradeQuestion, isAssessmentForm, sanitizeFormForRespondent } from '../lib/assessment/grading';
+import jwt from 'jsonwebtoken';
 
 const router = Router();
+
+/** Owners and collaborators see answer keys; respondents never do. */
+const requesterCanEdit = async (req: Request, form: { id: string; ownerId: string }): Promise<boolean> => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) return false;
+  try {
+    const secret = process.env.JWT_SECRET || 'promptform_jwt_secret_key_2026_default';
+    const decoded = jwt.verify(authHeader.split(' ')[1], secret) as any;
+    if (!decoded?.id) return false;
+    if (decoded.id === form.ownerId) return true;
+    return await hasFormAccess(form.id, decoded.id, ['admin', 'editor', 'viewer']);
+  } catch (_) {
+    return false;
+  }
+};
+
+/** Word-boundary match so "latest" / "contest" do not turn a form into a quiz. */
+const QUIZ_TITLE_PATTERN = /\b(quiz|test|exam|examination|student|assessment)\b/i;
 
 const getFormCacheKey = (id: string) => `form:${id}`;
 const getShareFormCacheKey = (shareId: string) => `form_share:${shareId}`;
@@ -512,10 +532,16 @@ router.get('/:id', async (req: Request, res: Response) => {
     const cachedFormStr = await cache.get(cacheKey);
 
     if (cachedFormStr) {
+      let cachedForm: any = null;
       try {
-        const cachedForm = JSON.parse(cachedFormStr);
-
+        cachedForm = JSON.parse(cachedFormStr);
+      } catch (_) {
+        // Cache parse error, fall through to database
+      }
+      if (cachedForm) {
         const cachedSettings = parseSettings(cachedForm.settings);
+        const canEdit = await requesterCanEdit(req, cachedForm);
+        const present = (f: any) => (canEdit ? f : sanitizeFormForRespondent(f));
 
         // Guard: check if form has expired based on expires_at deadline
         const cachedExpiresAt = cachedSettings.expires_at;
@@ -527,55 +553,31 @@ router.get('/:id', async (req: Request, res: Response) => {
           }
         }
 
-        if (isCachedExpired) {
-          let isOwner = false;
-          try {
-            const authHeader = req.headers.authorization;
-            if (authHeader && authHeader.startsWith('Bearer ')) {
-              const jwt = require('jsonwebtoken');
-              const decoded = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET!) as any;
-              if (decoded.id === cachedForm.ownerId) isOwner = true;
-            }
-          } catch (_) {}
-
-          if (!isOwner) {
-            return res.json({
-              ...cachedForm,
-              settings: cachedSettings,
-              status: 'CLOSED',
-              isExpired: true,
-              questions: [],
-              message: cachedSettings.expiration_message || 'This form has expired and is no longer accepting responses.'
-            });
-          }
+        if (isCachedExpired && !canEdit) {
+          return res.json(present({
+            ...cachedForm,
+            settings: cachedSettings,
+            status: 'CLOSED',
+            isExpired: true,
+            questions: [],
+            message: cachedSettings.expiration_message || 'This form has expired and is no longer accepting responses.'
+          }));
         }
 
         // Guard: mask questions if form is password-protected and correct password not provided
         const formPassword = cachedSettings.password;
         if (formPassword) {
           const providedPassword = req.headers['x-form-password'] || req.query.password;
-          let isOwner = false;
-          try {
-            const authHeader = req.headers.authorization;
-            if (authHeader && authHeader.startsWith('Bearer ')) {
-              const jwt = require('jsonwebtoken');
-              const decoded = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET!) as any;
-              if (decoded.id === cachedForm.ownerId) isOwner = true;
-            }
-          } catch (_) {}
-
-          if (!isOwner && providedPassword !== formPassword) {
-            return res.json({
+          if (!canEdit && providedPassword !== formPassword) {
+            return res.json(present({
               ...cachedForm,
               questions: [],
               passwordRequired: true,
               isLocked: true
-            });
+            }));
           }
         }
-        return res.json(cachedForm);
-      } catch (_) {
-        // Cache parse error, fall through to database
+        return res.json(present(cachedForm));
       }
     }
 
@@ -635,6 +637,8 @@ router.get('/:id', async (req: Request, res: Response) => {
     }
 
     const parsedDbSettings = parseSettings(form.settings);
+    const canEdit = await requesterCanEdit(req, form);
+    const present = (f: any) => (canEdit ? f : sanitizeFormForRespondent(f));
 
     // Guard: check if form has expired based on expires_at deadline
     const expiresAt = parsedDbSettings.expires_at;
@@ -647,17 +651,7 @@ router.get('/:id', async (req: Request, res: Response) => {
     }
 
     if (isExpired) {
-      let isOwner = false;
-      try {
-        const authHeader = req.headers.authorization;
-        if (authHeader && authHeader.startsWith('Bearer ')) {
-          const jwt = require('jsonwebtoken');
-          const decoded = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET!) as any;
-          if (decoded.id === form.ownerId) isOwner = true;
-        }
-      } catch (_) {}
-
-      if (!isOwner) {
+      if (!canEdit) {
         if (form.status === 'PUBLISHED') {
           try {
             await db.form.update({
@@ -667,14 +661,14 @@ router.get('/:id', async (req: Request, res: Response) => {
             await invalidateFormCache(form.id, form.uniqueShareId);
           } catch (_) {}
         }
-        return res.json({
+        return res.json(present({
           ...form,
           settings: parsedDbSettings,
           status: 'CLOSED',
           isExpired: true,
           questions: [],
           message: parsedDbSettings.expiration_message || 'This form has expired and is no longer accepting responses.'
-        });
+        }));
       }
     }
 
@@ -682,27 +676,17 @@ router.get('/:id', async (req: Request, res: Response) => {
     const formPassword = parsedDbSettings.password;
     if (formPassword) {
       const providedPassword = req.headers['x-form-password'] || req.query.password;
-      let isOwner = false;
-      try {
-        const authHeader = req.headers.authorization;
-        if (authHeader && authHeader.startsWith('Bearer ')) {
-          const jwt = require('jsonwebtoken');
-          const decoded = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET!) as any;
-          if (decoded.id === form.ownerId) isOwner = true;
-        }
-      } catch (_) {}
-
-      if (!isOwner && providedPassword !== formPassword) {
-        return res.json({
+      if (!canEdit && providedPassword !== formPassword) {
+        return res.json(present({
           ...form,
           questions: [],
           passwordRequired: true,
           isLocked: true
-        });
+        }));
       }
     }
 
-    return res.json(form);
+    return res.json(present(form));
   } catch (error) {
     return res.status(500).json({ error: 'Internal server error' });
   }
@@ -846,36 +830,7 @@ router.put('/:id/questions', authMiddleware, validateUuidMiddleware, async (req:
 
     // Differential upsert: update existing, create new, delete removed — preserves question UUIDs & foreign key references
     await db.$transaction(async (tx: any) => {
-      const existingQuestions = await tx.question.findMany({ where: { formId: id }, select: { id: true } });
-      const existingIds = new Set<string>(existingQuestions.map((q: any) => q.id));
-      const incomingIds = new Set<string>(questionsList.filter(q => q.id && isUUID(q.id)).map(q => q.id!));
-
-      // 1. Delete questions that are no longer in the incoming list
-      const idsToDelete = [...existingIds].filter((eid: string) => !incomingIds.has(eid));
-      if (idsToDelete.length > 0) {
-        await tx.question.deleteMany({ where: { id: { in: idsToDelete }, formId: id } });
-      }
-
-      // 2. Upsert each question: update if exists, create if new
-      for (let idx = 0; idx < questionsList.length; idx++) {
-        const q = questionsList[idx];
-        const qId = q.id && isUUID(q.id) ? q.id : undefined;
-        const data = {
-          formId: id,
-          type: q.type,
-          label: q.label,
-          required: q.required,
-          orderIndex: idx,
-          options: q.options,
-          validations: q.validations,
-          logic: q.logic
-        };
-        if (qId && existingIds.has(qId)) {
-          await tx.question.update({ where: { id: qId }, data });
-        } else {
-          await tx.question.create({ data: { ...(qId ? { id: qId } : {}), ...data } });
-        }
-      }
+      await FormsService.replaceQuestionsPreservingIds(tx, id, questionsList, { allowClientIds: true });
     });
 
     const updatedQuestions = await db.question.findMany({
@@ -1309,7 +1264,7 @@ router.post('/:id/submit', async (req: Request, res: Response) => {
     }
 
     // Fetch form questions
-    const formQuestions = await db.question.findMany({ where: { formId: form.id } });
+    const formQuestions = await db.question.findMany({ where: { formId: form.id }, orderBy: { orderIndex: 'asc' } });
     const isForceSubmit = Boolean(req.body.isForceSubmit || req.body.isTimeExpired || (req.body.browserMetadata?.is_flagged && Number(req.body.browserMetadata?.tab_switches) >= 3));
 
     // Enforce session timer limit (if configured)
@@ -1330,14 +1285,13 @@ router.post('/:id/submit', async (req: Request, res: Response) => {
     const resolvedStudentName = extractStudentName(answersMap, formQuestions, submittedBy || req.body.submittedBy);
     const resolvedEmail = extractStudentEmail(answersMap, formQuestions, email || req.body.email);
 
-    // Auto-detect Quiz or Student Assessment
-    const isQuizOrStudent = Boolean(
-      form.category === 'quiz' || 
+    // Auto-detect Quiz or Student Assessment. An explicit settings.isQuiz=false (AI-generated
+    // non-assessment forms) always wins over title heuristics.
+    const isQuizOrStudent = formSettings.isQuiz === false ? false : Boolean(
+      formSettings.isQuiz === true ||
+      form.category === 'quiz' ||
       form.category === 'education' ||
-      form.title.toLowerCase().includes('quiz') || 
-      form.title.toLowerCase().includes('test') || 
-      form.title.toLowerCase().includes('exam') || 
-      form.title.toLowerCase().includes('student') ||
+      QUIZ_TITLE_PATTERN.test(form.title) ||
       formQuestions.some((q: any) => {
         const l = (q.label || '').toLowerCase();
         return l.includes('enrollment') || l.includes('roll') || l.includes('student id');
@@ -1669,7 +1623,17 @@ router.post('/:id/submit', async (req: Request, res: Response) => {
       }
     })();
 
-    return res.status(201).json({ message: 'Response submitted successfully', responseId: response.id });
+    // Server-side grading: respondents never receive the answer key before submitting.
+    const quizResults = gradeSubmission({ settings: formSettings, category: form.category, questions: formQuestions }, answers as Record<string, any>);
+    if (quizResults.isQuiz && formSettings.show_answers_after_submit === false) {
+      quizResults.questionsBreakdown = quizResults.questionsBreakdown.map(item => ({ ...item, correctAnswer: undefined, explanation: undefined }));
+    }
+
+    return res.status(201).json({
+      message: 'Response submitted successfully',
+      responseId: response.id,
+      ...(quizResults.isQuiz ? { quizResults } : {})
+    });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return res.status(400).json({ error: 'Validation failed', details: error.errors });
@@ -1813,8 +1777,7 @@ router.get('/:id/export', authMiddleware, validateUuidMiddleware, async (req: Au
       return ans;
     };
 
-    const rawCategory = (form.category || (form.settings as any)?.category || '').toString().trim().toUpperCase();
-    const isQuizCategory = ['QUIZ', 'ASSESSMENT'].includes(rawCategory);
+    const isQuizCategory = isAssessmentForm(form);
     const isQuiz = isQuizCategory;
 
     const getEnrollmentNumber = (r: any) => extractEnrollmentNumber((r.answers as Record<string, any>) || {}, form.questions);
@@ -1840,7 +1803,7 @@ router.get('/:id/export', authMiddleware, validateUuidMiddleware, async (req: Au
 
       form.questions.forEach((q: any) => {
         const validations = q.validations || {};
-        
+
         // Skip if isGraded is explicitly set to false
         if (q.isGraded === false || validations.isGraded === false) {
           return;
@@ -1852,16 +1815,15 @@ router.get('/:id/export', authMiddleware, validateUuidMiddleware, async (req: Au
           return;
         }
 
+        // Same grading rules as the submit endpoint (multi-correct sets, accepted answers, tolerance...).
+        const graded = gradeQuestion(q, answersMap[q.id]);
+        if (!graded.isGraded) return;
         totalGraded++;
-        const pts = Number(validations.points ?? q.points ?? 1);
-        maxPoints += pts;
-        const userAns = answersMap[q.id];
-        const isCorrect = userAns !== undefined && userAns !== null && String(userAns).trim().toLowerCase() === String(correctAns).trim().toLowerCase();
-        if (isCorrect) {
-          correctCount++;
-          earnedPoints += pts;
-        }
+        maxPoints += graded.points;
+        if (graded.isCorrect) correctCount++;
+        earnedPoints += graded.earned;
       });
+      earnedPoints = Math.max(0, earnedPoints);
 
       return {
         correctCount,

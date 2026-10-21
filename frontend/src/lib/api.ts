@@ -162,10 +162,10 @@ export const api = {
     return getOAuthGoogleUrl(redirectTarget);
   },
 
-  async get(endpoint: string) {
+  async get(endpoint: string, extraHeaders?: Record<string, string>) {
     return request(endpoint, {
       method: 'GET',
-      headers: getHeaders(),
+      headers: { ...getHeaders(), ...(extraHeaders || {}) },
     });
   },
 

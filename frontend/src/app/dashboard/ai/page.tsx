@@ -16,6 +16,19 @@ import { ShareModal } from '@/components/ShareModal';
 import { CustomSelect } from '@/components/ui/CustomSelect';
 import { api } from '@/lib/api';
 
+const ASSESSMENT_TYPE_LABELS: Record<string, string> = {
+  mcq_single: 'MCQ', mcq_multiple: 'Multi-correct', true_false: 'True / False', fill_blank: 'Fill blank',
+  one_word: 'One word', short_answer: 'Short answer', long_answer: 'Long answer', coding: 'Coding',
+  predict_output: 'Predict output', debugging: 'Debugging', sql: 'SQL', numerical: 'Numerical',
+  assertion_reasoning: 'Assertion-Reason', case_study: 'Case study', match_following: 'Match', ordering: 'Ordering'
+};
+
+const formatAnswerKey = (ans: any, kind?: string): string => {
+  if (Array.isArray(ans)) return ans.join(kind === 'ordering' ? ' → ' : ', ');
+  if (ans && typeof ans === 'object') return Object.entries(ans).map(([k, v]) => `${k} = ${v}`).join('; ');
+  return String(ans);
+};
+
 export default function AIPage() {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
@@ -46,6 +59,50 @@ export default function AIPage() {
   // Generated Form State
   const [generatedForm, setGeneratedForm] = useState<any>(null);
   const [shareModalOpen, setShareModalOpen] = useState(false);
+  // What the server understood and verified for the last generation / edit.
+  const [requirements, setRequirements] = useState<any>(null);
+  // Clarifying question or conversational reply (no form was created or changed).
+  const [assistantNote, setAssistantNote] = useState<{ kind: 'clarify' | 'converse'; text: string; suggestions: string[] } | null>(null);
+  const [showAnswerKey, setShowAnswerKey] = useState(false);
+  const [showReportDetails, setShowReportDetails] = useState(false);
+
+  // The server's canonical form is shown as-is so the preview always matches what was saved.
+  const mapServerForm = (formObj: any) => {
+    const settings = formObj.settings || {};
+    const isAssessment = settings.isQuiz === true || String(formObj.category || '').toLowerCase() === 'quiz';
+    return {
+      id: formObj.id,
+      uniqueShareId: formObj.uniqueShareId,
+      publicUrl: formObj.publicUrl,
+      title: formObj.title || "AI Generated Form",
+      description: formObj.description || "",
+      category: isAssessment ? "ASSESSMENT" : "FORM",
+      isAssessment,
+      settings,
+      theme: formObj.theme || { primary_color: "#8B6B55", background_color: "#FAF6EF" },
+      questions: (formObj.questions || []).map((q: any, i: number) => ({
+        id: q.id || `q_${i}`,
+        type: q.type || "short_text",
+        label: q.label || `Question ${i + 1}`,
+        required: Boolean(q.required),
+        options: Array.isArray(q.options) ? q.options : [],
+        validations: q.validations || {},
+        logic: q.logic || {},
+        description: q.validations?.description,
+        placeholder: q.validations?.placeholder
+      })),
+      isPublished: formObj.status === 'PUBLISHED'
+    };
+  };
+
+  const startNewForm = () => {
+    setGeneratedForm(null);
+    setRequirements(null);
+    setAssistantNote(null);
+    setShowAnswerKey(false);
+    setPrompt("");
+    setError(null);
+  };
 
   // Demo preview form when explicitly requested to view sample demo
   const [showSampleDemo, setShowSampleDemo] = useState(false);
@@ -131,10 +188,21 @@ export default function AIPage() {
               )}
             </div>
           </div>
-          <div className="flex-shrink-0 flex items-center gap-1.5">
-            {(q.points !== undefined || q.validations?.points !== undefined) && (
+          <div className="flex-shrink-0 flex flex-wrap justify-end items-center gap-1.5">
+            {activeForm?.isAssessment && q.validations?.assessmentType && (
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20">
+                {ASSESSMENT_TYPE_LABELS[q.validations.assessmentType] || q.validations.assessmentType}
+                {q.validations.difficulty ? ` · ${q.validations.difficulty}` : ''}
+              </span>
+            )}
+            {activeForm?.isAssessment && q.validations?.points !== undefined && (
               <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20 shadow-xs">
-                {q.points !== undefined ? q.points : q.validations.points} Marks
+                {q.validations.points} {Number(q.validations.points) === 1 ? 'Mark' : 'Marks'}
+              </span>
+            )}
+            {q.validations?.needsReview && (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-red-500/10 text-red-600 border border-red-500/20" title="The AI could not produce a verifiable answer key for this question">
+                Answer needs review
               </span>
             )}
             {q.required ? (
@@ -149,13 +217,50 @@ export default function AIPage() {
           </div>
         </div>
 
+        {/* Supporting material: code snippet, coding examples */}
+        {q.validations?.codeSnippet && (
+          <pre className="mt-1 mb-2 text-[11px] font-mono bg-slate-900 text-emerald-300 rounded-xl p-3 overflow-x-auto whitespace-pre">{q.validations.codeSnippet}</pre>
+        )}
+        {Array.isArray(q.validations?.examples) && q.validations.examples.length > 0 && (
+          <div className="mb-2 space-y-1">
+            {q.validations.examples.slice(0, 2).map((ex: any, i: number) => (
+              <pre key={i} className="text-[10px] font-mono bg-muted/50 border border-border rounded-lg p-2 whitespace-pre-wrap">{`Input: ${ex.input}\nOutput: ${ex.output}`}</pre>
+            ))}
+          </div>
+        )}
+
         {/* Input / Control Layout Body */}
         <div className="w-full pt-1">
+          {/* Match the following */}
+          {fieldType === 'matching' && (
+            <div className="space-y-1.5 w-full">
+              {(q.validations?.matchLeft || []).map((left: string) => (
+                <div key={left} className="grid grid-cols-2 gap-2 items-center text-xs">
+                  <span className="font-medium text-foreground break-words">{left}</span>
+                  <CustomSelect placeholder="Select a match..." options={q.options || []} onChange={() => {}} size="md" />
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Ordering */}
+          {fieldType === 'ordering' && (
+            <ol className="space-y-1.5 w-full">
+              {(q.options || []).map((item: string, i: number) => (
+                <li key={item} className="flex items-center gap-2 px-3 py-2 rounded-xl border border-border bg-card text-xs">
+                  <span className="w-5 h-5 rounded bg-muted text-[10px] font-bold flex items-center justify-center">{i + 1}</span>
+                  <span className="flex-1 break-words">{item}</span>
+                  <span className="text-muted-foreground">↕</span>
+                </li>
+              ))}
+            </ol>
+          )}
+
           {/* Coding / Program / Algorithm */}
-          {(fieldType === 'code' || fieldType === 'coding' || (fieldType === 'long_text' && (q.label?.toLowerCase().includes("code") || q.label?.toLowerCase().includes("algorithm") || q.label?.toLowerCase().includes("program") || q.label?.toLowerCase().includes("c program")))) ? (
+          {(fieldType === 'code' || fieldType === 'coding' || (fieldType === 'long_text' && ['coding', 'debugging', 'sql'].includes(q.validations?.assessmentType))) ? (
             <div className="min-h-[110px] w-full bg-slate-900 border border-slate-700/80 rounded-xl p-3.5 font-mono text-xs text-emerald-400 leading-relaxed shadow-xs flex flex-col justify-between">
-              <span className="text-slate-400 select-none text-[11px]">// Write your C program or algorithm solution here</span>
-              <span className="text-slate-500 select-none text-[10px] self-end mt-4">Code / Algorithm Editor</span>
+              <span className="text-slate-400 select-none text-[11px]">// Write your {q.validations?.programmingLanguage || 'code'} solution here</span>
+              <span className="text-slate-500 select-none text-[10px] self-end mt-4">Code Answer</span>
             </div>
           ) : (fieldType === 'long_text' || fieldType === 'paragraph' || fieldType === 'feedback' || fieldType === 'textarea' || fieldType === 'comments' || fieldType === 'description' || fieldType === 'message') ? (
             <div className="min-h-[85px] w-full bg-card border border-border/80 rounded-xl p-3.5 text-xs text-muted-foreground/80 leading-relaxed shadow-xs flex items-start">
@@ -385,7 +490,7 @@ export default function AIPage() {
             'rating', 'star_rating', 'star-rating', 'stars', 'satisfaction',
             'emoji-satisfaction-scale', 'mood', 'satisfaction_emoji', 'emoji',
             'file_upload', 'photo', 'resume', 'document', 'file', 'upload',
-            'signature', 'agreement', 'consent'
+            'signature', 'agreement', 'consent', 'matching', 'ordering'
           ].includes(fieldType) && (
             <div className="relative flex items-center w-full">
               <div className="absolute left-3 text-muted-foreground/70 pointer-events-none">
@@ -397,6 +502,21 @@ export default function AIPage() {
             </div>
           )}
         </div>
+
+        {/* Answer key (only for assessments, only when the owner asks to see it) */}
+        {showAnswerKey && activeForm?.isAssessment && q.validations?.assessmentType && (
+          <div className="mt-2 p-2.5 rounded-xl bg-emerald-500/5 border border-emerald-500/20 text-[11px] space-y-1">
+            {q.validations.correctAnswer !== undefined ? (
+              <p className="text-emerald-700 dark:text-emerald-400 font-semibold break-words">✓ {formatAnswerKey(q.validations.correctAnswer, q.validations.assessmentType)}</p>
+            ) : q.validations.modelAnswer ? (
+              <pre className="text-emerald-700 dark:text-emerald-400 font-mono whitespace-pre-wrap">{q.validations.modelAnswer}</pre>
+            ) : (
+              <p className="text-red-600 font-semibold">No verified answer — review before publishing.</p>
+            )}
+            {q.validations.explanation && <p className="text-muted-foreground">{q.validations.explanation}</p>}
+            {q.validations.rubric && <p className="text-muted-foreground whitespace-pre-wrap"><b>Rubric:</b> {q.validations.rubric}</p>}
+          </div>
+        )}
       </div>
     );
   };
@@ -409,13 +529,16 @@ export default function AIPage() {
     }
 
     setError(null);
+    setAssistantNote(null);
     setIsGenerating(true);
     setShowSampleDemo(false);
 
     try {
       let result;
       const basePrompt = prompt.trim();
-      const configSuffix = `(Form type: ${formType}. Option layout: ${optionLayout})`;
+      // The open (saved) form is sent as conversation context; the server decides whether the
+      // message edits it or asks for a brand-new form.
+      const contextFormId = generatedForm?.id && !String(generatedForm.id).startsWith('gen-') && !String(generatedForm.id).startsWith('demo-') ? generatedForm.id : undefined;
 
       if (mode === 'pdf' || mode === 'image') {
         if (!file) {
@@ -425,79 +548,31 @@ export default function AIPage() {
         }
         const formData = new FormData();
         formData.append('file', file);
-        const promptToSend = basePrompt ? `${basePrompt} ${configSuffix}` : `Extract fields and generate a structured form ${configSuffix}`;
-        formData.append('prompt', promptToSend);
+        formData.append('prompt', basePrompt);
+        formData.append('formType', formType);
+        formData.append('optionLayout', optionLayout);
         result = await api.postMultipart('/ai/generate', formData);
       } else {
-        const fullPrompt = `${basePrompt} ${configSuffix}`;
-        const payload: any = { prompt: fullPrompt };
-        result = await api.post('/ai/generate', payload);
+        result = await api.post('/ai/generate', { prompt: basePrompt, formType, optionLayout, contextFormId });
       }
 
-      const formObj = result?.form || result;
-      const summary = result?.understandingSummary || formObj?.understandingSummary;
-      if (formObj && (formObj.id || formObj.formId || formObj.title)) {
-        const targetId = formObj.id || formObj.formId || `gen-${Date.now()}`;
-        if (targetId && !targetId.startsWith('gen-')) {
-          await api.patch(`/forms/${targetId}`, { settings: { display_mode: displayMode } }).catch(() => {});
-        }
-        const sanitizeTitle = (rawTitle: string, userPromptText: string) => {
-          let cleanTitle = (rawTitle && typeof rawTitle === 'string') ? rawTitle.trim() : "";
-          
-          if (cleanTitle) {
-            cleanTitle = cleanTitle.replace(/\b(analysis|analyze|analysing|create|make|generate|build|give\s+me|with\s+each\s+question|carrying|worth|marks?|points?|this\s+pdf|uploaded\s+pdf|pdf|document)\b/gi, '').trim();
-            cleanTitle = cleanTitle.replace(/\s+/g, ' ').trim();
-            if (cleanTitle.length > 2 && cleanTitle.length < 90) {
-              const lower = cleanTitle.toLowerCase();
-              const isBad = ["system prompt", "json format", "options with field", "create a form"].some(bad => lower.includes(bad));
-              if (!isBad) {
-                return cleanTitle.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-              }
-            }
-          }
-
-          const lowerPrompt = (userPromptText || "").toLowerCase();
-          if (lowerPrompt.includes("data structure") || lowerPrompt.includes("data structures") || lowerPrompt.includes("dsa")) {
-            return "Data Structures Quiz";
-          }
-          if (lowerPrompt.length > 3) {
-            const clean = userPromptText
-              .replace(/\b(analysis|analyze|analysing|give\s+me|create|make|generate|build|a|an|the|form|quiz|test|exam|survey|for|about|with|each|question|questions|marks?|points?|2|10|please|me|this|pdf|document|file)\b/gi, "")
-              .replace(/\s+/g, " ")
-              .trim();
-            if (clean.length > 2) {
-              const capitalized = clean.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-              return capitalized + (lowerPrompt.includes("quiz") || lowerPrompt.includes("exam") ? " Quiz" : " Form");
-            }
-          }
-          return "AI Generated Form";
-        };
-
-        const createdForm = {
-          id: targetId,
-          uniqueShareId: formObj.uniqueShareId,
-          publicUrl: formObj.publicUrl,
-          title: sanitizeTitle(formObj.title, prompt),
-          description: formObj.description || "Created with PromptForm AI",
-          category: summary?.formType ? summary.formType.toUpperCase() : (formObj.category || "AI FORM"),
-          questions: (formObj.questions || []).map((q: any, i: number) => {
-            let cleanLabel = q.label || `Question ${i + 1}`;
-            cleanLabel = cleanLabel.replace(/^Section\s*\d*\s*-\s*Q\d+\s*(?:\([^)]*\))?\s*:\s*/i, '').trim();
-            cleanLabel = cleanLabel.replace(/^(?:Q\d+[\s:-]+|\d+[\.\)]\s*)+/i, '').trim();
-            return {
-              id: q.id || `q_${i}`,
-              type: q.type || "short_text",
-              label: cleanLabel || q.label || `Question ${i + 1}`,
-              required: q.required !== undefined ? q.required : true,
-              options: Array.isArray(q.options) ? q.options : [],
-              placeholder: q.placeholder || `Enter response for ${cleanLabel || q.label}...`
-            };
-          }),
-          theme: formObj.theme || { primary_color: "#8B6B55", background_color: "#FAF6EF" },
-          isPublished: true
-        };
-        setGeneratedForm(createdForm);
+      if (result?.status === 'clarify' || result?.status === 'converse') {
+        setAssistantNote({ kind: result.status, text: result.message || '', suggestions: Array.isArray(result.suggestions) ? result.suggestions : [] });
+        return;
       }
+
+      const formObj = result?.form;
+      if (!formObj || !Array.isArray(formObj.questions)) {
+        setError("The server did not return a form. Please try again.");
+        return;
+      }
+      if (formObj.id && !String(formObj.id).startsWith('gen-') && result.operation !== 'modify') {
+        await api.patch(`/forms/${formObj.id}`, { settings: { display_mode: displayMode } }).catch(() => {});
+      }
+      setGeneratedForm(mapServerForm(formObj));
+      setRequirements(result.requirements || null);
+      setShowReportDetails(Boolean(result.requirements && !result.requirements.complete));
+      setPrompt("");
     } catch (err: any) {
       setError(err.message || "Failed to generate form. Please try again.");
     } finally {
@@ -505,155 +580,53 @@ export default function AIPage() {
     }
   };
 
-  const handleOpenBuilder = async () => {
-    const targetFormToOpen = generatedForm || (showSampleDemo ? defaultPreviewForm : null);
-    if (targetFormToOpen && targetFormToOpen.id) {
-      if (targetFormToOpen.id.startsWith('gen-') || targetFormToOpen.id.startsWith('demo-')) {
-        setIsGenerating(true);
-        try {
-          const savedForm = await api.post('/forms', {
-            title: targetFormToOpen.title || "AI Generated Form",
-            description: targetFormToOpen.description || "Created with PromptForm AI",
-            settings: targetFormToOpen.settings || { display_mode: displayMode },
-            theme: targetFormToOpen.theme || { primary_color: "#8B6B55", background_color: "#FAF6EF" }
-          });
-          if (targetFormToOpen.questions?.length > 0) {
-            await api.put(`/forms/${savedForm.id}/questions`, targetFormToOpen.questions);
-          }
-          setGeneratedForm(savedForm);
-          router.push(`/builder/${savedForm.id}`);
-        } catch (err: any) {
-          setError(err.message || "Failed to save generated form.");
-        } finally {
-          setIsGenerating(false);
-        }
-        return;
-      }
-      await api.patch(`/forms/${targetFormToOpen.id}`, { settings: { display_mode: displayMode } }).catch(() => {});
-      router.push(`/builder/${targetFormToOpen.id}`);
-      return;
+  /** Persist an unsaved preview (guest generation or the sample demo) and return the saved form. */
+  const ensureSavedForm = async (target: any): Promise<any> => {
+    if (!target?.id) return null;
+    if (!String(target.id).startsWith('gen-') && !String(target.id).startsWith('demo-')) {
+      await api.patch(`/forms/${target.id}`, { settings: { display_mode: displayMode } }).catch(() => {});
+      return target;
     }
+    const savedForm = await api.post('/forms', {
+      title: target.title || "AI Generated Form",
+      description: target.description || "Created with PromptForm AI",
+      settings: { ...(target.settings || {}), display_mode: displayMode },
+      theme: target.theme || { primary_color: "#8B6B55", background_color: "#FAF6EF" }
+    });
+    let savedQuestions: any[] = [];
+    if (target.questions?.length > 0) {
+      savedQuestions = await api.put(`/forms/${savedForm.id}/questions`, target.questions.map((q: any) => ({
+        type: q.type, label: q.label, required: Boolean(q.required), options: q.options || [], validations: q.validations || {}, logic: q.logic || {}
+      })));
+    }
+    const mapped = mapServerForm({ ...savedForm, questions: savedQuestions });
+    setGeneratedForm(mapped);
+    return mapped;
+  };
 
-    setError(null);
+  const handleOpenBuilder = async () => {
+    const target = generatedForm || (showSampleDemo ? defaultPreviewForm : null);
+    if (!target) return;
     setIsGenerating(true);
-
     try {
-      let result;
-      const basePrompt = prompt.trim() || "Create a comprehensive multi-purpose form";
-      const configSuffix = `(Form type: ${formType}. Option layout: ${optionLayout})`;
-
-      if (mode === 'pdf' || mode === 'image') {
-        if (!file) {
-          setError("Please select a file to upload or write a prompt.");
-          setIsGenerating(false);
-          return;
-        }
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('prompt', `${basePrompt} ${configSuffix}`);
-        result = await api.postMultipart('/ai/generate', formData);
-      } else {
-        const fullPrompt = `${basePrompt} ${configSuffix}`;
-        result = await api.post('/ai/generate', { prompt: fullPrompt });
-      }
-
-      const formObj = result?.form || result;
-      if (formObj && (formObj.id || formObj.formId)) {
-        const targetId = formObj.id || formObj.formId;
-        await api.patch(`/forms/${targetId}`, { settings: { display_mode: displayMode } }).catch(() => {});
-        const createdForm = {
-          id: targetId,
-          uniqueShareId: formObj.uniqueShareId,
-          publicUrl: formObj.publicUrl,
-          title: formObj.title || prompt || "AI Generated Form",
-          description: formObj.description || "Created with PromptForm AI",
-          questions: formObj.questions || defaultPreviewForm.questions,
-          isPublished: true
-        };
-        setGeneratedForm(createdForm);
-        router.push(`/builder/${targetId}`);
-      } else {
-        setError("Could not create form. Please try again.");
-      }
+      const saved = await ensureSavedForm(target);
+      if (saved?.id) router.push(`/builder/${saved.id}`);
     } catch (err: any) {
-      setError(err.message || "Failed to create form in builder.");
+      setError(err.message || "Failed to save generated form.");
     } finally {
       setIsGenerating(false);
     }
   };
 
   const handleSharePublic = async () => {
-    const targetFormToShare = generatedForm || (showSampleDemo ? defaultPreviewForm : null);
-    if (targetFormToShare && targetFormToShare.id) {
-      if (targetFormToShare.id.startsWith('gen-') || targetFormToShare.id.startsWith('demo-')) {
-        setIsGenerating(true);
-        try {
-          const savedForm = await api.post('/forms', {
-            title: targetFormToShare.title || "AI Generated Form",
-            description: targetFormToShare.description || "Created with PromptForm AI",
-            settings: targetFormToShare.settings || { display_mode: displayMode },
-            theme: targetFormToShare.theme || { primary_color: "#8B6B55", background_color: "#FAF6EF" }
-          });
-          if (targetFormToShare.questions?.length > 0) {
-            await api.put(`/forms/${savedForm.id}/questions`, targetFormToShare.questions);
-          }
-          setGeneratedForm(savedForm);
-          setShareModalOpen(true);
-        } catch (err: any) {
-          setError(err.message || "Failed to save form for sharing.");
-        } finally {
-          setIsGenerating(false);
-        }
-        return;
-      }
-      await api.patch(`/forms/${targetFormToShare.id}`, { settings: { display_mode: displayMode } }).catch(() => {});
-      setShareModalOpen(true);
-      return;
-    }
-
-    setError(null);
+    const target = generatedForm || (showSampleDemo ? defaultPreviewForm : null);
+    if (!target) return;
     setIsGenerating(true);
-
     try {
-      let result;
-      const basePrompt = prompt.trim() || "Create a comprehensive multi-purpose form";
-      const configSuffix = `(Form type: ${formType}. Option layout: ${optionLayout})`;
-
-      if (mode === 'pdf' || mode === 'image') {
-        if (!file) {
-          setError("Please select a file to upload or write a prompt.");
-          setIsGenerating(false);
-          return;
-        }
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('prompt', `${basePrompt} ${configSuffix}`);
-        result = await api.postMultipart('/ai/generate', formData);
-      } else {
-        const fullPrompt = `${basePrompt} ${configSuffix}`;
-        result = await api.post('/ai/generate', { prompt: fullPrompt });
-      }
-
-      const formObj = result?.form || result;
-      if (formObj && (formObj.id || formObj.formId)) {
-        const targetId = formObj.id || formObj.formId;
-        await api.patch(`/forms/${targetId}`, { settings: { display_mode: displayMode } }).catch(() => {});
-        const createdForm = {
-          id: targetId,
-          uniqueShareId: formObj.uniqueShareId,
-          publicUrl: formObj.publicUrl,
-          title: formObj.title || prompt || "AI Generated Form",
-          description: formObj.description || "Created with PromptForm AI",
-          questions: formObj.questions || defaultPreviewForm.questions,
-          isPublished: true
-        };
-        setGeneratedForm(createdForm);
-        setShareModalOpen(true);
-      } else {
-        setError("Could not create form for sharing. Please try again.");
-      }
+      const saved = await ensureSavedForm(target);
+      if (saved?.id) setShareModalOpen(true);
     } catch (err: any) {
-      setError(err.message || "Failed to generate form for sharing.");
+      setError(err.message || "Failed to save form for sharing.");
     } finally {
       setIsGenerating(false);
     }
@@ -732,16 +705,35 @@ export default function AIPage() {
               <form onSubmit={handleGenerate} className="space-y-5 flex-1 flex flex-col justify-between">
                   
                   <div className="space-y-5">
+                    {generatedForm && (
+                      <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-primary/5 border border-primary/20">
+                        <p className="text-[11px] text-foreground min-w-0">
+                          <span className="font-bold">Editing:</span>{' '}
+                          <span className="truncate">{generatedForm.title}</span>
+                          <span className="block text-muted-foreground">Follow-up messages change this form. Say “create a new form” or click New form to start over.</span>
+                        </p>
+                        <button
+                          type="button"
+                          onClick={startNewForm}
+                          className="shrink-0 text-[11px] font-bold px-3 py-1.5 rounded-lg border border-border bg-card hover:border-primary/50 cursor-pointer"
+                        >
+                          + New form
+                        </button>
+                      </div>
+                    )}
+
                     {mode === 'prompt' && (
                       <div className="space-y-3">
                         <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                          Describe your Form or Quiz Topic
+                          {generatedForm ? 'Describe a change, or ask for a new form' : 'Describe your Form or Quiz Topic'}
                         </label>
                         <Textarea
                           rows={4}
                           value={prompt}
                           onChange={(e) => setPrompt(e.target.value)}
-                          placeholder="e.g. Create a patient intake form for a dentistry clinic with medical history, insurance info, and consent checkboxes..."
+                          placeholder={generatedForm
+                            ? 'e.g. "Add five more questions with the same marks", "Make email mandatory", "Translate everything into Gujarati"...'
+                            : 'e.g. "Food order form for my restaurant", "ધોરણ ૬ માટે ૫૦ ગુણનો વિજ્ઞાનનો પ્રશ્નપત્ર", "Python test: 10 MCQs + 5 coding problems, 50 marks"...'}
                           className="w-full text-xs md:text-sm rounded-2xl p-4 bg-background border-border/80 focus:ring-2 focus:ring-primary/40 outline-none text-foreground placeholder:text-muted-foreground/60 transition-all"
                           required
                         />
@@ -865,6 +857,30 @@ export default function AIPage() {
                       </div>
                     </div>
 
+                    {assistantNote && (
+                      <div className="p-4 rounded-2xl bg-primary/5 border border-primary/25 text-xs space-y-2.5" role="status" aria-live="polite">
+                        <p className="font-bold text-foreground flex items-center gap-1.5">
+                          <Sparkles className="w-4 h-4 text-primary" />
+                          {assistantNote.kind === 'clarify' ? 'One quick question' : 'PromptForm AI'}
+                        </p>
+                        <p className="text-foreground leading-relaxed whitespace-pre-wrap">{assistantNote.text}</p>
+                        {assistantNote.suggestions.length > 0 && (
+                          <div className="flex flex-wrap gap-2">
+                            {assistantNote.suggestions.map((s) => (
+                              <button
+                                key={s}
+                                type="button"
+                                onClick={() => { setPrompt(s); setAssistantNote(null); }}
+                                className="text-[11px] font-medium px-3 py-1.5 rounded-xl bg-card border border-border hover:border-primary/50 hover:text-primary cursor-pointer"
+                              >
+                                {s}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     {error && (
                       <div className="p-4 rounded-2xl bg-destructive/10 border border-destructive/30 text-destructive text-xs font-semibold flex items-start space-x-3 shadow-xs animate-in fade-in slide-in-from-top-1">
                         <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5 text-destructive" />
@@ -896,12 +912,12 @@ export default function AIPage() {
                     {isGenerating ? (
                       <>
                         <Loader2 className="w-4 h-4 animate-spin" />
-                        <span>Generating Form & Questions...</span>
+                        <span>{generatedForm ? 'Applying your request...' : 'Generating Form & Questions...'}</span>
                       </>
                     ) : (
                       <>
                         <Sparkles className="w-4 h-4" />
-                        <span>Generate Form with AI</span>
+                        <span>{generatedForm ? 'Send to AI' : 'Generate Form with AI'}</span>
                         <ArrowRight className="w-4 h-4 ml-1" />
                       </>
                     )}
@@ -1036,7 +1052,92 @@ export default function AIPage() {
                           {activeForm.description}
                         </p>
                       )}
+                      {activeForm.isAssessment && (
+                        <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px] text-muted-foreground">
+                          <span className="font-semibold text-foreground">
+                            {activeForm.questions.filter((q: any) => q.validations?.assessmentType).length} questions ·{' '}
+                            {activeForm.questions.reduce((s: number, q: any) => s + (Number(q.validations?.points) || 0), 0)} marks
+                          </span>
+                          {Number(activeForm.settings?.timer_limit) > 0 && <span>· {activeForm.settings.timer_limit} min</span>}
+                          <button
+                            type="button"
+                            onClick={() => setShowAnswerKey(v => !v)}
+                            className="ml-auto text-[11px] font-bold text-primary hover:underline cursor-pointer"
+                          >
+                            {showAnswerKey ? 'Hide answer key' : 'Show answer key'}
+                          </button>
+                        </div>
+                      )}
                     </div>
+
+                    {/* Requirement verification report from the server */}
+                    {generatedForm && requirements && (
+                      <div className={`rounded-2xl border p-3.5 text-[11px] space-y-2 ${requirements.complete ? 'bg-emerald-500/5 border-emerald-500/25' : 'bg-amber-500/5 border-amber-500/30'}`}>
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="font-bold text-foreground flex items-center gap-1.5">
+                            {requirements.complete
+                              ? <><CheckCircle className="w-4 h-4 text-emerald-600" /> All {requirements.checks?.length || 0} requirement checks passed</>
+                              : <><AlertCircle className="w-4 h-4 text-amber-600" /> {requirements.unmet?.length || 0} requirement(s) not fully met</>}
+                          </p>
+                          <button type="button" onClick={() => setShowReportDetails(v => !v)} className="text-primary font-bold hover:underline cursor-pointer shrink-0">
+                            {showReportDetails ? 'Hide details' : 'Details'}
+                          </button>
+                        </div>
+                        {!requirements.complete && requirements.unmet?.length > 0 && (
+                          <ul className="list-disc pl-4 space-y-0.5 text-amber-800 dark:text-amber-300">
+                            {requirements.unmet.slice(0, 6).map((u: string) => <li key={u}>{u}</li>)}
+                          </ul>
+                        )}
+                        {requirements.unsupported?.length > 0 && (
+                          <ul className="list-disc pl-4 space-y-0.5 text-red-700 dark:text-red-400">
+                            {requirements.unsupported.map((u: string) => <li key={u}>{u}</li>)}
+                          </ul>
+                        )}
+                        {showReportDetails && (
+                          <div className="space-y-2 pt-1 border-t border-border/60">
+                            {requirements.understood?.length > 0 && (
+                              <div>
+                                <p className="font-semibold text-foreground mb-0.5">Understood</p>
+                                <ul className="list-disc pl-4 space-y-0.5 text-muted-foreground">{requirements.understood.map((u: string) => <li key={u}>{u}</li>)}</ul>
+                              </div>
+                            )}
+                            {requirements.checks?.length > 0 && (
+                              <div>
+                                <p className="font-semibold text-foreground mb-0.5">Checks</p>
+                                <ul className="space-y-0.5">
+                                  {requirements.checks.map((c: any) => (
+                                    <li key={c.requirement} className="flex gap-1.5">
+                                      <span className={c.status === 'unmet' ? 'text-red-600' : c.status === 'repaired' ? 'text-amber-600' : 'text-emerald-600'}>
+                                        {c.status === 'unmet' ? '✗' : c.status === 'repaired' ? '↻' : '✓'}
+                                      </span>
+                                      <span className="text-muted-foreground">{c.requirement}{c.detail ? ` — ${c.detail}` : ''}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                            {requirements.repairsApplied?.length > 0 && (
+                              <div>
+                                <p className="font-semibold text-foreground mb-0.5">Automatic corrections</p>
+                                <ul className="list-disc pl-4 space-y-0.5 text-muted-foreground">{requirements.repairsApplied.map((u: string) => <li key={u}>{u}</li>)}</ul>
+                              </div>
+                            )}
+                            {requirements.assumptions?.length > 0 && (
+                              <div>
+                                <p className="font-semibold text-foreground mb-0.5">Assumptions (editable)</p>
+                                <ul className="list-disc pl-4 space-y-0.5 text-muted-foreground">{requirements.assumptions.map((u: string) => <li key={u}>{u}</li>)}</ul>
+                              </div>
+                            )}
+                            {requirements.warnings?.length > 0 && (
+                              <div>
+                                <p className="font-semibold text-foreground mb-0.5">Review notes</p>
+                                <ul className="list-disc pl-4 space-y-0.5 text-muted-foreground">{requirements.warnings.map((u: string) => <li key={u}>{u}</li>)}</ul>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     {/* Question Fields Preview dynamically based on displayMode */}
                     {displayMode === 'full' && (

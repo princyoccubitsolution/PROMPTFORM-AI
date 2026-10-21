@@ -12,6 +12,28 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Input } from '@/components/ui/Input';
 import { api } from '@/lib/api';
 
+/* Answers can be strings, arrays (multi-select / ordering) or objects (match the following). */
+const displayAnswer = (val: any): string => {
+  if (val === undefined || val === null) return '';
+  if (Array.isArray(val)) return val.join(', ');
+  if (typeof val === 'object') return Object.entries(val).map(([k, v]) => `${k} → ${v}`).join('; ');
+  return String(val);
+};
+
+const answersMatch = (ans: any, correct: any, validations: any): boolean => {
+  const norm = (s: any) => String(s ?? '').trim().toLowerCase();
+  if (Array.isArray(correct)) {
+    const got = (Array.isArray(ans) ? ans : String(ans).split(',')).map(norm);
+    if (validations?.assessmentType === 'ordering') return got.length === correct.length && correct.every((c: any, i: number) => norm(c) === got[i]);
+    return got.length === correct.length && correct.every((c: any) => got.includes(norm(c)));
+  }
+  if (correct && typeof correct === 'object') {
+    return ans && typeof ans === 'object' && Object.keys(correct).every(k => norm(ans[k]) === norm(correct[k]));
+  }
+  const accepted: any[] = Array.isArray(validations?.acceptedAnswers) && validations.acceptedAnswers.length ? validations.acceptedAnswers : [correct];
+  return accepted.some(a => norm(a) === norm(ans));
+};
+
 export default function ResponsesPage() {
   const params = useParams();
   const router = useRouter();
@@ -26,12 +48,11 @@ export default function ResponsesPage() {
   const [statusFeedback, setStatusFeedback] = useState<string | null>(null);
 
   // Auto-detect Quiz
-  const isQuiz = Boolean(
+  const isQuiz = form?.settings?.isQuiz === false ? false : Boolean(
     form && (
-      form.category === 'quiz' || 
-      (form.title || '').toLowerCase().includes('quiz') || 
-      (form.title || '').toLowerCase().includes('test') || 
-      (form.title || '').toLowerCase().includes('exam') || 
+      form.settings?.isQuiz === true ||
+      form.category === 'quiz' ||
+      /\b(quiz|test|exam)\b/i.test(form.title || '') ||
       form.questions?.some((q: any) => ((q.validations as any)?.correctAnswer !== undefined || (q.validations as any)?.correct_answer !== undefined))
     )
   );
@@ -345,6 +366,7 @@ export default function ResponsesPage() {
         const val = resp?.answers?.[q.id];
         if (val === undefined || val === null) return "";
         if (Array.isArray(val)) return `"${val.join(', ')}"`;
+        if (typeof val === 'object') return `"${displayAnswer(val).replace(/"/g, '""')}"`;
         const rawStr = String(val);
         let finalVal = rawStr;
         if (rawStr.startsWith('data:') || rawStr.includes(';base64,')) {
@@ -924,8 +946,8 @@ export default function ResponsesPage() {
                   const correctAnswer = (validations.correctAnswer !== undefined && validations.correctAnswer !== null && String(validations.correctAnswer).trim() !== "")
                     ? validations.correctAnswer
                     : (validations.correct_answer !== undefined && validations.correct_answer !== null && String(validations.correct_answer).trim() !== "" ? validations.correct_answer : undefined);
-                  const points = validations.points || 5;
-                  const isAnswerCorrect = hasAnswer && String(ansVal).trim().toLowerCase() === String(correctAnswer).trim().toLowerCase();
+                  const points = validations.points ?? 1;
+                  const isAnswerCorrect = hasAnswer && answersMatch(ansVal, correctAnswer, validations);
 
                   return (
                     <div key={q.id || idx} className="p-3 rounded-xl bg-muted/20 border border-border/60 space-y-1.5">
@@ -976,7 +998,7 @@ export default function ResponsesPage() {
                                 : 'bg-rose-500/10 border border-rose-500/20 text-rose-700 dark:text-rose-300')
                               : 'bg-background border border-border/70 text-foreground'
                           }`}>
-                            {String(ansVal)}
+                            <span className="whitespace-pre-wrap break-words">{displayAnswer(ansVal)}</span>
                           </div>
                         ) : (
                           <p className="text-xs text-muted-foreground italic">No response submitted</p>
@@ -985,7 +1007,7 @@ export default function ResponsesPage() {
                         {/* Display Correct Answer if incorrect */}
                         {isQuiz && correctAnswer !== undefined && !isAnswerCorrect && (
                           <p className="text-xs font-semibold text-muted-foreground mt-1.5 flex items-center">
-                            <span className="text-emerald-600 dark:text-emerald-400 mr-1.5 font-bold">✓ Correct Answer:</span> {String(correctAnswer)}
+                            <span className="text-emerald-600 dark:text-emerald-400 mr-1.5 font-bold">✓ Correct Answer:</span> {displayAnswer(correctAnswer)}
                           </p>
                         )}
                       </div>
