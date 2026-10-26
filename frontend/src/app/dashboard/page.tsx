@@ -133,11 +133,6 @@ function DashboardContent() {
     { id: "webhooks", name: "Custom Webhooks", desc: "Send HTTP POST payloads directly to custom API servers.", icon: Activity, connected: false }
   ]);
 
-  // Settings Local States (API Keys)
-  const [apiKeys, setApiKeys] = useState<any[]>([
-    { id: "key_1", name: "Production Webhook Key", token: "vyn_live_4a8bc39d821eef00ad8bc7", createdAt: "2026-05-10" }
-  ]);
-  const [newKeyName, setNewKeyName] = useState("");
   const [activeCategoryFilter, setActiveCategoryFilter] = useState("all");
 
   useEffect(() => {
@@ -371,25 +366,6 @@ function DashboardContent() {
       }
       return item;
     }));
-  };
-
-  // Generate mock API keys
-  const handleCreateApiKey = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newKeyName.trim()) return;
-    const newKey = {
-      id: `key_${Date.now()}`,
-      name: newKeyName,
-      token: `vyn_live_${Math.random().toString(36).substring(2, 10)}${Math.random().toString(36).substring(2, 10)}`,
-      createdAt: new Date().toISOString().split('T')[0]
-    };
-    setApiKeys(prev => [...prev, newKey]);
-    setNewKeyName("");
-  };
-
-  // Delete API key
-  const handleDeleteApiKey = (id: string) => {
-    setApiKeys(prev => prev.filter(key => key.id !== id));
   };
 
   // SVG Chart Generators
@@ -1492,51 +1468,15 @@ function DashboardContent() {
                     </div>
                   </div>
 
-                  {/* SECTION 2: DEVELOPER API KEYS & BILLING */}
+                  {/* SECTION 2: SUBSCRIPTION BILLING & PLAN TIER */}
                   <div className="pt-6 space-y-4">
                     <div className="flex items-center space-x-2 border-b border-border/40 pb-2">
-                      <Key className="w-5 h-5 text-primary" />
-                      <h3 className="text-lg font-bold text-foreground">Developer API & Subscription Billing</h3>
+                      <CreditCard className="w-5 h-5 text-primary" />
+                      <h3 className="text-lg font-bold text-foreground">Subscription Billing & Plan Tier</h3>
                     </div>
 
-                    <div className="grid lg:grid-cols-3 gap-8">
-                      {/* Column 1: API keys */}
-                      <Card className="lg:col-span-2 space-y-4">
-                        <CardHeader className="pb-2">
-                          <CardTitle className="text-base">Developer API Webhook Keys</CardTitle>
-                          <CardDescription>Generate tokens to push form responses directly to custom API endpoints.</CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                          <form onSubmit={handleCreateApiKey} className="flex gap-2">
-                            <Input
-                              placeholder="e.g. Production hook Token"
-                              value={newKeyName}
-                              onChange={(e) => setNewKeyName(e.target.value)}
-                              className="h-9 text-xs rounded-lg focus:ring-1"
-                              required
-                            />
-                            <Button type="submit" size="sm" className="h-9 text-xs whitespace-nowrap">
-                              Generate key
-                            </Button>
-                          </form>
-
-                          <div className="space-y-2.5 pt-2">
-                            {apiKeys.map(k => (
-                              <div key={k.id} className="p-3 bg-background border border-border rounded-lg flex items-center justify-between text-xs font-mono">
-                                <div className="space-y-1 font-sans">
-                                  <p className="font-bold font-mono text-foreground dark:text-foreground">{k.name}</p>
-                                  <p className="text-xs text-muted-foreground font-mono">{k.token}</p>
-                                </div>
-                                <Button variant="ghost" size="sm" className="text-destructive hover:bg-destructive/10 p-2 h-auto" onClick={() => handleDeleteApiKey(k.id)}>
-                                  <Trash2 className="w-4 h-4" />
-                                </Button>
-                              </div>
-                            ))}
-                          </div>
-                        </CardContent>
-                      </Card>
-
-                      {/* Column 2: Billing / Plan info */}
+                    <div className="max-w-xl">
+                      {/* Billing / Plan info */}
                       <Card className="relative overflow-hidden border-border">
                         <div className="absolute top-0 right-0 px-3 py-1 bg-primary text-white text-xs font-bold uppercase rounded-bl-xl tracking-wider">active</div>
                         <CardHeader>
