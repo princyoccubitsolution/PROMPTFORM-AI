@@ -1281,6 +1281,17 @@ router.post('/:id/collaborators', authMiddleware, validateUuidMiddleware, async 
       }
     });
 
+    // Send notification email to the newly added collaborator
+    const formUrl = `${frontendBaseUrl(req)}/builder/${id}`;
+    const emailSent = await emailService.sendFormCollaboratorNotification({
+      formTitle: form.title,
+      recipientEmail,
+      inviterName: req.user.name || req.user.email,
+      role,
+      formUrl
+    });
+    const emailError = emailSent ? null : emailService.getLastError();
+
     await logActivity({
       userId: req.user.id,
       action: 'COLLABORATOR_ADDED',
@@ -1296,7 +1307,7 @@ router.post('/:id/collaborators', authMiddleware, validateUuidMiddleware, async 
       data: { status: 'cancelled' }
     });
 
-    return res.status(201).json({ ...collaborator, status: 'added' });
+    return res.status(201).json({ ...collaborator, status: 'added', emailSent, emailError });
   } catch (error) {
     if (error instanceof z.ZodError) {
       const invalidEmail = error.errors.some((e) => e.path[0] === 'email');
