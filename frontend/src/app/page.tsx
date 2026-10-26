@@ -71,14 +71,11 @@ export default function LandingPage() {
       let plan = 'Free';
       if (
         updatedAnswers.forms === 'unlimited' || 
-        updatedAnswers.team === 'enterprise' || 
-        updatedAnswers.features === 'sso'
-      ) {
-        plan = 'Enterprise';
-      } else if (
-        updatedAnswers.forms === 'pro' || 
+        updatedAnswers.forms === 'pro' ||
         updatedAnswers.team === 'pro' || 
-        updatedAnswers.features === 'cheat'
+        updatedAnswers.team === 'enterprise' || 
+        updatedAnswers.features === 'cheat' ||
+        updatedAnswers.features === 'sso'
       ) {
         plan = 'Pro';
       }
@@ -885,7 +882,7 @@ export default function LandingPage() {
             Looking for detailed pricing & plan comparison?
           </h2>
           <p className="text-muted-foreground text-sm md:text-base max-w-xl mx-auto font-normal">
-            Explore our dedicated Pricing page to compare Free, Pro, and Enterprise features, customize currencies ($ USD, ₹ INR, € EUR, £ GBP), or use our AI Plan Finder Assistant.
+            Explore our dedicated Pricing page to compare Free and Pro features, customize currencies ($ USD, ₹ INR, € EUR, £ GBP), or use our AI Plan Finder Assistant.
           </p>
 
           <div className="pt-4 flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -938,7 +935,7 @@ export default function LandingPage() {
               },
               {
                 q: 'What payment methods do you accept?',
-                a: 'We accept all major credit cards (Visa, Mastercard, American Express), UPI, PayPal, and bank transfers for Enterprise plans. All payments are secured with 256-bit SSL encryption.'
+                a: 'We accept all major credit cards (Visa, Mastercard, American Express), UPI, and PayPal. All payments are secured with 256-bit SSL encryption.'
               },
               {
                 q: 'Can I cancel my subscription anytime?',
@@ -950,11 +947,11 @@ export default function LandingPage() {
               },
               {
                 q: 'Do you offer a free trial of Pro?',
-                a: 'Our Free plan is essentially a forever trial — you get full access to core features with up to 5 forms. No credit card required, no time limit. Upgrade only when you need more.'
+                a: 'Our Free plan is essentially a forever trial — you get full access to all features with up to 5 forms. No credit card required, no time limit. Upgrade only when you need unlimited forms.'
               },
               {
                 q: 'Is my data secure?',
-                a: 'Yes. We use industry-standard encryption, secure cloud infrastructure, and regular security audits. Enterprise plans include additional security features like SSO, audit logs, and role-based access control.'
+                a: 'Yes. We use industry-standard encryption, secure cloud infrastructure, role-based access control, and comprehensive audit logs.'
               },
             ].map((faq, idx) => (
               <div
@@ -1085,13 +1082,7 @@ export default function LandingPage() {
                     onClick={() => handlePlanFinderAnswer('team', 'pro')}
                     className="w-full text-left p-3.5 rounded-xl border border-border hover:bg-accent text-xs font-semibold transition-all cursor-pointer"
                   >
-                    Small Team (2-10 members)
-                  </button>
-                  <button
-                    onClick={() => handlePlanFinderAnswer('team', 'enterprise')}
-                    className="w-full text-left p-3.5 rounded-xl border border-border hover:bg-accent text-xs font-semibold transition-all cursor-pointer"
-                  >
-                    Large Enterprise (Custom domains & SSO)
+                    Collaborative Team (Multiple members & shared workspaces)
                   </button>
                 </div>
               </div>
@@ -1104,26 +1095,20 @@ export default function LandingPage() {
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-foreground">Advanced Options</h3>
-                  <p className="text-xs text-muted-foreground mt-1">Which features do you require?</p>
+                  <p className="text-xs text-muted-foreground mt-1">Which capacity do you require?</p>
                 </div>
                 <div className="flex flex-col gap-2 pt-2">
                   <button
                     onClick={() => handlePlanFinderAnswer('features', 'free')}
                     className="w-full text-left p-3.5 rounded-xl border border-border hover:bg-accent text-xs font-semibold transition-all cursor-pointer"
                   >
-                    Basic quizzes and surveys
+                    1-5 Forms with Anti-Cheat, Quizzes & Logic
                   </button>
                   <button
-                    onClick={() => handlePlanFinderAnswer('features', 'cheat')}
+                    onClick={() => handlePlanFinderAnswer('features', 'pro')}
                     className="w-full text-left p-3.5 rounded-xl border border-border hover:bg-accent text-xs font-semibold transition-all cursor-pointer"
                   >
-                    Anti-Cheat Proctored Exams (Secure Mode)
-                  </button>
-                  <button
-                    onClick={() => handlePlanFinderAnswer('features', 'sso')}
-                    className="w-full text-left p-3.5 rounded-xl border border-border hover:bg-accent text-xs font-semibold transition-all cursor-pointer"
-                  >
-                    White-label branding & Custom Domain Login
+                    Unlimited Forms, +500 Monthly AI Credits & Priority Speed
                   </button>
                 </div>
               </div>
@@ -1143,9 +1128,8 @@ export default function LandingPage() {
                 </div>
 
                 <div className="bg-muted p-4 border border-border rounded-2xl text-left text-xs text-muted-foreground leading-relaxed font-medium">
-                  {recommendedPlan === 'Free' && "The Free Forever plan is perfect for individuals building up to 5 forms with standard templates and basic layouts."}
-                  {recommendedPlan === 'Pro' && "The Pro plan is highly recommended. It unlocks unlimited form generation, full secure exam proctoring features, custom templates, and automations."}
-                  {recommendedPlan === 'Enterprise' && "The Enterprise plan is tailored for large-scale operations. It provides custom white-labeled domains, SSO logins, custom integrations, and SLA guarantees."}
+                  {recommendedPlan === 'Free' && "The Free Forever plan is perfect for individuals and small teams building up to 5 forms with all core features included."}
+                  {recommendedPlan === 'Pro' && "The Pro plan is highly recommended. It unlocks unlimited form generation, bonus monthly AI credits, priority processing, and high-capacity team workspaces."}
                 </div>
 
                 <div className="flex flex-col gap-2 pt-2">

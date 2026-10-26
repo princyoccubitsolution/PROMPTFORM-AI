@@ -74,10 +74,10 @@ export default function BillingPage() {
     const txnCurrency = txn.currency || 'USD';
     
     const getInvoiceCost = (curr: string, billing: string) => {
-      if (curr === 'INR') return billing === 'yearly' ? { original: '₹9,588.00', discount: '₹4,794.00', symbol: '₹' } : { original: '₹999.00', discount: '₹499.50', symbol: '₹' };
-      if (curr === 'EUR') return billing === 'yearly' ? { original: '€168.00', discount: '€84.00', symbol: '€' } : { original: '€18.00', discount: '€9.00', symbol: '€' };
-      if (curr === 'GBP') return billing === 'yearly' ? { original: '£144.00', discount: '£72.00', symbol: '£' } : { original: '£16.00', discount: '£8.05', symbol: '£' };
-      return billing === 'yearly' ? { original: '$180.00', discount: '$90.00', symbol: '$' } : { original: '$19.00', discount: '$9.50', symbol: '$' };
+      if (curr === 'INR') return billing === 'yearly' ? { original: '₹999.00', discount: '₹499.50', symbol: '₹' } : { original: '₹99.00', discount: '₹49.50', symbol: '₹' };
+      if (curr === 'EUR') return billing === 'yearly' ? { original: '€89.00', discount: '€44.50', symbol: '€' } : { original: '€9.00', discount: '€4.50', symbol: '€' };
+      if (curr === 'GBP') return billing === 'yearly' ? { original: '£79.00', discount: '£39.50', symbol: '£' } : { original: '£8.00', discount: '£4.00', symbol: '£' };
+      return billing === 'yearly' ? { original: '$99.00', discount: '$49.50', symbol: '$' } : { original: '$9.99', discount: '$5.00', symbol: '$' };
     };
 
     const costDetails = getInvoiceCost(txnCurrency, txn.billingPeriod);

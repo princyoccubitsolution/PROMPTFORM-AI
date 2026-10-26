@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { db } from '../lib/db';
@@ -8,7 +9,7 @@ import { isUUID, generateUniqueShareId, hasFormAccess } from '../lib/utils';
 import { logActivity } from '../lib/activity';
 import { FormsService } from '../services/formsService';
 import { AnalyticsService } from '../services/analyticsService';
-import { emailService } from '../services/emailService';
+import { emailService, checkRecipientDomain } from '../services/emailService';
 import { logger } from '../lib/logger';
 import { gradeSubmission, gradeQuestion, isAssessmentForm, requiresStudentIdentity, sanitizeFormForRespondent } from '../lib/assessment/grading';
 import jwt from 'jsonwebtoken';
@@ -518,6 +519,226 @@ router.get('/collaborations/shared-with-me', authMiddleware, async (req: Authent
   }
 });
 
+// ==================== FORM INVITATIONS (must precede /:id) ====================
+
+const FORM_INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const FORM_INVITE_RESEND_COOLDOWN_MS = 60 * 1000;
+const FORM_INVITES_PER_HOUR = 50;
+
+type FormInvitationRecord = {
+  id: string;
+  email: string;
+  role: string;
+  status: string;
+  expiresAt: Date;
+  lastSentAt: Date;
+  createdAt: Date;
+};
+
+const hashInviteToken = (token: string) => crypto.createHash('sha256').update(token).digest('hex');
+
+const createInviteToken = () => {
+  const token = crypto.randomBytes(32).toString('hex');
+  return { token, tokenHash: hashInviteToken(token) };
+};
+
+const buildFormInviteUrl = (req: Request, token: string) => {
+  const reqOrigin = typeof req.headers.origin === 'string' && req.headers.origin.startsWith('http')
+    ? req.headers.origin.replace(/\/+$/, '')
+    : '';
+  const frontendUrl = (reqOrigin || process.env.FRONTEND_URL || 'https://promptform-ai-frontend.vercel.app').replace(/\/+$/, '');
+  return `${frontendUrl}/form-invite?token=${token}`;
+};
+
+// A pending invitation past its expiry is reported as expired even before its row is updated
+const effectiveInviteStatus = (invite: { status: string; expiresAt: Date }) =>
+  invite.status === 'pending' && invite.expiresAt <= new Date() ? 'expired' : invite.status;
+
+const serializeInvitation = (invite: FormInvitationRecord) => ({
+  id: invite.id,
+  email: invite.email,
+  role: invite.role,
+  status: effectiveInviteStatus(invite),
+  expiresAt: invite.expiresAt,
+  lastSentAt: invite.lastSentAt,
+  createdAt: invite.createdAt
+});
+
+// Caps invitation emails per sender so the form invite endpoint can't be used to spam addresses
+const inviteLimitReached = async (userId: string) => {
+  const sentLastHour = await db.formInvitation.count({
+    where: { invitedById: userId, lastSentAt: { gt: new Date(Date.now() - 60 * 60 * 1000) } }
+  });
+  return sentLastHour >= FORM_INVITES_PER_HOUR;
+};
+
+const findInvitationByToken = async (token: string) => {
+  if (!/^[a-f0-9]{64}$/i.test(token)) return null;
+  return db.formInvitation.findUnique({
+    where: { tokenHash: hashInviteToken(token) },
+    include: {
+      form: { select: { id: true, title: true, description: true, ownerId: true, teamId: true } },
+      invitedBy: { select: { name: true, email: true } }
+    }
+  });
+};
+
+/** Returns why an invitation can no longer be used (marking overdue ones expired), or null if it is usable. */
+const invitationUnusableReason = async (invite: { id: string; status: string; expiresAt: Date }) => {
+  if (invite.status === 'accepted') return 'This invitation has already been accepted.';
+  if (invite.status === 'cancelled') return 'This invitation was cancelled by the form owner.';
+  if (effectiveInviteStatus(invite) === 'expired') {
+    if (invite.status === 'pending') {
+      await db.formInvitation.updateMany({ where: { id: invite.id, status: 'pending' }, data: { status: 'expired' } });
+    }
+    return 'This invitation link has expired. Please ask the form owner to send a new invitation.';
+  }
+  return null;
+};
+
+/** Emails the invitation link and builds the API response shared by invite and resend. */
+const deliverFormInvitation = async (
+  req: AuthenticatedRequest,
+  formTitle: string,
+  invite: FormInvitationRecord,
+  token: string
+) => {
+  const inviteUrl = buildFormInviteUrl(req, token);
+  const emailSent = await emailService.sendFormInvitation({
+    formTitle,
+    recipientEmail: invite.email,
+    inviterName: req.user!.name || req.user!.email,
+    role: invite.role,
+    inviteUrl,
+    expiresAt: invite.expiresAt
+  });
+  const emailError = emailSent ? null : emailService.getLastError();
+
+  return {
+    status: 'invited',
+    emailSent,
+    emailError,
+    // Returned only when the email failed, so the owner can share the link another way
+    inviteUrl: emailSent ? null : inviteUrl,
+    invitation: serializeInvitation(invite),
+    message: emailSent
+      ? 'Invitation sent successfully.'
+      : `The invitation was created, but the email could not be delivered${emailError ? ` (${emailError})` : ''}. Share the invitation link with them directly.`
+  };
+};
+
+// GET: Invitation details for the /form-invite page (public; the token is the credential)
+router.get('/invitations/verify/:token', async (req: Request, res: Response) => {
+  try {
+    const invite = await findInvitationByToken(req.params.token);
+    if (!invite) return res.status(404).json({ error: 'Invitation not found or invalid token.' });
+
+    const unusable = await invitationUnusableReason(invite);
+    if (unusable) return res.status(400).json({ error: unusable });
+
+    const existingAccount = await db.user.findUnique({ where: { email: invite.email }, select: { id: true } });
+
+    return res.json({
+      email: invite.email,
+      role: invite.role,
+      formTitle: invite.form.title,
+      formDescription: invite.form.description,
+      inviterName: invite.invitedBy.name || invite.invitedBy.email,
+      hasAccount: Boolean(existingAccount),
+      expiresAt: invite.expiresAt
+    });
+  } catch (error) {
+    console.error('[Forms] Verify invitation error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST: Accept a form invitation as the signed-in user
+router.post('/invitations/accept/:token', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
+    const userId = req.user.id;
+
+    const invite = await findInvitationByToken(req.params.token);
+    if (!invite) return res.status(404).json({ error: 'Invitation not found or invalid token.' });
+
+    const emailMatches = (req.user.email || '').trim().toLowerCase() === invite.email;
+
+    // Opening the link again after accepting just leads back to the form
+    if (invite.status === 'accepted' && emailMatches && (await hasFormAccess(invite.formId, userId, ['editor', 'viewer']))) {
+      return res.json({
+        success: true,
+        formId: invite.formId,
+        formTitle: invite.form.title,
+        role: invite.role,
+        message: `You already have access to "${invite.form.title}".`
+      });
+    }
+
+    const unusable = await invitationUnusableReason(invite);
+    if (unusable) return res.status(400).json({ error: unusable });
+
+    // The invitation belongs to one email address; a different signed-in account must not consume it
+    if (!emailMatches) {
+      return res.status(403).json({
+        error: `This invitation was sent to ${invite.email}, but you are signed in as ${req.user.email}. Please sign in with ${invite.email} to accept it.`,
+        code: 'INVITE_EMAIL_MISMATCH',
+        invitedEmail: invite.email
+      });
+    }
+
+    // Claim the invitation and grant access atomically: the conditional update only succeeds
+    // for a still-pending, unexpired invitation, so duplicate accepts cannot both win.
+    const now = new Date();
+    const grantedRole = await db.$transaction(async (tx) => {
+      const { count } = await tx.formInvitation.updateMany({
+        where: { id: invite.id, status: 'pending', expiresAt: { gt: now } },
+        data: { status: 'accepted', acceptedAt: now }
+      });
+      if (count !== 1) return null;
+      if (invite.form.ownerId === userId) return 'owner';
+
+      const existing = await tx.formCollaborator.findUnique({
+        where: { formId_userId: { formId: invite.formId, userId } }
+      });
+      if (!existing) {
+        await tx.formCollaborator.create({ data: { formId: invite.formId, userId, role: invite.role } });
+        return invite.role;
+      }
+      // Never downgrade an existing collaborator through an invitation
+      if (existing.role === 'viewer' && invite.role === 'editor') {
+        await tx.formCollaborator.update({ where: { id: existing.id }, data: { role: 'editor' } });
+        return 'editor';
+      }
+      return existing.role;
+    });
+
+    if (!grantedRole) {
+      return res.status(409).json({ error: 'This invitation has already been accepted.' });
+    }
+
+    await logActivity({
+      userId,
+      action: 'COLLABORATOR_ADDED',
+      formId: invite.formId,
+      teamId: invite.form.teamId,
+      targetTitle: invite.form.title,
+      details: `${req.user.name || req.user.email} accepted the invitation and joined "${invite.form.title}" as ${grantedRole}`
+    });
+
+    return res.json({
+      success: true,
+      formId: invite.formId,
+      formTitle: invite.form.title,
+      role: grantedRole,
+      message: `You now have ${grantedRole} access to "${invite.form.title}".`
+    });
+  } catch (error) {
+    console.error('[Forms] Accept invitation error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // 2. GET FORM BY ID (Public details vs Authenticated editor details with Redis Caching)
 router.get('/:id', async (req: Request, res: Response) => {
   try {
@@ -921,12 +1142,21 @@ router.get('/:id/collaborators', authMiddleware, validateUuidMiddleware, async (
       }))
     ];
 
+    // Outstanding invitations are only shown to the owner, who manages them
+    const invitations = form.ownerId === req.user.id
+      ? await db.formInvitation.findMany({
+          where: { formId: id, status: { in: ['pending', 'expired'] } },
+          orderBy: { createdAt: 'asc' }
+        })
+      : [];
+
     return res.json({
       formId: form.id,
       title: form.title,
       ownerId: form.ownerId,
       isCurrentUserOwner: form.ownerId === req.user.id,
-      collaborators: collaboratorsList
+      collaborators: collaboratorsList,
+      invitations: invitations.map(serializeInvitation)
     });
   } catch (error) {
     console.error('[Forms] Get collaborators error:', error);
@@ -934,15 +1164,16 @@ router.get('/:id/collaborators', authMiddleware, validateUuidMiddleware, async (
   }
 });
 
-// POST: Add collaborator to form
+// POST: Add collaborator to form (existing users get access now; anyone else gets an emailed invitation)
 router.post('/:id/collaborators', authMiddleware, validateUuidMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   try {
     if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
     const { id } = req.params;
     const { email, role } = z.object({
-      email: z.string().email(),
+      email: z.string().trim().max(254).email(),
       role: z.enum(['editor', 'viewer']).default('editor')
     }).parse(req.body);
+    const recipientEmail = email.toLowerCase();
 
     const form = await db.form.findUnique({ where: { id } });
     if (!form) return res.status(404).json({ error: 'Form not found' });
@@ -951,9 +1182,64 @@ router.post('/:id/collaborators', authMiddleware, validateUuidMiddleware, async 
       return res.status(403).json({ error: 'Forbidden. Only the form owner can add collaborators.' });
     }
 
-    const targetUser = await db.user.findUnique({ where: { email: email.toLowerCase() } });
+    const targetUser = await db.user.findUnique({ where: { email: recipientEmail } });
     if (!targetUser) {
-      return res.status(404).json({ error: 'No user registered with this email address.' });
+      const domainError = await checkRecipientDomain(recipientEmail);
+      if (domainError) {
+        return res.status(400).json({ error: `${domainError}. Please check the email address.` });
+      }
+
+      const now = new Date();
+      const existingInvite = await db.formInvitation.findUnique({
+        where: { formId_email: { formId: id, email: recipientEmail } }
+      });
+      if (existingInvite && effectiveInviteStatus(existingInvite) === 'pending') {
+        return res.status(409).json({ error: 'An invitation has already been sent to this email address. You can resend it from the pending invitations below.' });
+      }
+
+      if (await inviteLimitReached(req.user.id)) {
+        return res.status(429).json({ error: 'You have sent too many invitations in the last hour. Please try again later.' });
+      }
+
+      const { token, tokenHash } = createInviteToken();
+      const expiresAt = new Date(now.getTime() + FORM_INVITE_TTL_MS);
+      const inviteData = { role, tokenHash, status: 'pending', invitedById: req.user.id, lastSentAt: now, expiresAt, acceptedAt: null };
+
+      let invitation;
+      if (existingInvite) {
+        // Reuse the row of an expired, cancelled or stale invitation. The guard makes a concurrent
+        // re-invite of the same address lose instead of sending a second live invitation.
+        const { count } = await db.formInvitation.updateMany({
+          where: { id: existingInvite.id, OR: [{ status: { not: 'pending' } }, { expiresAt: { lte: now } }] },
+          data: inviteData
+        });
+        if (count !== 1) {
+          return res.status(409).json({ error: 'An invitation has already been sent to this email address.' });
+        }
+        invitation = await db.formInvitation.findUniqueOrThrow({ where: { id: existingInvite.id } });
+      } else {
+        try {
+          invitation = await db.formInvitation.create({ data: { ...inviteData, formId: id, email: recipientEmail } });
+        } catch (createError: any) {
+          if (createError?.code === 'P2002') {
+            return res.status(409).json({ error: 'An invitation has already been sent to this email address.' });
+          }
+          throw createError;
+        }
+      }
+
+      const result = await deliverFormInvitation(req, form.title, invitation, token);
+
+      await logActivity({
+        userId: req.user.id,
+        action: 'COLLABORATOR_INVITED',
+        formId: id,
+        teamId: form.teamId,
+        targetTitle: form.title,
+        details: `${recipientEmail} was invited as ${role} to "${form.title}"`
+      });
+
+      return res.status(201).json(result);
     }
 
     if (targetUser.id === form.ownerId) {
@@ -988,10 +1274,20 @@ router.post('/:id/collaborators', authMiddleware, validateUuidMiddleware, async 
       details: `${targetUser.name || targetUser.email} was added as ${role} to "${form.title}"`
     });
 
-    return res.status(201).json(collaborator);
+    // Direct access supersedes an invitation still waiting for this address
+    await db.formInvitation.updateMany({
+      where: { formId: id, email: recipientEmail, status: 'pending' },
+      data: { status: 'cancelled' }
+    });
+
+    return res.status(201).json({ ...collaborator, status: 'added' });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return res.status(400).json({ error: 'Validation failed', details: error.errors });
+      const invalidEmail = error.errors.some((e) => e.path[0] === 'email');
+      return res.status(400).json({
+        error: invalidEmail ? 'Please enter a valid email address.' : 'Validation failed',
+        details: error.errors
+      });
     }
     console.error('[Forms] Add collaborator error:', error);
     return res.status(500).json({ error: 'Internal server error' });
@@ -1073,6 +1369,96 @@ router.delete('/:id/collaborators/:collaboratorId', authMiddleware, validateUuid
     return res.json({ message: 'Collaborator removed successfully.' });
   } catch (error) {
     console.error('[Forms] Remove collaborator error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/** Loads a form and one of its open (pending or expired) invitations, enforcing owner-only access. */
+const loadOwnedOpenInvitation = async (req: AuthenticatedRequest, res: Response) => {
+  const { id, invitationId } = req.params;
+  const form = await db.form.findUnique({ where: { id } });
+  if (!form) {
+    res.status(404).json({ error: 'Form not found' });
+    return null;
+  }
+  if (form.ownerId !== req.user!.id) {
+    res.status(403).json({ error: 'Forbidden. Only the form owner can manage invitations.' });
+    return null;
+  }
+  const invitation = isUUID(invitationId)
+    ? await db.formInvitation.findFirst({ where: { id: invitationId, formId: id, status: { in: ['pending', 'expired'] } } })
+    : null;
+  if (!invitation) {
+    res.status(404).json({ error: 'Invitation not found.' });
+    return null;
+  }
+  return { form, invitation };
+};
+
+// POST: Resend an invitation with a fresh link and expiry (the previous link stops working)
+router.post('/:id/invitations/:invitationId/resend', authMiddleware, validateUuidMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
+    const loaded = await loadOwnedOpenInvitation(req, res);
+    if (!loaded) return;
+    const { form, invitation } = loaded;
+
+    if (Date.now() - invitation.lastSentAt.getTime() < FORM_INVITE_RESEND_COOLDOWN_MS) {
+      return res.status(429).json({ error: 'This invitation was just sent. Please wait a minute before resending it.' });
+    }
+    if (await inviteLimitReached(req.user.id)) {
+      return res.status(429).json({ error: 'You have sent too many invitations in the last hour. Please try again later.' });
+    }
+
+    const { token, tokenHash } = createInviteToken();
+    const now = new Date();
+    const { count } = await db.formInvitation.updateMany({
+      where: { id: invitation.id, status: { in: ['pending', 'expired'] } },
+      data: { tokenHash, status: 'pending', invitedById: req.user.id, lastSentAt: now, expiresAt: new Date(now.getTime() + FORM_INVITE_TTL_MS) }
+    });
+    if (count !== 1) return res.status(404).json({ error: 'Invitation not found.' });
+
+    const refreshed = await db.formInvitation.findUniqueOrThrow({ where: { id: invitation.id } });
+    return res.json(await deliverFormInvitation(req, form.title, refreshed, token));
+  } catch (error) {
+    console.error('[Forms] Resend invitation error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PUT: Change the role an invitation will grant
+router.put('/:id/invitations/:invitationId', authMiddleware, validateUuidMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
+    const { role } = z.object({ role: z.enum(['editor', 'viewer']) }).parse(req.body);
+    const loaded = await loadOwnedOpenInvitation(req, res);
+    if (!loaded) return;
+
+    const updated = await db.formInvitation.update({ where: { id: loaded.invitation.id }, data: { role } });
+    return res.json(serializeInvitation(updated));
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: 'Validation failed', details: error.errors });
+    }
+    console.error('[Forms] Update invitation error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DELETE: Cancel an invitation (its link stops working)
+router.delete('/:id/invitations/:invitationId', authMiddleware, validateUuidMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
+    const loaded = await loadOwnedOpenInvitation(req, res);
+    if (!loaded) return;
+
+    await db.formInvitation.updateMany({
+      where: { id: loaded.invitation.id, status: { in: ['pending', 'expired'] } },
+      data: { status: 'cancelled' }
+    });
+    return res.json({ message: 'Invitation cancelled.' });
+  } catch (error) {
+    console.error('[Forms] Cancel invitation error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

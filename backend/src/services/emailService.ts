@@ -14,7 +14,7 @@ const DOMAIN_TYPOS: Record<string, string> = {
 const mxCache = new Map<string, { ok: boolean; reason?: string; at: number }>();
 
 /** Returns an error string if the recipient's domain cannot receive mail, otherwise null. */
-async function checkRecipientDomain(email: string): Promise<string | null> {
+export async function checkRecipientDomain(email: string): Promise<string | null> {
   const domain = email.split('@')[1]?.toLowerCase() || '';
   if (DOMAIN_TYPOS[domain]) {
     return `"${email}" looks misspelled (did you mean @${DOMAIN_TYPOS[domain]}?)`;
@@ -70,6 +70,25 @@ interface SendTeamInvitationParams {
   inviterName: string;
   role: string;
   inviteUrl: string;
+}
+
+interface SendFormInvitationParams {
+  formTitle: string;
+  recipientEmail: string;
+  inviterName: string;
+  role: string;
+  inviteUrl: string;
+  expiresAt: Date;
+}
+
+// Form titles and names are user-supplied; escape them before placing them in email HTML
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 export interface DeliveryInfo {
@@ -566,6 +585,54 @@ class EmailService {
     `;
 
     const text = `${inviterName} has invited you to join team "${teamName}" as ${roleCapitalized}.\n\nAccess Workspace: ${inviteUrl}`;
+    return this.dispatchEmail(recipientEmail, subject, html, text);
+  }
+
+  public async sendFormInvitation(params: SendFormInvitationParams): Promise<boolean> {
+    const { formTitle, recipientEmail, inviterName, role, inviteUrl, expiresAt } = params;
+    if (!recipientEmail || recipientEmail.trim() === '') {
+      this.lastError = 'No recipient email provided for form invitation';
+      return false;
+    }
+
+    const subject = `${inviterName} invited you to collaborate on "${formTitle}" on PromptForm AI`;
+    const roleCapitalized = role.charAt(0).toUpperCase() + role.slice(1);
+    const roleDescription = role === 'editor'
+      ? 'You will be able to edit the form\'s questions, logic, and settings.'
+      : 'You will have read-only access to the form\'s structure.';
+    const expiryText = expiresAt.toUTCString();
+    const safeTitle = escapeHtml(formTitle);
+    const safeInviter = escapeHtml(inviterName);
+    const safeUrl = escapeHtml(inviteUrl);
+
+    const html = `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border: 1px solid #e4e4e7; border-radius: 16px; padding: 32px; color: #18181b;">
+        <div style="margin-bottom: 24px;">
+          <h2 style="margin: 0; color: #4f46e5; font-size: 22px; font-weight: 800; letter-spacing: -0.5px;">PromptForm AI</h2>
+        </div>
+        <h3 style="font-size: 18px; color: #0f172a; margin-top: 0; font-weight: 700;">You've been invited to collaborate on a form</h3>
+        <p style="font-size: 15px; color: #3f3f46; line-height: 1.6;">
+          <strong>${safeInviter}</strong> has invited you to the form <strong>"${safeTitle}"</strong> as a <strong>${roleCapitalized}</strong>. ${roleDescription}
+        </p>
+        <div style="margin: 28px 0; text-align: center;">
+          <a href="${safeUrl}" target="_blank" style="background-color: #4f46e5; background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); color: #ffffff; font-weight: 700; text-decoration: none; padding: 14px 28px; border-radius: 12px; display: inline-block; font-size: 14px;">
+            Accept Invitation &amp; Open Form
+          </a>
+        </div>
+        <p style="font-size: 13px; color: #71717a; line-height: 1.5;">
+          You'll be asked to sign in or create a free account with this email address. This invitation expires on ${expiryText}.
+        </p>
+        <p style="font-size: 13px; color: #71717a; line-height: 1.5;">
+          If the button above doesn't work, copy and paste this link into your browser:<br/>
+          <a href="${safeUrl}" style="color: #6366f1; word-break: break-all;">${safeUrl}</a>
+        </p>
+        <div style="margin-top: 32px; padding-top: 20px; border-top: 1px solid #f4f4f5; text-align: center; font-size: 12px; color: #a1a1aa;">
+          If you weren't expecting this invitation, you can ignore this email.
+        </div>
+      </div>
+    `;
+
+    const text = `${inviterName} has invited you to collaborate on the form "${formTitle}" as ${roleCapitalized}. ${roleDescription}\n\nAccept the invitation: ${inviteUrl}\n\nThis invitation expires on ${expiryText}.`;
     return this.dispatchEmail(recipientEmail, subject, html, text);
   }
 }

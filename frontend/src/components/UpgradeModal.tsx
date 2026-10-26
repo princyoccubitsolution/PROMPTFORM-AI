@@ -118,17 +118,17 @@ export function UpgradeModal({ isOpen, onClose, onSuccess, restriction, currency
     return '$';
   };
   const getBasePrice = (curr: string, cycle: 'monthly' | 'yearly') => {
-    if (curr === 'INR') return cycle === 'yearly' ? 799 : 999;
-    if (curr === 'EUR') return cycle === 'yearly' ? 14 : 18;
-    if (curr === 'GBP') return cycle === 'yearly' ? 12 : 16;
-    return cycle === 'yearly' ? 15 : 19;
+    if (curr === 'INR') return cycle === 'yearly' ? 999 : 99;
+    if (curr === 'EUR') return cycle === 'yearly' ? 89 : 9;
+    if (curr === 'GBP') return cycle === 'yearly' ? 79 : 8;
+    return cycle === 'yearly' ? 99 : 9.99;
   };
 
   const currencySymbol = getCurrencySymbol(activeCurrency);
   const basePrice = getBasePrice(activeCurrency, billingCycle);
   const discountMultiplier = isCouponApplied ? (100 - couponDiscount) / 100 : 1;
-  const finalPrice = basePrice * discountMultiplier;
-  const totalBilled = billingCycle === 'yearly' ? finalPrice * 12 : finalPrice;
+  const totalBilled = basePrice * discountMultiplier;
+  const finalPrice = billingCycle === 'yearly' ? totalBilled / 12 : totalBilled;
 
   // Dynamic subscription period preview
   const startPreview = new Date();
@@ -288,10 +288,10 @@ export function UpgradeModal({ isOpen, onClose, onSuccess, restriction, currency
     const txnCurrency = txn.currency || activeCurrency;
     
     const getInvoiceCost = (curr: string, billing: string) => {
-      if (curr === 'INR') return billing === 'yearly' ? { original: '₹9,588.00', discount: '₹4,794.00', symbol: '₹' } : { original: '₹999.00', discount: '₹499.50', symbol: '₹' };
-      if (curr === 'EUR') return billing === 'yearly' ? { original: '€168.00', discount: '€84.00', symbol: '€' } : { original: '€18.00', discount: '€9.00', symbol: '€' };
-      if (curr === 'GBP') return billing === 'yearly' ? { original: '£144.00', discount: '£72.00', symbol: '£' } : { original: '£16.00', discount: '£8.00', symbol: '£' };
-      return billing === 'yearly' ? { original: '$180.00', discount: '$90.00', symbol: '$' } : { original: '$19.00', discount: '$9.50', symbol: '$' };
+      if (curr === 'INR') return billing === 'yearly' ? { original: '₹999.00', discount: '₹499.50', symbol: '₹' } : { original: '₹99.00', discount: '₹49.50', symbol: '₹' };
+      if (curr === 'EUR') return billing === 'yearly' ? { original: '€89.00', discount: '€44.50', symbol: '€' } : { original: '€9.00', discount: '€4.50', symbol: '€' };
+      if (curr === 'GBP') return billing === 'yearly' ? { original: '£79.00', discount: '£39.50', symbol: '£' } : { original: '£8.00', discount: '£4.00', symbol: '£' };
+      return billing === 'yearly' ? { original: '$99.00', discount: '$49.50', symbol: '$' } : { original: '$9.99', discount: '$5.00', symbol: '$' };
     };
 
     const costDetails = getInvoiceCost(txnCurrency, txn.billingPeriod);
@@ -927,7 +927,7 @@ export function UpgradeModal({ isOpen, onClose, onSuccess, restriction, currency
                       {isCouponApplied ? (
                         <>
                           <span className="line-through text-muted-foreground mr-1.5">
-                            {currencySymbol}{billingCycle === 'yearly' ? (basePrice * 12).toFixed(2) : basePrice.toFixed(2)}
+                            {currencySymbol}{basePrice.toFixed(2)}
                           </span>
                           <span className="text-emerald-500 font-extrabold">
                             {currencySymbol}{totalBilled.toFixed(2)}
@@ -1038,7 +1038,7 @@ export function UpgradeModal({ isOpen, onClose, onSuccess, restriction, currency
                       {isCouponApplied ? (
                         <>
                           <span className="line-through text-muted-foreground mr-1.5">
-                            {currencySymbol}{billingCycle === 'yearly' ? (basePrice * 12).toFixed(2) : basePrice.toFixed(2)}
+                            {currencySymbol}{basePrice.toFixed(2)}
                           </span>
                           <span className="text-emerald-500 font-extrabold">{currencySymbol}{totalBilled.toFixed(2)}</span>
                         </>
@@ -1110,7 +1110,7 @@ export function UpgradeModal({ isOpen, onClose, onSuccess, restriction, currency
                       {isCouponApplied ? (
                         <>
                           <span className="line-through text-muted-foreground mr-1.5">
-                            {currencySymbol}{billingCycle === 'yearly' ? (basePrice * 12).toFixed(2) : basePrice.toFixed(2)}
+                            {currencySymbol}{basePrice.toFixed(2)}
                           </span>
                           <span className="text-emerald-500 font-extrabold">{currencySymbol}{totalBilled.toFixed(2)}</span>
                         </>

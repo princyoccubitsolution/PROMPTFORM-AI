@@ -63,14 +63,11 @@ export default function PricingPage() {
       let plan = "Free";
       if (
         updatedAnswers.forms === "unlimited" ||
-        updatedAnswers.team === "enterprise" ||
-        updatedAnswers.features === "sso"
-      ) {
-        plan = "Enterprise";
-      } else if (
         updatedAnswers.forms === "pro" ||
         updatedAnswers.team === "pro" ||
-        updatedAnswers.features === "cheat"
+        updatedAnswers.team === "enterprise" ||
+        updatedAnswers.features === "cheat" ||
+        updatedAnswers.features === "sso"
       ) {
         plan = "Pro";
       }
@@ -92,12 +89,12 @@ export default function PricingPage() {
       answer: "Yes, absolutely! You can upgrade, downgrade, or cancel your plan at any time directly from your account settings. If you upgrade, the prorated difference will be applied immediately."
     },
     {
-      question: "What happens when I hit the 5 AI Forms limit on the Free plan?",
-      answer: "You can keep using your 5 created forms indefinitely to receive responses. If you wish to generate additional AI forms or access advanced exam proctoring features, you can upgrade to the Pro or Enterprise plan."
+      question: "What happens when I hit the 5 Forms limit on the Free plan?",
+      answer: "You can keep using your 5 created forms indefinitely to receive unlimited responses. To create your 6th form and beyond, you can upgrade to the Pro plan for unlimited forms."
     },
     {
       question: "Is there a money-back guarantee?",
-      answer: "Yes! We offer a 14-day 100% money-back guarantee on all Pro and Enterprise paid plans. If you are not satisfied for any reason, reach out to support within 14 days for a full refund."
+      answer: "Yes! We offer a 14-day 100% money-back guarantee on the Pro paid plan. If you are not satisfied for any reason, reach out to support within 14 days for a full refund."
     },
     {
       question: "How does the Anti-Cheat & Secure Exam Mode work?",
@@ -105,7 +102,7 @@ export default function PricingPage() {
     },
     {
       question: "Do you offer discounts for educational institutions and non-profits?",
-      answer: "Yes! We offer up to 50% discount for registered educational institutions, students, and eligible non-profit organizations. Contact our sales team to claim your discount."
+      answer: "Yes! We offer up to 50% discount with promo coupon codes like PROMPT50 for registered educational institutions, students, and eligible non-profit organizations."
     }
   ];
 
@@ -168,7 +165,7 @@ export default function PricingPage() {
                     ? "bg-white text-primary"
                     : "bg-emerald-500 text-white animate-pulse"
                 }`}>
-                  Save 20%
+                  Save 16%
                 </span>
               </button>
             </div>
@@ -203,8 +200,8 @@ export default function PricingPage() {
 
       {/* PRICING CARDS SECTION */}
       <section className="pb-24 z-10 relative">
-        <div className="container mx-auto px-6 max-w-7xl">
-          <div className="grid md:grid-cols-3 gap-8 items-stretch">
+        <div className="container mx-auto px-6 max-w-6xl">
+          <div className="grid md:grid-cols-2 gap-8 items-stretch max-w-5xl mx-auto">
             
             {/* FREE TIER */}
             <motion.div 
@@ -219,7 +216,7 @@ export default function PricingPage() {
                     Free Forever
                   </div>
                   <h3 className="text-3xl font-bold text-foreground">Free</h3>
-                  <p className="text-xs text-muted-foreground mt-1 leading-relaxed">Perfect for individuals and exploring AI form creation.</p>
+                  <p className="text-xs text-muted-foreground mt-1 leading-relaxed">All premium features unlocked for up to 5 forms. Ideal for individuals and growing teams.</p>
                   
                   <div className="pt-4 flex items-baseline">
                     <span className="text-5xl font-bold tracking-tight text-foreground">$0</span>
@@ -233,31 +230,47 @@ export default function PricingPage() {
                 <ul className="space-y-3.5 text-xs text-muted-foreground font-medium">
                   <li className="flex items-center space-x-3">
                     <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" />
-                    <span>Create up to <strong className="text-foreground">5 AI Forms</strong></span>
+                    <span>Create up to <strong className="text-foreground">5 Forms</strong> (All features unlocked)</span>
                   </li>
                   <li className="flex items-center space-x-3">
                     <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" />
-                    <span>AI Prompt-to-Form Generator</span>
+                    <span><strong className="text-foreground">100 Free AI Credits</strong> included</span>
                   </li>
                   <li className="flex items-center space-x-3">
                     <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" />
-                    <span>Drag & Drop Visual Form Builder</span>
+                    <span><strong className="text-foreground">Unlimited Team Members</strong> & Invites</span>
                   </li>
                   <li className="flex items-center space-x-3">
                     <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" />
-                    <span>20+ Premium Field Widgets</span>
+                    <span>AI Prompt & Document (PDF / DOCX) Generator</span>
                   </li>
                   <li className="flex items-center space-x-3">
                     <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" />
-                    <span>Unlimited Form Responses</span>
+                    <span>Graded Quiz Mode & Instant Auto-Grading</span>
                   </li>
                   <li className="flex items-center space-x-3">
                     <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" />
-                    <span>Basic Analytics & Charts</span>
+                    <span>Exam Anti-Cheat (Tab-Switch Tracking & Timers)</span>
                   </li>
                   <li className="flex items-center space-x-3">
                     <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" />
-                    <span>PDF / CSV Export</span>
+                    <span>Conditional Branching Logic (Jump / Show / Hide)</span>
+                  </li>
+                  <li className="flex items-center space-x-3">
+                    <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+                    <span>15+ Field Widgets & Custom Themes</span>
+                  </li>
+                  <li className="flex items-center space-x-3">
+                    <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+                    <span>Password Protected Forms</span>
+                  </li>
+                  <li className="flex items-center space-x-3">
+                    <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+                    <span>Unlimited Form Responses Forever</span>
+                  </li>
+                  <li className="flex items-center space-x-3">
+                    <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+                    <span>Real-Time Analytics & CSV Export</span>
                   </li>
                 </ul>
               </div>
@@ -297,22 +310,31 @@ export default function PricingPage() {
               <div className="space-y-6">
                 <div>
                   <div className="inline-flex items-center px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-[10px] font-bold text-primary uppercase tracking-widest mb-3">
-                    For Professionals
+                    For Power Users & Teams
                   </div>
                   <h3 className="text-3xl font-bold text-primary">Pro</h3>
-                  <p className="text-xs text-muted-foreground mt-1 leading-relaxed">For educators, creators, and growing businesses.</p>
+                  <p className="text-xs text-muted-foreground mt-1 leading-relaxed">Unlimited forms and capacity for power creators, educators, businesses, and growing teams.</p>
                   
                   <div className="pt-4 flex items-baseline">
                     <span className="text-5xl font-bold tracking-tight text-primary">
                       {(() => {
-                        if (currency === "INR") return billingPeriod === "yearly" ? "₹799" : "₹999";
-                        if (currency === "EUR") return billingPeriod === "yearly" ? "€14" : "€18";
-                        if (currency === "GBP") return billingPeriod === "yearly" ? "£12" : "£16";
-                        return billingPeriod === "yearly" ? "$15" : "$19";
+                        if (currency === "INR") return billingPeriod === "yearly" ? "₹999" : "₹99";
+                        if (currency === "EUR") return billingPeriod === "yearly" ? "€89" : "€9";
+                        if (currency === "GBP") return billingPeriod === "yearly" ? "£79" : "£8";
+                        return billingPeriod === "yearly" ? "$99" : "$9.99";
                       })()}
                     </span>
                     <span className="text-xs text-muted-foreground font-semibold ml-2">
-                      / month {billingPeriod === "yearly" && <span className="text-[10px] text-emerald-500 font-bold block">(billed annually)</span>}
+                      {billingPeriod === "yearly" ? (
+                        <>
+                          / year
+                          <span className="text-[10px] text-emerald-500 font-bold block">
+                            (Only {currency === "INR" ? "₹83" : "$8.25"}/mo - Billed annually)
+                          </span>
+                        </>
+                      ) : (
+                        "/ month"
+                      )}
                     </span>
                   </div>
                 </div>
@@ -323,35 +345,27 @@ export default function PricingPage() {
                 <ul className="space-y-3.5 text-xs text-muted-foreground font-medium">
                   <li className="flex items-center space-x-3">
                     <CheckCircle className="w-4 h-4 text-primary flex-shrink-0" />
-                    <span><strong className="text-foreground">Unlimited</strong> AI Form Generations</span>
+                    <span><strong className="text-foreground">UNLIMITED Form Creation</strong> (No 5-form limit)</span>
                   </li>
                   <li className="flex items-center space-x-3">
                     <CheckCircle className="w-4 h-4 text-primary flex-shrink-0" />
-                    <span>AI Form from PDF, Image & Document Scan</span>
+                    <span><strong className="text-foreground">+500 AI Credits</strong> Included (Auto-refills)</span>
                   </li>
                   <li className="flex items-center space-x-3">
                     <CheckCircle className="w-4 h-4 text-primary flex-shrink-0" />
-                    <span>Secure Exam Mode & Anti-Cheat Proctoring</span>
+                    <span>High-Capacity Team Project Workspaces</span>
                   </li>
                   <li className="flex items-center space-x-3">
                     <CheckCircle className="w-4 h-4 text-primary flex-shrink-0" />
-                    <span>Smart Quiz Timer & Auto-Submit</span>
+                    <span>Priority AI Processing Speed</span>
                   </li>
                   <li className="flex items-center space-x-3">
                     <CheckCircle className="w-4 h-4 text-primary flex-shrink-0" />
-                    <span>Conditional Logic & Branching Workflows</span>
+                    <span>All Future AI Feature Updates Included</span>
                   </li>
                   <li className="flex items-center space-x-3">
                     <CheckCircle className="w-4 h-4 text-primary flex-shrink-0" />
-                    <span>AI Sentiment Analysis & Summary Insights</span>
-                  </li>
-                  <li className="flex items-center space-x-3">
-                    <CheckCircle className="w-4 h-4 text-primary flex-shrink-0" />
-                    <span>Custom Themes, Colors & Fonts</span>
-                  </li>
-                  <li className="flex items-center space-x-3">
-                    <CheckCircle className="w-4 h-4 text-primary flex-shrink-0" />
-                    <span>Priority AI Speed & Response Generation</span>
+                    <span>Priority Email & Community Support</span>
                   </li>
                 </ul>
               </div>
@@ -367,7 +381,7 @@ export default function PricingPage() {
                 ) : (
                   <Link href="/register" className="block w-full">
                     <Button className="w-full py-3.5 text-sm font-extrabold bg-primary hover:bg-primary/90 text-white border-none rounded-xl transition-all shadow-lg">
-                      Start Pro Trial
+                      Start Pro Plan
                     </Button>
                   </Link>
                 )}
@@ -378,92 +392,16 @@ export default function PricingPage() {
               </div>
             </motion.div>
 
-            {/* ENTERPRISE TIER */}
-            <motion.div 
-              initial={{ opacity: 0, y: 25 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.3 }}
-              className="bg-card dark:bg-card border border-border/80 rounded-3xl p-8 flex flex-col justify-between hover:shadow-xl transition-all duration-300 relative group"
-            >
-              <div className="space-y-6">
-                <div>
-                  <div className="inline-flex items-center px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-[10px] font-bold text-primary uppercase tracking-widest mb-3">
-                    Enterprise
-                  </div>
-                  <h3 className="text-3xl font-bold text-foreground">Enterprise</h3>
-                  <p className="text-xs text-muted-foreground mt-1 leading-relaxed">For large organizations requiring custom domains & SLAs.</p>
-                  
-                  <div className="pt-4 flex items-baseline">
-                    <span className="text-5xl font-bold tracking-tight text-foreground">Custom</span>
-                  </div>
-                </div>
-
-                <div className="border-b border-border/60" />
-
-                <div className="text-[11px] font-extrabold text-foreground uppercase tracking-wider">Everything in Pro, plus:</div>
-                <ul className="space-y-3.5 text-xs text-muted-foreground font-medium">
-                  <li className="flex items-center space-x-3">
-                    <CheckCircle className="w-4 h-4 text-primary flex-shrink-0" />
-                    <span>Unlimited Team Members & Workspaces</span>
-                  </li>
-                  <li className="flex items-center space-x-3">
-                    <CheckCircle className="w-4 h-4 text-primary flex-shrink-0" />
-                    <span>Role-Based Access Control (RBAC)</span>
-                  </li>
-                  <li className="flex items-center space-x-3">
-                    <CheckCircle className="w-4 h-4 text-primary flex-shrink-0" />
-                    <span>White-Label Branding & Custom Subdomains</span>
-                  </li>
-                  <li className="flex items-center space-x-3">
-                    <CheckCircle className="w-4 h-4 text-primary flex-shrink-0" />
-                    <span>SAML / Single Sign-On (SSO)</span>
-                  </li>
-                  <li className="flex items-center space-x-3">
-                    <CheckCircle className="w-4 h-4 text-primary flex-shrink-0" />
-                    <span>Dedicated Account Manager & 99.9% SLA</span>
-                  </li>
-                  <li className="flex items-center space-x-3">
-                    <CheckCircle className="w-4 h-4 text-primary flex-shrink-0" />
-                    <span>REST API Access & Custom Webhooks</span>
-                  </li>
-                </ul>
-              </div>
-
-              <div className="pt-8">
-                {isLoggedIn ? (
-                  <Button 
-                    onClick={() => setUpgradeModalOpen(true)}
-                    variant="outline"
-                    className="w-full h-12 text-sm font-bold rounded-xl shadow-xs"
-                  >
-                    Contact Enterprise Sales
-                  </Button>
-                ) : (
-                  <Link href="/register" className="block w-full">
-                    <Button 
-                      variant="outline"
-                      className="w-full h-12 text-sm font-bold rounded-xl shadow-xs"
-                    >
-                      Contact Enterprise Sales
-                    </Button>
-                  </Link>
-                )}
-                <div className="text-[11px] text-muted-foreground mt-3 text-center font-medium">
-                  Custom billing & PO invoicing available
-                </div>
-              </div>
-            </motion.div>
-
           </div>
         </div>
       </section>
 
       {/* FEATURE COMPARISON TABLE */}
       <section className="py-20 border-t border-border/60 bg-card/40 dark:bg-card/20">
-        <div className="container mx-auto px-6 max-w-7xl">
+        <div className="container mx-auto px-6 max-w-5xl">
           <div className="text-center max-w-3xl mx-auto mb-16">
             <h2 className="text-3xl font-extrabold text-foreground">Compare Plan Features</h2>
-            <p className="mt-2 text-sm text-muted-foreground">Detailed view of capabilities included in each tier.</p>
+            <p className="mt-2 text-sm text-muted-foreground">Every advanced feature is unlocked on both plans. Upgrade to Pro when you need unlimited forms.</p>
           </div>
 
           <div className="overflow-x-auto rounded-2xl border border-border shadow-sm">
@@ -471,59 +409,80 @@ export default function PricingPage() {
               <thead>
                 <tr className="bg-muted/80 dark:bg-card border-b border-border text-foreground font-bold">
                   <th className="p-4 md:p-5 text-sm">Feature Comparison</th>
-                  <th className="p-4 md:p-5 text-center text-sm w-1/4">Free</th>
-                  <th className="p-4 md:p-5 text-center text-sm text-primary w-1/4 bg-primary/5">Pro</th>
-                  <th className="p-4 md:p-5 text-center text-sm text-purple-600 dark:text-purple-400 w-1/4">Enterprise</th>
+                  <th className="p-4 md:p-5 text-center text-sm w-1/3">Free Tier</th>
+                  <th className="p-4 md:p-5 text-center text-sm text-primary w-1/3 bg-primary/5">Pro Plan (Unlimited)</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60 font-medium text-muted-foreground">
                 <tr>
-                  <td className="p-4 text-foreground font-bold">AI Forms Limit</td>
-                  <td className="p-4 text-center">5 Forms</td>
-                  <td className="p-4 text-center font-bold text-primary bg-primary/5">Unlimited</td>
-                  <td className="p-4 text-center font-bold text-purple-600 dark:text-purple-400">Unlimited</td>
+                  <td className="p-4 text-foreground font-bold">Active Form Creation Limit</td>
+                  <td className="p-4 text-center font-bold text-foreground">5 Forms</td>
+                  <td className="p-4 text-center font-bold text-primary bg-primary/5">Unlimited Forms</td>
                 </tr>
                 <tr>
-                  <td className="p-4 text-foreground font-bold">Form Submissions</td>
+                  <td className="p-4 text-foreground font-bold">Form Submissions (Responses)</td>
                   <td className="p-4 text-center">Unlimited</td>
                   <td className="p-4 text-center font-bold text-primary bg-primary/5">Unlimited</td>
-                  <td className="p-4 text-center font-bold text-purple-600 dark:text-purple-400">Unlimited</td>
                 </tr>
                 <tr>
-                  <td className="p-4 text-foreground font-bold">AI Generation from PDF / Images</td>
-                  <td className="p-4 text-center text-muted-foreground/40">—</td>
+                  <td className="p-4 text-foreground font-bold">Team Members & Email Invites</td>
+                  <td className="p-4 text-center"><Check className="w-4 h-4 text-emerald-500 mx-auto" /></td>
                   <td className="p-4 text-center bg-primary/5"><Check className="w-4 h-4 text-primary mx-auto" /></td>
-                  <td className="p-4 text-center"><Check className="w-4 h-4 text-purple-600 dark:text-purple-400 mx-auto" /></td>
                 </tr>
                 <tr>
-                  <td className="p-4 text-foreground font-bold">Anti-Cheat & Proctoring Exam Mode</td>
-                  <td className="p-4 text-center text-muted-foreground/40">—</td>
+                  <td className="p-4 text-foreground font-bold">AI Prompt & Document (PDF / DOCX) Generator</td>
+                  <td className="p-4 text-center"><Check className="w-4 h-4 text-emerald-500 mx-auto" /></td>
                   <td className="p-4 text-center bg-primary/5"><Check className="w-4 h-4 text-primary mx-auto" /></td>
-                  <td className="p-4 text-center"><Check className="w-4 h-4 text-purple-600 dark:text-purple-400 mx-auto" /></td>
                 </tr>
                 <tr>
-                  <td className="p-4 text-foreground font-bold">Conditional Logic & Branching</td>
-                  <td className="p-4 text-center text-muted-foreground/40">—</td>
+                  <td className="p-4 text-foreground font-bold">Anti-Cheat & Proctoring Exam Mode (Tab Switches)</td>
+                  <td className="p-4 text-center"><Check className="w-4 h-4 text-emerald-500 mx-auto" /></td>
                   <td className="p-4 text-center bg-primary/5"><Check className="w-4 h-4 text-primary mx-auto" /></td>
-                  <td className="p-4 text-center"><Check className="w-4 h-4 text-purple-600 dark:text-purple-400 mx-auto" /></td>
                 </tr>
                 <tr>
-                  <td className="p-4 text-foreground font-bold">Custom Domain & White-Labeling</td>
-                  <td className="p-4 text-center text-muted-foreground/40">—</td>
-                  <td className="p-4 text-center text-muted-foreground/40 bg-primary/5">—</td>
-                  <td className="p-4 text-center"><Check className="w-4 h-4 text-purple-600 dark:text-purple-400 mx-auto" /></td>
+                  <td className="p-4 text-foreground font-bold">Graded Quizzes & Auto-Score Calculation</td>
+                  <td className="p-4 text-center"><Check className="w-4 h-4 text-emerald-500 mx-auto" /></td>
+                  <td className="p-4 text-center bg-primary/5"><Check className="w-4 h-4 text-primary mx-auto" /></td>
                 </tr>
                 <tr>
-                  <td className="p-4 text-foreground font-bold">SAML / SSO Authentication</td>
-                  <td className="p-4 text-center text-muted-foreground/40">—</td>
-                  <td className="p-4 text-center text-muted-foreground/40 bg-primary/5">—</td>
-                  <td className="p-4 text-center"><Check className="w-4 h-4 text-purple-600 dark:text-purple-400 mx-auto" /></td>
+                  <td className="p-4 text-foreground font-bold">Conditional Branching Logic (Jump / Show / Hide)</td>
+                  <td className="p-4 text-center"><Check className="w-4 h-4 text-emerald-500 mx-auto" /></td>
+                  <td className="p-4 text-center bg-primary/5"><Check className="w-4 h-4 text-primary mx-auto" /></td>
                 </tr>
                 <tr>
-                  <td className="p-4 text-foreground font-bold">Priority Support & SLA</td>
+                  <td className="p-4 text-foreground font-bold">15+ Smart Form Field Widgets</td>
+                  <td className="p-4 text-center"><Check className="w-4 h-4 text-emerald-500 mx-auto" /></td>
+                  <td className="p-4 text-center bg-primary/5"><Check className="w-4 h-4 text-primary mx-auto" /></td>
+                </tr>
+                <tr>
+                  <td className="p-4 text-foreground font-bold">Custom HSL Themes, Colors & Fonts</td>
+                  <td className="p-4 text-center"><Check className="w-4 h-4 text-emerald-500 mx-auto" /></td>
+                  <td className="p-4 text-center bg-primary/5"><Check className="w-4 h-4 text-primary mx-auto" /></td>
+                </tr>
+                <tr>
+                  <td className="p-4 text-foreground font-bold">Password Protected Forms</td>
+                  <td className="p-4 text-center"><Check className="w-4 h-4 text-emerald-500 mx-auto" /></td>
+                  <td className="p-4 text-center bg-primary/5"><Check className="w-4 h-4 text-primary mx-auto" /></td>
+                </tr>
+                <tr>
+                  <td className="p-4 text-foreground font-bold">Real-Time Analytics & CSV Export</td>
+                  <td className="p-4 text-center"><Check className="w-4 h-4 text-emerald-500 mx-auto" /></td>
+                  <td className="p-4 text-center bg-primary/5"><Check className="w-4 h-4 text-primary mx-auto" /></td>
+                </tr>
+                <tr>
+                  <td className="p-4 text-foreground font-bold">AI Credits Included</td>
+                  <td className="p-4 text-center">100 Initial Credits</td>
+                  <td className="p-4 text-center font-bold text-primary bg-primary/5">+500 Bonus Credits</td>
+                </tr>
+                <tr>
+                  <td className="p-4 text-foreground font-bold">AI Generation Processing Speed</td>
+                  <td className="p-4 text-center">Standard</td>
+                  <td className="p-4 text-center font-bold text-primary bg-primary/5">Priority Speed</td>
+                </tr>
+                <tr>
+                  <td className="p-4 text-foreground font-bold">Support</td>
                   <td className="p-4 text-center">Community</td>
-                  <td className="p-4 text-center bg-primary/5 font-semibold text-primary">Priority Email</td>
-                  <td className="p-4 text-center font-bold text-purple-600 dark:text-purple-400">24/7 Dedicated Manager</td>
+                  <td className="p-4 text-center font-bold text-primary bg-primary/5">Priority Email Support</td>
                 </tr>
               </tbody>
             </table>
@@ -657,13 +616,7 @@ export default function PricingPage() {
                     onClick={() => handlePlanFinderAnswer("team", "pro")}
                     className="w-full text-left p-3.5 rounded-2xl border border-border hover:bg-muted text-xs font-bold transition-all cursor-pointer"
                   >
-                    Small Team (2-10 members)
-                  </button>
-                  <button
-                    onClick={() => handlePlanFinderAnswer("team", "enterprise")}
-                    className="w-full text-left p-3.5 rounded-2xl border border-border hover:bg-muted text-xs font-bold transition-all cursor-pointer"
-                  >
-                    Large Enterprise (Custom Domain & SSO)
+                    Collaborative Team (Multiple members & shared workspaces)
                   </button>
                 </div>
               </div>
@@ -676,26 +629,20 @@ export default function PricingPage() {
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-foreground">Advanced Requirements</h3>
-                  <p className="text-xs text-muted-foreground mt-1">What security features do you need?</p>
+                  <p className="text-xs text-muted-foreground mt-1">What capacity and features do you need?</p>
                 </div>
                 <div className="flex flex-col gap-2 pt-2">
                   <button
                     onClick={() => handlePlanFinderAnswer("features", "free")}
                     className="w-full text-left p-3.5 rounded-2xl border border-border hover:bg-muted text-xs font-bold transition-all cursor-pointer"
                   >
-                    Basic quizzes and feedback forms
+                    1-5 Forms with Anti-Cheat, Quizzes & Logic
                   </button>
                   <button
-                    onClick={() => handlePlanFinderAnswer("features", "cheat")}
+                    onClick={() => handlePlanFinderAnswer("features", "pro")}
                     className="w-full text-left p-3.5 rounded-2xl border border-border hover:bg-muted text-xs font-bold transition-all cursor-pointer"
                   >
-                    Anti-Cheat Proctored Exams & Timer
-                  </button>
-                  <button
-                    onClick={() => handlePlanFinderAnswer("features", "sso")}
-                    className="w-full text-left p-3.5 rounded-2xl border border-border hover:bg-muted text-xs font-bold transition-all cursor-pointer"
-                  >
-                    White-label custom subdomains & SSO
+                    Unlimited Forms, +500 Monthly AI Credits & Priority Speed
                   </button>
                 </div>
               </div>

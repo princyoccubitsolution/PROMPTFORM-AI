@@ -1,3 +1,9 @@
+# Temporary Office & Editor files
+~$*
+.claude/
+*.tsbuildinfo
+temp_*.json
+
 # Dependencies
 node_modules/
 **/node_modules/

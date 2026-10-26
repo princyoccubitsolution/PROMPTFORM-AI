@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>PromptForm AI – PPSU Poster (A2 Landscape)</title>
+<!--
+  PromptForm AI – PPSU Internship Poster (editable source)
+  Page: A2 landscape, 594 mm × 420 mm. Font: Cambria (PPSU guideline).
+  Type scale: Title 42 pt · Section headings 28 pt · Sub-headings 24 pt · Body 18 pt ·
+              Figure/table text 14–16 pt · Captions & references 14 pt.
+  Export from Chrome: Print → Save as PDF, custom paper 594 × 420 mm (A2 landscape),
+  Margins: None, Background graphics: ON.
+  Project facts: PRINCY_PROMPTFORM_AI_FINAL_REPORT.docx. Screenshots: live site
+  (https://promptform-ai-frontend.vercel.app/) and the report's output figures.
+-->
+<style>
+  @page { size: 594mm 420mm; margin: 0; }
+
+  :root {
+    /* PromptForm AI brand tokens (frontend/src/app/globals.css, "Mocha" theme) */
+    --ink: #342A24;          /* --foreground */
+    --ink-soft: #5E4A3D;
+    --mocha: #8B6B55;        /* --primary */
+    --mocha-dark: #795D49;   /* --hover-accent */
+    --sand: #E8DDD2;         /* --secondary */
+    --line: #E4D9CD;         /* --border */
+    --cream: #FAF6EF;        /* --background */
+    --tint: #F7F1EA;
+    --muted: #6E625A;
+    --green: #22784F;        /* --success, darkened for print contrast */
+    --green-bg: #E1F2E8;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  /* Mocha canvas behind the poster: any sub-pixel sliver left by pixel snapping at the page edge
+     matches the bottom of the background gradient instead of showing white. */
+  html { width: 594mm; height: 420mm; background: #8B6B55; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body {
+    width: 594mm; height: 420mm;
+    font-family: Cambria, "Cambria Math", Caladea, Georgia, serif;
+    color: var(--ink); font-size: 18pt; line-height: 1.17;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+    overflow: hidden;
+  }
+
+  .poster { position: relative; width: 594mm; height: 420mm; isolation: isolate; }
+  .poster::before {
+    content: ""; position: absolute; left: 0; top: 0; right: 0; bottom: 0; z-index: -1;
+    background:
+      radial-gradient(ellipse 160mm 58mm at 297mm 0%, rgba(167, 139, 250, 0.15), rgba(167, 139, 250, 0) 70%),
+      linear-gradient(180deg, #FFFDF9 0%, #FAF6EF 16%, #F1E8DE 40%, #DDCCBD 66%, #B4977F 87%, #8B6B55 100%);
+  }
+  /* On screen (PNG export) the background bleeds past the right/bottom edge; print keeps the exact page size. */
+  @media screen { .poster::before { right: -1.5mm; bottom: -1.5mm; } }
+  @media print  { .poster::before { bottom: -1mm; } }
+
+  /* ---------------- Header ---------------- */
+  .header {
+    position: absolute; left: 12mm; right: 12mm; top: 5mm; height: 58mm;
+    display: grid; grid-template-columns: 46mm 1fr 72mm; align-items: start; column-gap: 8mm;
+  }
+  .logo-ppsu { width: 46mm; height: 46mm; object-fit: contain; display: block; margin-top: 2mm; }
+  .logo-soe { width: 72mm; display: block; margin-top: 10mm; }
+  .head-center { text-align: center; }
+  .title-row { display: flex; align-items: center; justify-content: center; gap: 5mm; }
+  .title-row img { width: 23mm; height: 23mm; flex: none; }
+  h1 { font-size: 42pt; line-height: 1.05; font-weight: 700; color: var(--ink); letter-spacing: -0.2pt; }
+  h1 .brand { color: var(--mocha); }
+  .author { margin-top: 2.4mm; font-size: 24pt; line-height: 1.12; }
+  .author span { font-size: 20pt; color: var(--ink-soft); }
+  .affil { font-size: 18pt; line-height: 1.22; color: var(--ink-soft); margin-top: 0.6mm; }
+  .affil b { color: var(--ink); }
+
+  /* ---------------- Columns ---------------- */
+  .cols {
+    position: absolute; left: 12mm; right: 12mm; top: 66mm; bottom: 7mm;
+    display: grid; grid-template-columns: repeat(4, 1fr); column-gap: 6mm;
+  }
+  .col {
+    display: flex; flex-direction: column; gap: 3mm; min-height: 0;
+    padding: 2.2mm; border-radius: 2.2mm;
+    background: rgba(255, 255, 255, 0.30);
+    border: 0.35mm solid rgba(139, 107, 85, 0.20);
+  }
+  .card {
+    background: #fff; border-radius: 1.6mm; padding: 4mm 5.4mm 4.2mm;
+    box-shadow: 0 0.4mm 1.4mm rgba(52, 42, 36, 0.10);
+    border: 0.25mm solid rgba(139, 107, 85, 0.14);
+    flex: 0 0 auto; overflow: hidden;
+  }
+  .card.grow { flex: 1 0 auto; }
+
+  h2 {
+    font-size: 28pt; line-height: 1.04; font-weight: 700; color: var(--ink);
+    padding-bottom: 1.6mm; margin-bottom: 2.6mm; position: relative;
+    display: flex; align-items: center; gap: 2.4mm;
+  }
+  h2::after {
+    content: ""; position: absolute; left: 0; bottom: 0; width: 36mm; height: 0.9mm;
+    background: linear-gradient(90deg, var(--mocha), rgba(139, 107, 85, 0.25)); border-radius: 0.5mm;
+  }
+  /* icon badge before each section heading (Lucide icon set, as used on the PromptForm AI site) */
+  h2 .ic {
+    flex: none; width: 9mm; height: 9mm; border-radius: 2mm; background: var(--mocha);
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 0.4mm 1mm rgba(121, 93, 73, 0.30);
+  }
+  h2 .ic svg { width: 5.6mm; height: 5.6mm; fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  h3 { font-size: 24pt; line-height: 1.08; font-weight: 700; color: var(--mocha); margin: 2.6mm 0 1.4mm; }
+
+  p { margin: 0 0 1.6mm; }
+  p:last-child { margin-bottom: 0; }
+  .small { font-size: 16pt; line-height: 1.18; }
+  .nw { white-space: nowrap; }
+
+  ul.b { list-style: none; }
+  ul.b li { position: relative; padding-left: 5.2mm; margin-bottom: 1.4mm; }
+  ul.b li:last-child { margin-bottom: 0; }
+  ul.b li::before {
+    content: ""; position: absolute; left: 0.2mm; top: 0.36em; width: 2.2mm; height: 2.2mm;
+    background: var(--mocha); border-radius: 0.4mm;
+  }
+  ul.b li b { color: var(--ink-soft); }
+  /* objectives: check-mark bullets; recommendations: arrow bullets */
+  ul.b.ok li, ul.b.go li { padding-left: 5.8mm; }
+  ul.b.ok li::before, ul.b.go li::before {
+    width: 4.2mm; height: 4.2mm; left: 0; top: 0.17em; border-radius: 50%; background-color: transparent;
+    background-repeat: no-repeat; background-size: 100% 100%;
+  }
+  ul.b.ok li::before { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='11.5' fill='%238B6B55'/%3E%3Cpath d='m7.2 12.4 3.2 3.2 6.4-6.8' stroke='%23fff' stroke-width='2.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); }
+  ul.b.go li::before { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='11.5' fill='%238B6B55'/%3E%3Cpath d='M7 12h9.5M12.5 7.5 17 12l-4.5 4.5' stroke='%23fff' stroke-width='2.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); }
+
+  .kw { font-size: 14pt; line-height: 1.25; color: var(--muted); margin-top: 1.8mm; }
+  .kw b { color: var(--mocha-dark); }
+  .kw i { font-style: normal; color: var(--mocha); padding: 0 0.6mm; }
+
+  .cap { font-size: 14pt; line-height: 1.18; color: var(--muted); text-align: center; margin-top: 1.5mm; }
+  .cap b { color: var(--ink-soft); }
+
+  /* ---------------- Screenshot frames ---------------- */
+  .shot {
+    border: 0.3mm solid #D9CBBE; border-radius: 1.4mm; overflow: hidden; background: #fff;
+    box-shadow: 0 0.5mm 1.6mm rgba(52, 42, 36, 0.12);
+  }
+  .shot .bar { height: 3mm; background: #F3ECE4; border-bottom: 0.25mm solid #E4D9CD; display: flex; align-items: center; gap: 1mm; padding-left: 1.6mm; }
+  .shot .bar i { width: 1.2mm; height: 1.2mm; border-radius: 50%; display: block; }
+  .shot .bar i:nth-child(1) { background: #EE6A5F; } .shot .bar i:nth-child(2) { background: #F5BE4F; } .shot .bar i:nth-child(3) { background: #62C554; }
+  .shot img { display: block; width: 100%; object-fit: cover; }
+
+  /* ---------------- Materials ---------------- */
+  table.stack { width: 100%; border-collapse: collapse; font-size: 16pt; line-height: 1.15; }
+  table.stack th { text-align: left; color: var(--ink-soft); font-weight: 700; padding: 0.6mm 3mm 0.6mm 0; white-space: nowrap; vertical-align: top; width: 1%; }
+  table.stack td { padding: 0.6mm 0; }
+  table.stack tr + tr th, table.stack tr + tr td { border-top: 0.3mm solid var(--line); }
+
+  /* Architecture: client ↔ frontend ↔ backend, backend → data/AI services */
+  .arch { margin-top: 2.6mm; }
+  .arch .r1 { display: grid; grid-template-columns: 24mm 5mm 38mm 5mm 1fr; align-items: stretch; }
+  .arch .r2 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2mm; }
+  .arch .arrow { width: 5mm; height: 4mm; align-self: center; }
+  .arch .bus { display: block; width: 100%; height: 5.4mm; }
+  .node {
+    border-radius: 1.4mm; padding: 1.1mm 0.8mm; text-align: center;
+    font-size: 14pt; line-height: 1.12; border: 0.35mm solid #D3C2B3; background: var(--tint); color: var(--ink);
+    display: flex; flex-direction: column; justify-content: center;
+  }
+  .node b { display: block; }
+  .node.dark { background: var(--mocha); border-color: var(--mocha-dark); color: #fff; }
+  .node.darker { background: #5E4A3D; border-color: #4C3B30; color: #fff; }
+  .node .chip { align-self: center; margin-top: 0.8mm; background: rgba(255,255,255,0.18); border: 0.25mm solid rgba(255,255,255,0.5); border-radius: 0.8mm; padding: 0 1.4mm; font-weight: 700; }
+
+  /* ---------------- Methodology ---------------- */
+  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.4mm 1.6mm; margin-top: 1.6mm; }
+  .step {
+    display: flex; align-items: center; gap: 1.3mm; background: var(--tint); border: 0.3mm solid #E2D4C7;
+    border-radius: 1.2mm; padding: 0.7mm 1.2mm; font-size: 14pt; line-height: 1.1; white-space: nowrap;
+  }
+  .step .n {
+    flex: none; width: 5.4mm; height: 5.4mm; border-radius: 50%; background: var(--mocha); color: #fff;
+    font-size: 14pt; font-weight: 700; display: flex; align-items: center; justify-content: center;
+  }
+
+  .flow { margin-top: 1.6mm; }
+  .flow .row { display: flex; align-items: stretch; }
+  .flow .box {
+    flex: 1 1 0; min-height: 10.6mm; display: flex; align-items: center; justify-content: center; text-align: center;
+    border-radius: 1.3mm; border: 0.35mm solid #D3C2B3; background: var(--tint);
+    font-size: 14pt; line-height: 1.08; font-weight: 700; padding: 0.8mm 1mm; color: var(--ink);
+  }
+  .flow .box.ai { background: var(--mocha); color: #fff; border-color: var(--mocha-dark); }
+  .flow .box.end { background: #5E4A3D; color: #fff; border-color: #4C3B30; }
+  .flow .arr { flex: 0 0 4mm; height: 4mm; align-self: center; }
+  .flow .turn { display: flex; justify-content: flex-end; height: 3.8mm; padding-right: 11.5mm; }
+  .flow .turn svg { width: 4mm; height: 3.8mm; }
+
+  .mods { display: grid; grid-template-columns: 1fr 1fr; gap: 2mm 3mm; margin-top: 1.6mm; }
+  .mod .shot img { height: 36mm; }
+  .mod .t { font-size: 15pt; font-weight: 700; color: var(--ink); margin-top: 1mm; line-height: 1.1; }
+  .mod .d { font-size: 14pt; color: var(--muted); line-height: 1.12; }
+
+  /* ---------------- Results ---------------- */
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2mm; }
+  .kpi { background: var(--tint); border: 0.3mm solid #E2D4C7; border-radius: 1.4mm; text-align: center; padding: 1.4mm 0.8mm 1.2mm; }
+  .kpi .v { font-size: 26pt; font-weight: 700; color: var(--mocha); line-height: 1.02; }
+  .kpi .k { font-size: 14pt; color: var(--ink-soft); line-height: 1.1; }
+  .kpi.hi { background: var(--mocha); border-color: var(--mocha-dark); }
+  .kpi.hi .v, .kpi.hi .k { color: #fff; }
+
+  .callout {
+    margin-top: 1.2mm; text-align: center; font-size: 14pt; font-weight: 700; line-height: 1.1;
+    border-radius: 1mm; padding: 0.9mm 1mm; background: var(--tint); color: var(--mocha-dark); border: 0.3mm solid #E2D4C7;
+  }
+  .callout.good { background: var(--green-bg); color: var(--green); border-color: #BFE3CD; }
+
+  table.t { width: 100%; border-collapse: collapse; font-size: 14pt; line-height: 1.12; margin-top: 2.6mm; }
+  table.t th { background: #5E4A3D; color: #fff; text-align: left; font-weight: 700; padding: 1.1mm 1.4mm; }
+  table.t td { padding: 1mm 1.4mm; border-bottom: 0.3mm solid var(--line); vertical-align: middle; white-space: nowrap; }
+  table.t tr:nth-child(even) td { background: #FBF8F4; }
+  table.t td:first-child { font-weight: 700; color: var(--ink-soft); }
+  .pass { display: inline-block; background: var(--green-bg); color: var(--green); font-weight: 700; border-radius: 0.8mm; padding: 0 1.3mm; font-size: 14pt; }
+
+  .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 2.6mm; margin-top: 2.6mm; }
+  .chart { border: 0.3mm solid var(--line); border-radius: 1.4mm; padding: 1.6mm 1.6mm 1.2mm; background: #fff; }
+  .chart svg { display: block; margin: 0 auto; }
+  .chart .ct { font-size: 15pt; font-weight: 700; color: var(--ink); text-align: center; margin-bottom: 1mm; }
+  .chart .cap { margin-top: 0.8mm; }
+
+  /* ---------------- QR card ---------------- */
+  .scan { display: flex; gap: 4.6mm; align-items: center; }
+  .scan .qr { flex: none; width: 44mm; height: 44mm; border: 0.3mm solid var(--line); border-radius: 1.2mm; background: #fff; overflow: hidden; }
+  .scan .qr svg { width: 100%; height: 100%; display: block; }
+  .scan h2 { font-size: 26pt; display: block; }
+  .scan .url { font-size: 14pt; color: var(--mocha-dark); font-weight: 700; margin-top: 1mm; line-height: 1.15; }
+  .lockup { display: flex; align-items: center; gap: 2mm; margin-top: 2mm; }
+  .lockup img { width: 8.5mm; height: 8.5mm; }
+  .lockup span { font-size: 18pt; font-weight: 700; color: var(--ink); }
+  .lockup span em { font-style: normal; color: var(--mocha); }
+
+  ol.refs { font-size: 14pt; line-height: 1.18; padding-left: 5.6mm; }
+  ol.refs li { margin-bottom: 1.3mm; padding-left: 0.6mm; }
+  ol.refs li:last-child { margin-bottom: 0; }
+  ol.refs li::marker { color: var(--mocha); font-weight: 700; }
+</style>
+</head>
+<body>
+<div class="poster">
+
+  <!-- ===================== HEADER ===================== -->
+  <header class="header">
+    <img class="logo-ppsu" src="../assets/ppsu_naac_logo_hq.png" alt="P P Savani University – NAAC A+ accredited">
+    <div class="head-center">
+      <div class="title-row">
+        <img src="../assets/promptform_logo.svg" alt="PromptForm AI logo">
+        <h1><span class="brand">PromptForm AI</span> – AI-Powered Intelligent Form<br>Generation and Analytics Platform</h1>
+      </div>
+      <div class="author"><b>Korat Princy Vikasbhai</b> <span>(Enrollment No.: 23SE02CS119)</span></div>
+      <div class="affil">B.Tech Computer Science &amp; Engineering (7th Sem), School of Engineering, P P Savani University</div>
+      <div class="affil">Organization: <b>OCCUBIT SOLUTION</b> &nbsp;|&nbsp; Mentors: Mr. Zeel Shiyani (Company Mentor) &nbsp;|&nbsp; Ms. Kiraiti Bhatt (Institute Mentor)</div>
+    </div>
+    <img class="logo-soe" src="../assets/school_of_engineering_logo_hq.png" alt="School of Engineering">
+  </header>
+
+  <main class="cols">
+
+    <!-- ===================== COLUMN 1 ===================== -->
+    <section class="col">
+      <div class="card">
+        <h2><span class="ic"><svg viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg></span>Abstract</h2>
+        <p>PromptForm AI is a full-stack SaaS platform that turns a one-sentence prompt or an uploaded document into a validated, shareable online form in seconds. A hybrid engine pairs Google Gemini with rule-based AIFormBrain checks, and the platform supports editing, quizzes, analytics and teamwork. All 50 automated tests passed.</p>
+        <p class="kw"><b>Keywords:</b> Artificial Intelligence <i>·</i> Form Generation <i>·</i> Next.js <i>·</i> Google Gemini <i>·</i> Full-Stack Development</p>
+        <div class="shot" style="margin-top:2.4mm">
+          <div class="bar"><i></i><i></i><i></i></div>
+          <img src="../assets/ss_live_landing.png" style="height:34mm; object-position: 50% 31%;" alt="Live PromptForm AI landing page">
+        </div>
+        <div class="cap"><b>Figure 1.</b> Live landing page (Vercel deployment).</div>
+      </div>
+
+      <div class="card grow">
+        <h2><span class="ic"><svg viewBox="0 0 24 24"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg></span>Introduction</h2>
+        <ul class="b">
+          <li><b>Background:</b> admissions, intake, feedback and quizzes run on web forms, yet every field is still added by hand.</li>
+          <li><b>Problem:</b> a 10-field form took <span class="nw">15–25 min</span>; field-type errors were common and PDF forms were re-typed.</li>
+          <li><b>Solution:</b> generate a typed, validated form from a prompt or document and manage responses in one place.</li>
+        </ul>
+        <h3>Objectives</h3>
+        <ul class="b ok">
+          <li><b>Generate:</b> a complete form from a prompt in &lt;&nbsp;10&nbsp;s.</li>
+          <li><b>Digitise:</b> fields from PDF, DOCX, XLSX and images.</li>
+          <li><b>Build:</b> ≥&nbsp;10 field types, visual builder, share link.</li>
+          <li><b>Assess:</b> graded quizzes with anti-cheat and analytics.</li>
+          <li><b>Secure:</b> JWT, team roles, ≥&nbsp;40 tests, cloud deployment.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ===================== COLUMN 2 ===================== -->
+    <section class="col">
+      <div class="card">
+        <h2><span class="ic"><svg viewBox="0 0 24 24"><path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></svg></span>Materials</h2>
+        <table class="stack">
+          <tr><th>Frontend</th><td>Next.js 15 · React 19 · Tailwind CSS</td></tr>
+          <tr><th>Backend</th><td>Express 4 · PostgreSQL · Prisma ORM</td></tr>
+          <tr><th>AI engine</th><td>Google Gemini API · AIFormBrain rules</td></tr>
+          <tr><th>Cloud</th><td>Vercel · Render · managed PostgreSQL</td></tr>
+        </table>
+        <div class="arch">
+          <div class="r1">
+            <div class="node"><b>Client</b>browser</div>
+            <svg class="arrow" viewBox="0 0 10 8"><path d="M1 4h8M6.5 1.5 9 4 6.5 6.5M3.5 1.5 1 4l2.5 2.5" stroke="#8B6B55" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <div class="node dark"><b>Next.js 15</b>29 pages · Vercel</div>
+            <svg class="arrow" viewBox="0 0 10 8"><path d="M1 4h8M6.5 1.5 9 4 6.5 6.5M3.5 1.5 1 4l2.5 2.5" stroke="#8B6B55" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <div class="node darker"><b>Express 4 API</b>73 routes · Render<span class="chip">AIFormBrain</span></div>
+          </div>
+          <!-- connector: backend (centre ≈ 96.6 mm) to the three services (centres at 1/6, 1/2, 5/6 of the row) -->
+          <svg class="bus" viewBox="0 0 121.6 6" preserveAspectRatio="none">
+            <g stroke="#8B6B55" stroke-width="0.4" fill="none" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M96.6 0V2.2M19.6 2.2H102M19.6 2.2V5.4M60.8 2.2V5.4M102 2.2V5.4"/>
+              <path d="M18.4 4.3 19.6 5.6 20.8 4.3M59.6 4.3 60.8 5.6 62 4.3M100.8 4.3 102 5.6 103.2 4.3"/>
+            </g>
+          </svg>
+          <div class="r2">
+            <div class="node"><b>PostgreSQL</b>Prisma ORM</div>
+            <div class="node"><b>Gemini API</b>5-model fallback</div>
+            <div class="node"><b>E-mail</b>SMTP / Resend</div>
+          </div>
+        </div>
+        <div class="cap"><b>Figure 2.</b> Three-tier system architecture.</div>
+      </div>
+
+      <div class="card grow">
+        <h2><span class="ic"><svg viewBox="0 0 24 24"><rect width="8" height="8" x="3" y="3" rx="2"/><path d="M7 11v4a2 2 0 0 0 2 2h4"/><rect width="8" height="8" x="13" y="13" rx="2"/></svg></span>Methodology</h2>
+        <p class="small">Agile Scrum: two-week sprints over 14 weeks, with mentor demos and four progress-report milestones.</p>
+        <div class="steps">
+          <div class="step"><span class="n">1</span>Problem Study</div>
+          <div class="step"><span class="n">2</span>Requirements</div>
+          <div class="step"><span class="n">3</span>Design</div>
+          <div class="step"><span class="n">4</span>Core Build</div>
+          <div class="step"><span class="n">5</span>AI Engine</div>
+          <div class="step"><span class="n">6</span>Features</div>
+          <div class="step"><span class="n">7</span>Testing</div>
+          <div class="step"><span class="n">8</span>Deployment</div>
+          <div class="step"><span class="n">9</span>Documentation</div>
+        </div>
+        <h3>AI Form Generation Pipeline</h3>
+        <div class="flow">
+          <div class="row">
+            <div class="box">Prompt / File</div>
+            <svg class="arr" viewBox="0 0 10 10"><path d="M1 5h7M5 2l3 3-3 3" stroke="#8B6B55" stroke-width="1.3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <div class="box">Validate &amp; Credits</div>
+            <svg class="arr" viewBox="0 0 10 10"><path d="M1 5h7M5 2l3 3-3 3" stroke="#8B6B55" stroke-width="1.3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <div class="box">Document Parsing</div>
+            <svg class="arr" viewBox="0 0 10 10"><path d="M1 5h7M5 2l3 3-3 3" stroke="#8B6B55" stroke-width="1.3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <div class="box ai">AIFormBrain Plan</div>
+          </div>
+          <div class="turn"><svg viewBox="0 0 8 10"><path d="M4 1v7M1 5l3 3 3-3" stroke="#8B6B55" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          <div class="row">
+            <div class="box end">Builder &amp; Share</div>
+            <svg class="arr" viewBox="0 0 10 10"><path d="M9 5H2M5 2 2 5l3 3" stroke="#8B6B55" stroke-width="1.3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <div class="box">Persist &amp; Publish</div>
+            <svg class="arr" viewBox="0 0 10 10"><path d="M9 5H2M5 2 2 5l3 3" stroke="#8B6B55" stroke-width="1.3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <div class="box">Quality Review</div>
+            <svg class="arr" viewBox="0 0 10 10"><path d="M9 5H2M5 2 2 5l3 3" stroke="#8B6B55" stroke-width="1.3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <div class="box ai">Gemini (JSON)</div>
+          </div>
+        </div>
+        <div class="cap"><b>Figure 3.</b> Hybrid generation with rule-based fallback.</div>
+
+        <h3>Core Modules &amp; Features</h3>
+        <div class="mods">
+          <div class="mod">
+            <div class="shot"><div class="bar"><i></i><i></i><i></i></div><img src="../assets/ss_ai_generator.png" style="object-position: 0% 0%;" alt="AI Form Generator"></div>
+            <div class="t">AI Form Generator</div>
+            <div class="d">Prompt or file → form</div>
+          </div>
+          <div class="mod">
+            <div class="shot"><div class="bar"><i></i><i></i><i></i></div><img src="../assets/ss_visual_builder.png" style="object-position: 50% 0%;" alt="Visual Form Builder"></div>
+            <div class="t">Visual Form Builder</div>
+            <div class="d">11 field types, themes</div>
+          </div>
+          <div class="mod">
+            <div class="shot"><div class="bar"><i></i><i></i><i></i></div><img src="../assets/ss_public_responder.png" style="object-position: 50% 35%;" alt="Public Responder"></div>
+            <div class="t">Responder &amp; Quizzes</div>
+            <div class="d">Scoring and anti-cheat</div>
+          </div>
+          <div class="mod">
+            <div class="shot"><div class="bar"><i></i><i></i><i></i></div><img src="../assets/ss_analytics.png" style="object-position: 50% 0%;" alt="Analytics Dashboard"></div>
+            <div class="t">Analytics &amp; Teams</div>
+            <div class="d">Completion and sentiment</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== COLUMN 3 ===================== -->
+    <section class="col">
+      <div class="card grow">
+        <h2><span class="ic"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg></span>Results</h2>
+        <div class="kpis">
+          <div class="kpi hi"><div class="v">50/50</div><div class="k">Tests<br>passed</div></div>
+          <div class="kpi"><div class="v">10/10</div><div class="k">Objectives<br>met</div></div>
+          <div class="kpi"><div class="v">9</div><div class="k">Defects<br>fixed</div></div>
+          <div class="kpi"><div class="v">≈&nbsp;8&nbsp;s</div><div class="k">Prompt<br>to form</div></div>
+        </div>
+        <table class="t">
+          <thead><tr><th>Test ID</th><th>Scenario</th><th>Expected</th><th>Status</th></tr></thead>
+          <tbody>
+            <tr><td>AUTH-03</td><td>Single active session</td><td>401</td><td><span class="pass">PASS</span></td></tr>
+            <tr><td>BILL-01</td><td>Free-plan 5-form limit</td><td>403</td><td><span class="pass">PASS</span></td></tr>
+            <tr><td>RUN-06</td><td>Tab-switch anti-cheat</td><td>201, flagged</td><td><span class="pass">PASS</span></td></tr>
+            <tr><td>TEAM-02</td><td>Viewer cannot edit (RBAC)</td><td>403</td><td><span class="pass">PASS</span></td></tr>
+            <tr><td>AI-GEN-04</td><td>Form from PDF upload</td><td>200</td><td><span class="pass">PASS</span></td></tr>
+          </tbody>
+        </table>
+        <div class="cap"><b>Table 1.</b> Representative automated test cases.</div>
+
+        <div class="charts">
+          <div class="chart">
+            <div class="ct">Tests passed by suite</div>
+            <svg viewBox="0 0 55 49" style="width:55mm;height:49mm" font-family="Cambria, Georgia, serif">
+              <!-- 1 unit = 1 mm; text 4.94 mm = 14 pt; bars start at x = 21.4; scale: 11 tests = 18 mm -->
+              <line x1="21.1" y1="0.3" x2="21.1" y2="48.7" stroke="#B9A797" stroke-width="0.3"/>
+              <g font-size="4.94" fill="#342A24">
+                <g transform="translate(0,4.9)"><text x="20.2" text-anchor="end">Auth</text><rect x="21.4" y="-3.5" width="14.73" height="4" rx="0.6" fill="#8B6B55"/><text x="37.3">9/9</text></g>
+                <g transform="translate(0,10.2)"><text x="20.2" text-anchor="end">Billing</text><rect x="21.4" y="-3.5" width="9.82" height="4" rx="0.6" fill="#8B6B55"/><text x="32.4">6/6</text></g>
+                <g transform="translate(0,15.5)"><text x="20.2" text-anchor="end">Builder</text><rect x="21.4" y="-3.5" width="6.55" height="4" rx="0.6" fill="#8B6B55"/><text x="29.2">4/4</text></g>
+                <g transform="translate(0,20.8)"><text x="20.2" text-anchor="end">Runner</text><rect x="21.4" y="-3.5" width="11.45" height="4" rx="0.6" fill="#8B6B55"/><text x="34.1">7/7</text></g>
+                <g transform="translate(0,26.1)"><text x="20.2" text-anchor="end">Quiz</text><rect x="21.4" y="-3.5" width="4.91" height="4" rx="0.6" fill="#8B6B55"/><text x="27.5">3/3</text></g>
+                <g transform="translate(0,31.4)"><text x="20.2" text-anchor="end">Analytics</text><rect x="21.4" y="-3.5" width="4.91" height="4" rx="0.6" fill="#8B6B55"/><text x="27.5">3/3</text></g>
+                <g transform="translate(0,36.7)"><text x="20.2" text-anchor="end">Team</text><rect x="21.4" y="-3.5" width="6.55" height="4" rx="0.6" fill="#8B6B55"/><text x="29.2">4/4</text></g>
+                <g transform="translate(0,42.0)"><text x="20.2" text-anchor="end">AI / Flow</text><rect x="21.4" y="-3.5" width="4.91" height="4" rx="0.6" fill="#8B6B55"/><text x="27.5">3/3</text></g>
+                <g transform="translate(0,47.3)"><text x="20.2" text-anchor="end" font-weight="700">AI Gen</text><rect x="21.4" y="-3.5" width="18" height="4" rx="0.6" fill="#5E4A3D"/><text x="40.6" font-weight="700">11/11</text></g>
+              </g>
+            </svg>
+            <div class="callout">39 platform + 11 AI</div>
+            <div class="cap"><b>Figure 4.</b> Passed cases per suite.</div>
+          </div>
+          <div class="chart">
+            <div class="ct">Form creation time</div>
+            <svg viewBox="0 0 55 49" style="width:55mm;height:49mm" font-family="Cambria, Georgia, serif">
+              <!-- 1 unit = 1 mm; scale: 25 min = 27 mm from x = 0.5; dark = lower bound, light = upper bound of the reported range -->
+              <g font-size="4.94" fill="#342A24">
+                <text x="0.5" y="4.9">Manual (Google Forms)</text>
+                <rect x="0.5" y="6.5" width="16.2" height="4" rx="0.6" fill="#A8998C"/>
+                <rect x="17.1" y="6.5" width="10.4" height="4" rx="0.6" fill="#D9CEC4"/>
+                <text x="29" y="10.1">15–25 min</text>
+
+                <text x="0.5" y="16.9">Template (Jotform)</text>
+                <rect x="0.5" y="18.5" width="5.4" height="4" rx="0.6" fill="#A8998C"/>
+                <rect x="6.3" y="18.5" width="2.84" height="4" rx="0.6" fill="#D9CEC4"/>
+                <text x="10.6" y="22.1">5–8 min</text>
+
+                <text x="0.5" y="28.9">PromptForm (prompt)</text>
+                <rect x="0.5" y="30.5" width="1.2" height="4" rx="0.4" fill="#8B6B55"/>
+                <text x="3" y="34.1" font-weight="700" fill="#795D49">≈ 8 s</text>
+
+                <text x="0.5" y="40.9">PromptForm (document)</text>
+                <rect x="0.5" y="42.5" width="1.4" height="4" rx="0.4" fill="#8B6B55"/>
+                <text x="3.2" y="46.1" font-weight="700" fill="#795D49">≈ 12 s</text>
+              </g>
+            </svg>
+            <div class="callout good">≈ 20 min → &lt; 10 s</div>
+            <div class="cap"><b>Figure 5.</b> Time to a ready form.</div>
+          </div>
+        </div>
+
+        <h3>Discussion</h3>
+        <ul class="b">
+          <li><b>Faster:</b> creation time fell from <span class="nw">≈ 15–25 min</span> to <span class="nw">≈ 8–12 s</span>.</li>
+          <li><b>Reliable:</b> rule-based review fixed wrong field types and missing options; model fallback kept generation working during Gemini outages.</li>
+          <li><b>Secure:</b> API tests exposed client-only checks, which were fixed server-side and re-verified.</li>
+          <li><b>Responsive:</b> CRUD APIs took <span class="nw">≈ 40–200 ms</span> and submissions <span class="nw">≈ 100–250 ms</span> <span class="nw">(target &lt; 500 ms)</span>.</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="scan">
+          <div class="qr" id="qr"><svg role="img" aria-label="QR code: https://promptform-ai-frontend.vercel.app/" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 41 41" shape-rendering="crispEdges"><path fill="#FFFFFF" d="M0 0h41v41H0z"/><path stroke="#1E1712" d="M4 4.5h7m1 0h1m1 0h3m1 0h2m1 0h3m2 0h2m2 0h7M4 5.5h1m5 0h1m2 0h5m2 0h2m2 0h3m1 0h1m1 0h1m5 0h1M4 6.5h1m1 0h3m1 0h1m3 0h1m1 0h1m1 0h5m2 0h1m2 0h1m1 0h1m1 0h3m1 0h1M4 7.5h1m1 0h3m1 0h1m2 0h2m2 0h2m4 0h2m3 0h1m1 0h1m1 0h3m1 0h1M4 8.5h1m1 0h3m1 0h1m1 0h2m1 0h1m5 0h2m2 0h1m1 0h1m2 0h1m1 0h3m1 0h1M4 9.5h1m5 0h1m1 0h2m1 0h4m5 0h3m3 0h1m5 0h1M4 10.5h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7M14 11.5h1m1 0h1m1 0h1m1 0h1m4 0h1M5 12.5h7m2 0h2m1 0h1m1 0h3m4 0h1m4 0h2m3 0h1M4 13.5h4m3 0h3m2 0h1m1 0h1m3 0h3m2 0h1m2 0h2m1 0h2m1 0h1M6 14.5h3m1 0h2m1 0h2m3 0h1m1 0h1m1 0h1m1 0h1m1 0h1m2 0h2m1 0h1m1 0h2M4 15.5h2m1 0h2m4 0h1m4 0h3m4 0h1m4 0h1m1 0h5M6 16.5h2m1 0h3m3 0h2m1 0h1m3 0h1m3 0h4m1 0h3m1 0h2M4 17.5h2m5 0h2m2 0h1m3 0h2m3 0h2m1 0h1m1 0h3m1 0h1m1 0h2M4 18.5h1m1 0h1m1 0h3m1 0h1m3 0h2m1 0h3m1 0h1m2 0h1m2 0h3m3 0h1M6 19.5h1m1 0h1m2 0h5m2 0h2m3 0h3m1 0h4m2 0h2M5 20.5h1m2 0h1m1 0h1m2 0h1m1 0h1m1 0h1m2 0h4m2 0h1m1 0h2m1 0h3m2 0h1M5 21.5h1m2 0h1m2 0h1m1 0h5m2 0h1m1 0h4m1 0h1m1 0h3m1 0h2m1 0h1M6 22.5h5m3 0h1m1 0h1m2 0h2m1 0h1m1 0h2m3 0h1m1 0h2m1 0h2M4 23.5h1m2 0h1m3 0h2m1 0h1m2 0h2m1 0h1m1 0h1m1 0h4m2 0h5m1 0h1M5 24.5h1m1 0h2m1 0h1m1 0h1m2 0h3m3 0h3m2 0h4m1 0h3M4 25.5h2m3 0h1m1 0h1m5 0h2m2 0h2m3 0h2m2 0h1m2 0h2m1 0h1M4 26.5h1m1 0h7m1 0h2m4 0h3m1 0h1m1 0h1m1 0h1m2 0h2m1 0h2M4 27.5h1m1 0h1m4 0h3m2 0h1m2 0h3m1 0h6m3 0h3m1 0h1M4 28.5h1m1 0h2m1 0h6m1 0h1m2 0h1m1 0h1m1 0h1m2 0h1m1 0h5m3 0h1M12 29.5h1m2 0h1m3 0h3m1 0h1m1 0h2m1 0h1m3 0h1m1 0h3M4 30.5h7m1 0h3m2 0h2m1 0h1m3 0h2m1 0h2m1 0h1m1 0h1m1 0h2M4 31.5h1m5 0h1m1 0h1m2 0h1m2 0h5m1 0h2m1 0h2m3 0h3m1 0h1M4 32.5h1m1 0h3m1 0h1m1 0h2m3 0h1m4 0h2m2 0h1m1 0h6m1 0h1M4 33.5h1m1 0h3m1 0h1m1 0h1m2 0h2m1 0h1m2 0h3m1 0h2m2 0h1m2 0h3m1 0h1M4 34.5h1m1 0h3m1 0h1m1 0h2m2 0h3m9 0h4m1 0h2M4 35.5h1m5 0h1m1 0h1m3 0h2m1 0h3m3 0h1m1 0h1m1 0h1m2 0h3M4 36.5h7m2 0h2m1 0h1m1 0h5m3 0h4m1 0h1m3 0h1"/></svg></div>
+          <div>
+            <h2>Scan to Visit PromptForm AI</h2>
+            <div class="url">promptform-ai-frontend.vercel.app</div>
+            <div class="lockup"><img src="../assets/promptform_logo.svg" alt=""><span>PromptForm <em>AI</em></span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== COLUMN 4 ===================== -->
+    <section class="col">
+      <div class="card">
+        <h2><span class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg></span>Conclusion</h2>
+        <ul class="b">
+          <li><b>Summary:</b> a deployed, secure platform that turns a prompt or document into a shareable form in seconds; all 10 objectives were met.</li>
+          <li><b>Applications:</b> registrations, patient intake, surveys and classroom quizzes.</li>
+          <li><b>Limitations:</b> Gemini dependence, <span class="nw">30–50 s</span> cold starts on free hosting, no real payments.</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h2><span class="ic"><svg viewBox="0 0 24 24"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></svg></span>Recommendations</h2>
+        <ul class="b go">
+          <li><b>Payments:</b> Razorpay / Stripe billing.</li>
+          <li><b>Smarter AI:</b> generated conditional logic.</li>
+          <li><b>Multilingual:</b> voice-to-form, translation.</li>
+          <li><b>Integrations:</b> Sheets, Slack, Zapier.</li>
+          <li><b>Accessibility:</b> WCAG 2.2 AA audit.</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h2><span class="ic"><svg viewBox="0 0 24 24"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg></span>Acknowledgements</h2>
+        <p>Sincere thanks to Mr. Zeel Shiyani (Company Mentor), Ms. Kiraiti Bhatt (Institute Mentor), OCCUBIT SOLUTION and the School of Engineering, P P Savani University, for their guidance and support.</p>
+      </div>
+
+      <div class="card grow">
+        <h2><span class="ic"><svg viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg></span>References</h2>
+        <ol class="refs">
+          <li>Vaswani, A., et al. (2017). Attention is all you need. <i>Advances in Neural Information Processing Systems, 30</i>.</li>
+          <li>Brown, T., et al. (2020). Language models are few-shot learners. <i>Advances in Neural Information Processing Systems, 33</i>.</li>
+          <li>Google. (2024). <i>Gemini API documentation: Generate structured output.</i> https://ai.google.dev/gemini-api/docs/structured-output</li>
+          <li>Vercel. (2024). <i>Next.js documentation.</i> https://nextjs.org/docs</li>
+          <li>OWASP Foundation. (2021). <i>OWASP Top 10: 2021.</i> https://owasp.org/Top10/</li>
+        </ol>
+      </div>
+    </section>
+
+  </main>
+</div>
+</body>
+</html>

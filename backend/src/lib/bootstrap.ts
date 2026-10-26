@@ -5,6 +5,7 @@ import { execSync } from 'child_process';
 import { db } from './db';
 import { initCache } from './cache';
 import { logger } from './logger';
+import { ensureFormInvitationTable } from './schemaUpgrades';
 import { Express } from 'express';
 
 export async function bootstrap(app: Express, port: number): Promise<void> {
@@ -63,6 +64,9 @@ export async function bootstrap(app: Express, port: number): Promise<void> {
       }
     }
   }
+
+  // Add tables introduced after this database was created
+  await ensureFormInvitationTable();
 
   // 3. Validate Redis Connection
   try {

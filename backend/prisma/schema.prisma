@@ -24,6 +24,7 @@ model User {
   activeSessionToken String?
   activities       Activity[]
   collaborations   FormCollaborator[]
+  formInvitationsSent FormInvitation[] @relation("FormInvitationsSent")
 }
 
 model Form {
@@ -50,6 +51,7 @@ model Form {
   events       FormEvent[]
   dailyMetrics FormDailyMetric[]
   collaborators FormCollaborator[]
+  invitations  FormInvitation[]
   activities   Activity[]
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
@@ -243,6 +245,29 @@ model FormCollaborator {
   @@unique([formId, userId])
   @@index([userId])
   @@index([formId])
+}
+
+// Invitation for an email address that has no account yet; accepting it creates a FormCollaborator
+model FormInvitation {
+  id          String    @id @default(uuid())
+  formId      String
+  form        Form      @relation(fields: [formId], references: [id], onDelete: Cascade)
+  email       String
+  role        String    @default("editor") // "editor", "viewer"
+  tokenHash   String    @unique // SHA-256 of the emailed token; the raw token is never stored
+  status      String    @default("pending") // "pending", "accepted", "expired", "cancelled"
+  invitedById String
+  invitedBy   User      @relation("FormInvitationsSent", fields: [invitedById], references: [id], onDelete: Cascade)
+  lastSentAt  DateTime  @default(now())
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // One invitation per address per form: re-inviting reactivates the same row
+  @@unique([formId, email])
+  @@index([email])
+  @@index([invitedById])
 }
 
 model Activity {

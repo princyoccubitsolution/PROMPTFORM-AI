@@ -1,9 +1,11 @@
-// A team invitation opened before signing in/up is remembered by /accept-invite so that
-// authentication (including new-account onboarding) returns there to finish accepting it.
+// A team or form invitation opened before signing in/up is remembered by /accept-invite or
+// /form-invite so that authentication (including new-account onboarding) returns there to finish accepting it.
 export function getPendingInviteUrl(): string | null {
   try {
     const token = localStorage.getItem('promptform_pending_invite');
-    return token ? `/accept-invite?token=${encodeURIComponent(token)}` : null;
+    if (token) return `/accept-invite?token=${encodeURIComponent(token)}`;
+    const formToken = localStorage.getItem('promptform_pending_form_invite');
+    return formToken ? `/form-invite?token=${encodeURIComponent(formToken)}` : null;
   } catch {
     return null;
   }

@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>PromptForm AI – PPSU Poster (A2 Landscape)</title>
+<!--
+  PromptForm AI – PPSU Internship / UDP Final Project Poster (editable source, v2 redesign)
+  Page: A2 landscape, 594 mm × 420 mm (PPSU guideline). Font: Cambria (PPSU guideline).
+  Type scale: Title 48 pt · Subtitle 30 pt · Section headings 28 pt · Footer headings 24 pt ·
+              Body 18 pt · Diagram/table labels 14–16 pt · Captions & references 14 pt.
+  Colours: PromptForm AI "Mocha" theme – #FAF6EF background, #342A24 text, #8B6B55 accent, #E8DDD2 secondary.
+  Facts: PRINCY_PROMPTFORM_AI_FINAL_REPORT.docx. Screenshot: AI-generated Patient Intake Form in the visual builder (report Fig. 8.2).
+  Export from Chrome: Print → Save as PDF, paper 594 × 420 mm, Margins: None, Background graphics: ON.
+-->
+<style>
+  @page { size: 594mm 420mm; margin: 0; }
+
+  :root {
+    --bg: #FAF6EF;           /* site --background */
+    --ink: #342A24;          /* site --foreground */
+    --ink-2: #5E4A3D;
+    --accent: #8B6B55;       /* site --primary */
+    --accent-dk: #795D49;    /* site --hover-accent */
+    --sand: #E8DDD2;         /* site --secondary */
+    --sand-2: #F3ECE4;
+    --line: #E4D9CD;         /* site --border */
+    --muted: #6E625A;
+    --ok: #22784F; --ok-bg: #E3F1E8;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { width: 594mm; height: 420mm; background: var(--bg); -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body {
+    width: 594mm; height: 420mm; overflow: hidden; background: var(--bg);
+    font-family: Cambria, "Cambria Math", Caladea, Georgia, serif;
+    color: var(--ink); font-size: 18pt; line-height: 1.2;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  .poster { position: relative; width: 594mm; height: 420mm; }
+  .poster::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 3mm; background: var(--accent); }
+  /* print only: paint 1 mm past the bottom edge so page-size rounding never leaves an unpainted sliver */
+  @media print { .poster::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1mm; height: 2mm; background: var(--bg); z-index: -1; } }
+
+  /* ================= Header ================= */
+  .header {
+    position: absolute; left: 14mm; right: 14mm; top: 8mm; height: 48mm;
+    display: grid; grid-template-columns: 44mm 1fr 70mm; align-items: center; column-gap: 10mm;
+  }
+  .logo-ppsu { width: 44mm; height: 44mm; object-fit: contain; display: block; }
+  .logo-soe { width: 70mm; display: block; }
+  .hc { text-align: center; }
+  .kicker { font-size: 16pt; font-weight: 700; letter-spacing: 1.6pt; color: var(--accent); text-transform: uppercase; }
+  .title { display: flex; align-items: center; justify-content: center; gap: 4.5mm; margin-top: 1.4mm; }
+  .title img { width: 17mm; height: 17mm; }
+  h1 { font-size: 48pt; line-height: 1; font-weight: 700; color: var(--ink); letter-spacing: -0.3pt; }
+  h1 span { color: var(--accent); }
+  .subtitle { font-size: 30pt; line-height: 1.1; color: var(--ink-2); margin-top: 1.6mm; }
+  .meta { font-size: 16pt; color: var(--muted); margin-top: 1.6mm; letter-spacing: 0.2pt; }
+
+  /* details strip */
+  .details {
+    position: absolute; left: 14mm; right: 14mm; top: 60mm; height: 17mm;
+    background: #fff; border: 0.3mm solid var(--line); border-radius: 2.4mm;
+    display: grid; grid-template-columns: 1fr 1.45fr 1.85fr 0.95fr; align-items: center;
+  }
+  .details > div { padding: 0 6mm; border-left: 0.3mm solid var(--line); }
+  .details > div:first-child { border-left: 0; }
+  .details small { display: block; font-size: 14pt; font-weight: 700; letter-spacing: 1.2pt; color: var(--accent); text-transform: uppercase; line-height: 1.15; }
+  .details span { display: block; font-size: 18pt; line-height: 1.2; white-space: nowrap; }
+  .details span b { color: var(--ink); }
+
+  /* ================= Main grid ================= */
+  .main {
+    position: absolute; left: 14mm; right: 14mm; top: 82mm; height: 274mm;
+    display: grid; grid-template-columns: 150mm 1fr 150mm; column-gap: 10mm;
+  }
+  .col { display: flex; flex-direction: column; gap: 5mm; min-height: 0; }
+  .card {
+    background: #fff; border: 0.3mm solid var(--line); border-radius: 2.4mm;
+    padding: 4.6mm 6mm 4.8mm; box-shadow: 0 0.3mm 0.9mm rgba(52, 42, 36, 0.06);
+    flex: 0 0 auto; overflow: hidden;
+  }
+  .card.grow { flex: 1 0 auto; }
+
+  /* numbered section heading with a thin rule */
+  .sh { display: flex; align-items: baseline; gap: 2.6mm; font-size: 26pt; line-height: 1.05; font-weight: 700; margin-bottom: 3mm; white-space: nowrap; }
+  .sh .n { color: var(--accent); font-size: 26pt; min-width: 10mm; }
+  .sh::after { content: ""; flex: 1; height: 0.3mm; background: var(--line); align-self: center; margin-left: 1mm; }
+  .fh { font-size: 24pt; line-height: 1.05; font-weight: 700; margin-bottom: 1.8mm; display: flex; align-items: baseline; gap: 3mm; }
+  .fh::after { content: ""; flex: 1; height: 0.3mm; background: var(--line); align-self: center; }
+
+  p { margin: 0; }
+  .lead { color: var(--ink); }
+  .cap { font-size: 14pt; line-height: 1.2; color: var(--muted); margin-top: 2.2mm; }
+  .cap b { color: var(--ink-2); }
+
+  ul.l { list-style: none; }
+  ul.l li { position: relative; padding-left: 5.4mm; margin-top: 1.5mm; }
+  ul.l li:first-child { margin-top: 0; }
+  ul.l li::before { content: ""; position: absolute; left: 0.2mm; top: 0.4em; width: 2.2mm; height: 2.2mm; border-radius: 0.5mm; background: var(--accent); }
+  ul.l li b { color: var(--ink-2); }
+  ul.ck li { padding-left: 6.4mm; }
+  ul.ck li::before {
+    width: 4.4mm; height: 4.4mm; left: 0; top: 0.16em; border-radius: 50%; background-color: transparent;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='11.5' fill='%238B6B55'/%3E%3Cpath d='m7.2 12.4 3.2 3.2 6.4-6.8' stroke='%23fff' stroke-width='2.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat 0 0 / 100% 100%;
+  }
+
+  /* technology stack */
+  .stack { display: grid; grid-template-columns: max-content 1fr; gap: 2mm 4mm; align-items: center; }
+  .stack dt { font-size: 16pt; font-weight: 700; color: var(--ink-2); }
+  .stack dd { display: flex; flex-wrap: wrap; gap: 1.6mm; }
+  .chip { font-size: 16pt; line-height: 1.15; padding: 0.7mm 2.4mm; border-radius: 5mm; background: var(--sand-2); border: 0.3mm solid var(--line); color: var(--ink); white-space: nowrap; }
+  .chip.ai { background: var(--accent); border-color: var(--accent-dk); color: #fff; }
+
+  /* ================= Proposed solution visual ================= */
+  .sol { display: grid; grid-template-columns: 60mm 8mm 46mm 8mm 1fr; align-items: center; margin-top: 3.4mm; }
+  .arrow { width: 8mm; height: 6mm; display: block; }
+  .pcard { border: 0.3mm solid var(--line); border-radius: 2mm; background: var(--sand-2); padding: 3.4mm 3.6mm; }
+  .tag { font-size: 14pt; font-weight: 700; letter-spacing: 1.2pt; text-transform: uppercase; color: var(--accent); line-height: 1.1; }
+  .pcard .q { font-size: 16pt; font-style: italic; line-height: 1.22; margin-top: 1.6mm; color: var(--ink); }
+  .pcard .alt { font-size: 14pt; color: var(--muted); margin-top: 2mm; line-height: 1.2; }
+  .ecard { border-radius: 2mm; background: var(--accent); color: #fff; padding: 3.4mm 3.4mm; }
+  .ecard .tag { color: #F3E6DA; }
+  .ecard ol { list-style: none; margin-top: 1.8mm; }
+  .ecard li { font-size: 14pt; line-height: 1.18; display: flex; gap: 1.6mm; align-items: flex-start; margin-top: 1.4mm; }
+  .ecard li i { font-style: normal; flex: none; width: 5.4mm; height: 5.4mm; border-radius: 50%; background: rgba(255,255,255,0.22); display: flex; align-items: center; justify-content: center; font-size: 14pt; font-weight: 700; margin-top: 0.2mm; }
+  .shot { border: 0.3mm solid #D9CBBE; border-radius: 2mm; overflow: hidden; background: #fff; box-shadow: 0 0.6mm 1.8mm rgba(52, 42, 36, 0.12); }
+  .shot .bar { height: 4mm; background: var(--sand-2); border-bottom: 0.3mm solid var(--line); display: flex; align-items: center; gap: 1.2mm; padding-left: 2mm; }
+  .shot .bar i { width: 1.5mm; height: 1.5mm; border-radius: 50%; }
+  .shot .bar i:nth-child(1) { background: #EE6A5F; } .shot .bar i:nth-child(2) { background: #F5BE4F; } .shot .bar i:nth-child(3) { background: #62C554; }
+  .shot img { display: block; width: 100%; height: 63mm; object-fit: cover; object-position: 50% 0%; }
+
+  /* ================= Architecture ================= */
+  .arch { display: grid; grid-template-columns: 1fr 5mm 1fr 5mm 1fr 5mm 1fr 5mm 1fr 5mm 1fr; align-items: stretch; margin-top: 3.4mm; }
+  .arch .arrow { width: 5mm; height: 5mm; align-self: center; }
+  .node { border: 0.3mm solid var(--line); border-radius: 2mm; background: #fff; text-align: center; padding: 2.4mm 1.2mm 2.2mm; display: flex; flex-direction: column; align-items: center; }
+  .node svg.ic { width: 7mm; height: 7mm; fill: none; stroke: var(--accent); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .node b { font-size: 14pt; line-height: 1.1; margin-top: 1.2mm; color: var(--ink); }
+  .node span { font-size: 14pt; line-height: 1.12; color: var(--muted); margin-top: 0.8mm; }
+  .node.mid { background: var(--sand-2); }
+  .node.ai { background: var(--accent); border-color: var(--accent-dk); }
+  .node.ai svg.ic { stroke: #fff; } .node.ai b { color: #fff; } .node.ai span { color: #F3E6DA; }
+  .note { font-size: 14pt; color: var(--muted); margin-top: 2.6mm; text-align: center; }
+  .note b { color: var(--ink-2); }
+
+  /* ================= Workflow ================= */
+  .flow { position: relative; display: grid; grid-template-columns: repeat(6, 1fr); gap: 3mm; margin-top: 3.6mm; }
+  .flow::before { content: ""; position: absolute; left: 8%; right: 8%; top: 4.6mm; height: 0.5mm; background: var(--sand); }
+  .st { position: relative; text-align: center; }
+  .st .c { width: 9.2mm; height: 9.2mm; border-radius: 50%; background: var(--accent); color: #fff; font-size: 16pt; font-weight: 700; display: flex; align-items: center; justify-content: center; margin: 0 auto; box-shadow: 0 0 0 1.4mm #fff; }
+  .st b { display: block; font-size: 16pt; line-height: 1.1; margin-top: 2mm; }
+  .st span { display: block; font-size: 14pt; line-height: 1.15; color: var(--muted); margin-top: 0.8mm; }
+  .method { font-size: 16pt; line-height: 1.25; margin-top: 3.6mm; padding-top: 3mm; border-top: 0.3mm solid var(--line); color: var(--ink); }
+  .method b { color: var(--accent-dk); }
+
+  /* ================= Key features ================= */
+  .feat { display: grid; grid-template-columns: 1fr 1fr; gap: 1.7mm 4mm; }
+  .ft { display: flex; align-items: center; gap: 2.4mm; }
+  .ft .i { flex: none; width: 7mm; height: 7mm; border-radius: 50%; background: var(--sand-2); border: 0.3mm solid var(--line); display: flex; align-items: center; justify-content: center; }
+  .ft svg { width: 4.6mm; height: 4.6mm; fill: none; stroke: var(--accent); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .ft b { font-size: 16pt; line-height: 1.1; color: var(--ink); white-space: nowrap; }
+
+  /* ================= Results ================= */
+  .kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2.4mm; }
+  .kpi { border: 0.3mm solid var(--line); border-radius: 2mm; background: var(--sand-2); text-align: center; padding: 1.8mm 1mm 1.6mm; }
+  .kpi .v { font-size: 26pt; font-weight: 700; color: var(--accent); line-height: 1.05; }
+  .kpi .k { font-size: 14pt; color: var(--ink-2); line-height: 1.15; }
+  .kpi.hi { background: var(--accent); border-color: var(--accent-dk); }
+  .kpi.hi .v, .kpi.hi .k { color: #fff; }
+  .chart { margin-top: 2.6mm; }
+  .chart .ct { font-size: 15pt; font-weight: 700; color: var(--ink); margin-bottom: 1.2mm; }
+  .chart svg { display: block; }
+
+  /* ================= Footer band ================= */
+  .foot {
+    position: absolute; left: 14mm; right: 14mm; top: 361mm; height: 51mm;
+    display: grid; grid-template-columns: 1fr 150mm 112mm; column-gap: 10mm;
+  }
+  .foot .card { height: 100%; padding: 3.6mm 6mm; }
+  ol.refs { list-style: none; display: grid; grid-template-columns: 1fr; gap: 0.8mm; counter-reset: r; }
+  ol.refs li { font-size: 14pt; line-height: 1.16; position: relative; padding-left: 7mm; counter-increment: r; }
+  ol.refs li::before { content: "[" counter(r) "]"; position: absolute; left: 0; color: var(--accent); font-weight: 700; }
+  .ack { font-size: 18pt; line-height: 1.22; }
+  .qrbox { display: flex; gap: 4mm; align-items: center; height: 100%; }
+  .qr { flex: none; width: 34mm; height: 34mm; border: 0.3mm solid var(--line); border-radius: 1.2mm; overflow: hidden; background: #fff; }
+  .qr svg { width: 100%; height: 100%; display: block; }
+  .qrbox .t { font-size: 24pt; font-weight: 700; line-height: 1.08; }
+  .qrbox .u { font-size: 14pt; color: var(--accent-dk); font-weight: 700; margin-top: 1.6mm; line-height: 1.2; }
+</style>
+</head>
+<body>
+<div class="poster">
+
+  <!-- ================= HEADER ================= -->
+  <header class="header">
+    <img class="logo-ppsu" src="../assets/ppsu_naac_logo_hq.png" alt="P P Savani University – NAAC A+ accredited">
+    <div class="hc">
+      <div class="kicker">P P Savani University &nbsp;·&nbsp; School of Engineering</div>
+      <div class="title"><img src="../assets/promptform_logo.svg" alt="PromptForm AI logo"><h1>PromptForm <span>AI</span></h1></div>
+      <div class="subtitle">AI-Powered Form Generation Platform</div>
+      <div class="meta">Internship / UDP / Training Final Project &nbsp;·&nbsp; Academic Year 2026–2027</div>
+    </div>
+    <img class="logo-soe" src="../assets/school_of_engineering_logo_hq.png" alt="School of Engineering">
+  </header>
+
+  <section class="details">
+    <div><small>Student</small><span><b>Princy Korat</b> &nbsp;(23SE02CS119)</span></div>
+    <div><small>Programme</small><span>B.Tech Computer Science &amp; Engineering · Sem VII</span></div>
+    <div><small>Mentors</small><span>Mr. Zeel Shiyani (Company) &nbsp;·&nbsp; Ms. Kirti Bhatt (Institute)</span></div>
+    <div><small>Organisation</small><span><b>OCCUBIT SOLUTION</b></span></div>
+  </section>
+
+  <main class="main">
+
+    <!-- ================= LEFT ================= -->
+    <div class="col">
+      <section class="card">
+        <h2 class="sh"><span class="n">01</span>Abstract</h2>
+        <p class="lead">PromptForm AI turns a one-sentence prompt or an uploaded document into a complete, validated and shareable online form in seconds. Google Gemini, guided by rule-based AIFormBrain checks, builds the form; users then edit, publish, run quizzes and analyse responses on one platform.</p>
+      </section>
+
+      <section class="card">
+        <h2 class="sh"><span class="n">02</span>Problem Statement</h2>
+        <ul class="l">
+          <li><b>Manual:</b> every field and rule set by hand</li>
+          <li><b>Slow:</b> 15–25 min for a 10-field form</li>
+          <li><b>Error-prone:</b> wrong types, re-typed PDFs</li>
+          <li><b>Fragmented:</b> separate quiz &amp; analytics tools</li>
+        </ul>
+      </section>
+
+      <section class="card">
+        <h2 class="sh"><span class="n">03</span>Objectives</h2>
+        <ul class="l ck">
+          <li>Prompt → complete form in under 10 s</li>
+          <li>Digitise PDF, DOCX, XLSX and image forms</li>
+          <li>10+ field types with automatic validation</li>
+          <li>Graded quizzes, analytics and export</li>
+          <li>Secure, team-ready cloud deployment</li>
+        </ul>
+      </section>
+
+      <section class="card grow">
+        <h2 class="sh"><span class="n">04</span>Technology Stack</h2>
+        <dl class="stack">
+          <dt>Frontend</dt><dd><span class="chip">Next.js</span><span class="chip">React</span><span class="chip">TypeScript</span></dd>
+          <dt>Backend</dt><dd><span class="chip">Node.js</span><span class="chip">Express.js</span></dd>
+          <dt>Database</dt><dd><span class="chip">PostgreSQL</span><span class="chip">Prisma ORM</span></dd>
+          <dt>AI</dt><dd><span class="chip ai">Google Gemini API</span></dd>
+       </dl>
+      </section>
+    </div>
+
+    <!-- ================= CENTRE ================= -->
+    <div class="col">
+      <section class="card">
+        <h2 class="sh"><span class="n">05</span>Proposed Solution</h2>
+        <p class="lead">Describe a form in plain English or upload an existing one. PromptForm AI plans the fields, generates a typed and validated form, and opens it ready to edit and share.</p>
+        <div class="sol">
+          <div class="pcard">
+            <div class="tag">Prompt</div>
+            <div class="q">“Patient intake form for a dental clinic with contact details, medical history and appointment date”</div>
+            <div class="alt">or upload PDF · DOCX · XLSX · image</div>
+          </div>
+          <svg class="arrow" viewBox="0 0 16 12"><path d="M2 6h11M9.5 2.5 13 6l-3.5 3.5" stroke="#8B6B55" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <div class="ecard">
+            <div class="tag">AIFormBrain + Gemini</div>
+            <ol>
+              <li><i>1</i>Detect intent &amp; domain</li>
+              <li><i>2</i>Plan typed fields &amp; rules</li>
+              <li><i>3</i>Schema JSON + quality review</li>
+            </ol>
+          </div>
+          <svg class="arrow" viewBox="0 0 16 12"><path d="M2 6h11M9.5 2.5 13 6l-3.5 3.5" stroke="#8B6B55" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <div class="shot"><div class="bar"><i></i><i></i><i></i></div><img src="../assets/ss_builder_patient_intake_3x.png" alt="Generated Patient Intake Form in the PromptForm AI builder"></div>
+        </div>
+        <div class="cap"><b>Figure 1.</b> In the final demo, this prompt produced a six-question Patient Intake Form (visual builder).</div>
+      </section>
+
+      <section class="card">
+        <h2 class="sh"><span class="n">06</span>System Architecture</h2>
+        <div class="arch">
+          <div class="node"><svg class="ic" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><b>User Prompt</b><span>text or file</span></div>
+          <svg class="arrow" viewBox="0 0 10 10"><path d="M1.5 5h6.5M5.5 2.5 8 5 5.5 7.5" stroke="#8B6B55" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <div class="node mid"><svg class="ic" viewBox="0 0 24 24"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></svg><b>Next.js Frontend</b><span>React UI</span></div>
+          <svg class="arrow" viewBox="0 0 10 10"><path d="M1.5 5h6.5M5.5 2.5 8 5 5.5 7.5" stroke="#8B6B55" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <div class="node mid"><svg class="ic" viewBox="0 0 24 24"><rect width="20" height="8" x="2" y="2" rx="2"/><rect width="20" height="8" x="2" y="14" rx="2"/><line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/></svg><b>Express.js Backend</b><span>REST · JWT</span></div>
+          <svg class="arrow" viewBox="0 0 10 10"><path d="M1.5 5h6.5M5.5 2.5 8 5 5.5 7.5" stroke="#8B6B55" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <div class="node ai"><svg class="ic" viewBox="0 0 24 24"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/></svg><b>Gemini API</b><span>+ AIFormBrain</span></div>
+          <svg class="arrow" viewBox="0 0 10 10"><path d="M1.5 5h6.5M5.5 2.5 8 5 5.5 7.5" stroke="#8B6B55" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <div class="node mid"><svg class="ic" viewBox="0 0 24 24"><path d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5c0 1.1.9 2 2 2h1"/><path d="M16 21h1a2 2 0 0 0 2-2v-5c0-1.1.9-2 2-2a2 2 0 0 1-2-2V5a2 2 0 0 0-2-2h-1"/></svg><b>Structured Form JSON</b><span>validated</span></div>
+          <svg class="arrow" viewBox="0 0 10 10"><path d="M1.5 5h6.5M5.5 2.5 8 5 5.5 7.5" stroke="#8B6B55" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <div class="node"><svg class="ic" viewBox="0 0 24 24"><rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/></svg><b>Interactive Form Preview</b><span>edit &amp; share</span></div>
+        </div>
+        <div class="note"><b>Data:</b> Express.js → Prisma ORM → PostgreSQL &nbsp;·&nbsp; <b>Hosting:</b> Vercel (frontend), Render (backend)</div>
+        <div class="cap" style="text-align:center"><b>Figure 2.</b> Request flow from prompt to interactive form.</div>
+      </section>
+
+      <section class="card grow">
+        <h2 class="sh"><span class="n">07</span>Workflow &amp; Methodology</h2>
+        <div class="flow">
+          <div class="st"><div class="c">1</div><b>Sign in</b><span>e-mail or Google account</span></div>
+          <div class="st"><div class="c">2</div><b>Describe</b><span>type a prompt or upload a file</span></div>
+          <div class="st"><div class="c">3</div><b>Generate</b><span>AI builds typed fields</span></div>
+          <div class="st"><div class="c">4</div><b>Customise</b><span>edit questions and theme</span></div>
+          <div class="st"><div class="c">5</div><b>Publish</b><span>share a unique short link</span></div>
+          <div class="st"><div class="c">6</div><b>Analyse</b><span>responses and CSV export</span></div>
+        </div>
+        <p class="method"><b>Methodology:</b> Agile Scrum with two-week sprints over 14 weeks and weekly mentor reviews; validated with 50 automated test cases.</p>
+      </section>
+    </div>
+
+    <!-- ================= RIGHT ================= -->
+    <div class="col">
+      <section class="card">
+        <h2 class="sh"><span class="n">08</span>Key Features</h2>
+        <div class="feat">
+          <div class="ft"><span class="i"><svg viewBox="0 0 24 24"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/></svg></span><b>AI form generation</b></div>
+          <div class="ft"><span class="i"><svg viewBox="0 0 24 24"><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z"/></svg></span><b>Editable forms</b></div>
+          <div class="ft"><span class="i"><svg viewBox="0 0 24 24"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg></span><b>Live preview</b></div>
+          <div class="ft"><span class="i"><svg viewBox="0 0 24 24"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg></span><b>11 question types</b></div>
+          <div class="ft"><span class="i"><svg viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg></span><b>Field validation</b></div>
+          <div class="ft"><span class="i"><svg viewBox="0 0 24 24"><line x1="10" x2="14" y1="2" y2="2"/><line x1="12" x2="15" y1="14" y2="11"/><circle cx="12" cy="14" r="8"/></svg></span><b>Quizzes &amp; anti-cheat</b></div>
+          <div class="ft"><span class="i"><svg viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span><b>Secure sign-in</b></div>
+          <div class="ft"><span class="i"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg></span><b>Analytics &amp; export</b></div>
+          <div class="ft"><span class="i"><svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span><b>Team collaboration</b></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2 class="sh"><span class="n">09</span>Results &amp; Benefits</h2>
+        <div class="kpis">
+          <div class="kpi hi"><div class="v">50/50</div><div class="k">tests passed</div></div>
+          <div class="kpi"><div class="v">≈&nbsp;8&nbsp;s</div><div class="k">prompt to form</div></div>
+          <div class="kpi"><div class="v">10/10</div><div class="k">objectives met</div></div>
+        </div>
+        <div class="chart">
+         <svg id="timechart" viewBox="0 0 137 30" style="width:137mm;height:30mm" font-family="Cambria, Georgia, serif">
+            <!-- 1 unit = 1 mm; 4.94 = 14 pt. Bars from x = 60; scale 25 min = 52 mm; dark = lower bound, light = upper bound of the reported range -->
+            <g font-size="4.94" fill="#342A24">
+              <text x="58" y="5.2" text-anchor="end">Manual (Google Forms)</text>
+              <rect x="60" y="1.6" width="31.2" height="4.6" rx="0.7" fill="#A8998C"/><rect x="91.6" y="1.6" width="20.4" height="4.6" rx="0.7" fill="#D9CEC4"/>
+              <text x="114" y="5.4">15–25 min</text>
+              <text x="58" y="12.6" text-anchor="end">Template (Jotform)</text>
+              <rect x="60" y="9" width="10.4" height="4.6" rx="0.7" fill="#A8998C"/><rect x="70.8" y="9" width="5.8" height="4.6" rx="0.7" fill="#D9CEC4"/>
+              <text x="78.6" y="12.8">5–8 min</text>
+              <text x="58" y="20" text-anchor="end" font-weight="700">PromptForm (prompt)</text>
+              <rect x="60" y="16.4" width="1.4" height="4.6" rx="0.4" fill="#8B6B55"/>
+              <text x="63" y="20.2" font-weight="700" fill="#795D49">≈ 8 s</text>
+              <text x="58" y="27.4" text-anchor="end" font-weight="700">PromptForm (document)</text>
+              <rect x="60" y="23.8" width="1.6" height="4.6" rx="0.4" fill="#8B6B55"/>
+              <text x="63.2" y="27.6" font-weight="700" fill="#795D49">≈ 12 s</text>
+            </g>
+          </svg>
+          <div class="cap"><b>Figure 3.</b> Reported time to build a ready-to-share form.</div>
+        </div>
+        <ul class="l" style="margin-top:2.4mm">
+          <li><b>Time:</b> minutes of work become seconds</li>
+          <li><b>Ease:</b> types and validation set automatically</li>
+          <li><b>Usability:</b> live preview and 3 display modes</li>
+        </ul>
+      </section>
+
+      <section class="card grow">
+        <h2 class="sh"><span class="n">10</span>Conclusion &amp; Future Scope</h2>
+        <ul class="l">
+          <li><b>Conclusion:</b> a deployed, secure platform that builds validated forms in seconds.</li>
+          <li><b>Applications:</b> registrations, patient intake, surveys and quizzes.</li>
+          <li><b>Limitations:</b> relies on the Gemini API; <span style="white-space:nowrap">30–50 s</span> cold start on free hosting.</li>
+          <li><b>Future:</b> payments, AI conditional logic, multilingual input.</li>
+        </ul>
+      </section>
+    </div>
+  </main>
+
+  <!-- ================= FOOTER ================= -->
+  <footer class="foot">
+    <section class="card">
+      <h2 class="fh">References</h2>
+      <ol class="refs">
+        <li>Google. (2024). <i>Gemini API documentation: Generate structured output.</i> https://ai.google.dev/gemini-api/docs/structured-output</li>
+        <li>Vercel. (2024). <i>Next.js documentation (App Router).</i> https://nextjs.org/docs</li>
+        <li>OpenJS Foundation. (2024). <i>Express 4.x API reference.</i> https://expressjs.com/en/4x/api.html</li>
+        <li>Prisma Data. (2024). <i>Prisma ORM documentation.</i> https://www.prisma.io/docs</li>
+      </ol>
+    </section>
+    <section class="card">
+      <h2 class="fh">Acknowledgements</h2>
+      <p class="ack">Sincere thanks to Mr. Zeel Shiyani, Ms. Kirti Bhatt, OCCUBIT SOLUTION and the School of Engineering, PPSU, for their guidance.</p>
+    </section>
+    <section class="card">
+      <div class="qrbox">
+        <div class="qr" id="qr"><svg role="img" aria-label="QR code: https://promptform-ai-frontend.vercel.app/" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 41 41" shape-rendering="crispEdges"><path fill="#FFFFFF" d="M0 0h41v41H0z"/><path stroke="#1E1712" d="M4 4.5h7m1 0h1m1 0h3m1 0h2m1 0h3m2 0h2m2 0h7M4 5.5h1m5 0h1m2 0h5m2 0h2m2 0h3m1 0h1m1 0h1m5 0h1M4 6.5h1m1 0h3m1 0h1m3 0h1m1 0h1m1 0h5m2 0h1m2 0h1m1 0h1m1 0h3m1 0h1M4 7.5h1m1 0h3m1 0h1m2 0h2m2 0h2m4 0h2m3 0h1m1 0h1m1 0h3m1 0h1M4 8.5h1m1 0h3m1 0h1m1 0h2m1 0h1m5 0h2m2 0h1m1 0h1m2 0h1m1 0h3m1 0h1M4 9.5h1m5 0h1m1 0h2m1 0h4m5 0h3m3 0h1m5 0h1M4 10.5h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7M14 11.5h1m1 0h1m1 0h1m1 0h1m4 0h1M5 12.5h7m2 0h2m1 0h1m1 0h3m4 0h1m4 0h2m3 0h1M4 13.5h4m3 0h3m2 0h1m1 0h1m3 0h3m2 0h1m2 0h2m1 0h2m1 0h1M6 14.5h3m1 0h2m1 0h2m3 0h1m1 0h1m1 0h1m1 0h1m1 0h1m2 0h2m1 0h1m1 0h2M4 15.5h2m1 0h2m4 0h1m4 0h3m4 0h1m4 0h1m1 0h5M6 16.5h2m1 0h3m3 0h2m1 0h1m3 0h1m3 0h4m1 0h3m1 0h2M4 17.5h2m5 0h2m2 0h1m3 0h2m3 0h2m1 0h1m1 0h3m1 0h1m1 0h2M4 18.5h1m1 0h1m1 0h3m1 0h1m3 0h2m1 0h3m1 0h1m2 0h1m2 0h3m3 0h1M6 19.5h1m1 0h1m2 0h5m2 0h2m3 0h3m1 0h4m2 0h2M5 20.5h1m2 0h1m1 0h1m2 0h1m1 0h1m1 0h1m2 0h4m2 0h1m1 0h2m1 0h3m2 0h1M5 21.5h1m2 0h1m2 0h1m1 0h5m2 0h1m1 0h4m1 0h1m1 0h3m1 0h2m1 0h1M6 22.5h5m3 0h1m1 0h1m2 0h2m1 0h1m1 0h2m3 0h1m1 0h2m1 0h2M4 23.5h1m2 0h1m3 0h2m1 0h1m2 0h2m1 0h1m1 0h1m1 0h4m2 0h5m1 0h1M5 24.5h1m1 0h2m1 0h1m1 0h1m2 0h3m3 0h3m2 0h4m1 0h3M4 25.5h2m3 0h1m1 0h1m5 0h2m2 0h2m3 0h2m2 0h1m2 0h2m1 0h1M4 26.5h1m1 0h7m1 0h2m4 0h3m1 0h1m1 0h1m1 0h1m2 0h2m1 0h2M4 27.5h1m1 0h1m4 0h3m2 0h1m2 0h3m1 0h6m3 0h3m1 0h1M4 28.5h1m1 0h2m1 0h6m1 0h1m2 0h1m1 0h1m1 0h1m2 0h1m1 0h5m3 0h1M12 29.5h1m2 0h1m3 0h3m1 0h1m1 0h2m1 0h1m3 0h1m1 0h3M4 30.5h7m1 0h3m2 0h2m1 0h1m3 0h2m1 0h2m1 0h1m1 0h1m1 0h2M4 31.5h1m5 0h1m1 0h1m2 0h1m2 0h5m1 0h2m1 0h2m3 0h3m1 0h1M4 32.5h1m1 0h3m1 0h1m1 0h2m3 0h1m4 0h2m2 0h1m1 0h6m1 0h1M4 33.5h1m1 0h3m1 0h1m1 0h1m2 0h2m1 0h1m2 0h3m1 0h2m2 0h1m2 0h3m1 0h1M4 34.5h1m1 0h3m1 0h1m1 0h2m2 0h3m9 0h4m1 0h2M4 35.5h1m5 0h1m1 0h1m3 0h2m1 0h3m3 0h1m1 0h1m1 0h1m2 0h3M4 36.5h7m2 0h2m1 0h1m1 0h5m3 0h4m1 0h1m3 0h1"/></svg></div>
+        <div><div class="t">Scan to Visit PromptForm AI</div><div class="u">promptform-ai-frontend.vercel.app</div></div>
+      </div>
+    </section>
+  </footer>
+</div>
+</body>
+</html>
