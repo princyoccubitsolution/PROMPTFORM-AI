@@ -6,6 +6,7 @@ import { ArrowLeft, Sparkles, CreditCard, Calendar, FileText, CheckCircle2, Shie
 import { Button } from '@/components/ui/Button';
 import { api } from '@/lib/api';
 import { SiteHeader } from '@/components/SiteHeader';
+import { UpgradeModal } from '@/components/UpgradeModal';
 import { useTheme } from 'next-themes';
 
 export default function BillingPage() {
@@ -13,6 +14,7 @@ export default function BillingPage() {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
   const [profile, setProfile] = useState<any>(null);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -21,28 +23,28 @@ export default function BillingPage() {
     setMounted(true);
   }, []);
 
+  const loadBillingData = async () => {
+    try {
+      setIsLoading(true);
+      // Fetch current user details
+      const userData = await api.get('/auth/me');
+      setProfile(userData);
+
+      // Fetch transaction history
+      const txData = await api.get('/auth/transactions');
+      setTransactions(txData || []);
+    } catch (err: any) {
+      setError(err.message || 'Failed to load billing information.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
     const token = localStorage.getItem('promptform_access_token');
     if (!token) {
       router.push('/login?redirect=billing');
       return;
-    }
-
-    async function loadBillingData() {
-      try {
-        setIsLoading(true);
-        // Fetch current user details
-        const userData = await api.get('/auth/me');
-        setProfile(userData);
-
-        // Fetch transaction history
-        const txData = await api.get('/auth/transactions');
-        setTransactions(txData || []);
-      } catch (err: any) {
-        setError(err.message || 'Failed to load billing information.');
-      } finally {
-        setIsLoading(false);
-      }
     }
 
     loadBillingData();
@@ -375,7 +377,7 @@ export default function BillingPage() {
 
             {!isPro && (
               <Button
-                onClick={() => router.push('/dashboard?action=upgrade')}
+                onClick={() => setIsUpgradeModalOpen(true)}
                 className="w-full mt-6 py-2.5 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs shadow-sm flex items-center justify-center space-x-1 transition-all active:scale-[0.97]"
               >
                 <Sparkles className="w-4 h-4" />
@@ -453,6 +455,16 @@ export default function BillingPage() {
           )}
         </div>
       </div>
+
+      <UpgradeModal
+        isOpen={isUpgradeModalOpen}
+        onClose={() => setIsUpgradeModalOpen(false)}
+        onSuccess={() => {
+          loadBillingData();
+        }}
+        restriction={null}
+        currency="INR"
+      />
     </div>
     </div>
   );

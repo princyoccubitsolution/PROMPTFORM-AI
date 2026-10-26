@@ -81,6 +81,17 @@ interface SendFormInvitationParams {
   expiresAt: Date;
 }
 
+interface SendSubscriptionReceiptEmailParams {
+  recipientEmail: string;
+  userName: string;
+  planName: string;
+  billingPeriod: string;
+  amount: number | string;
+  currency: string;
+  paymentMethod: string;
+  receiptNumber: string;
+}
+
 // Form titles and names are user-supplied; escape them before placing them in email HTML
 function escapeHtml(value: string): string {
   return value
@@ -666,6 +677,98 @@ class EmailService {
     `;
 
     const text = `${inviterName} has invited you to collaborate on the form "${formTitle}" as ${roleCapitalized}. ${roleDescription}\n\nAccept the invitation: ${inviteUrl}\n\nThis invitation expires on ${expiryText}.`;
+    return this.dispatchEmail(recipientEmail, subject, html, text);
+  }
+
+  public async sendSubscriptionReceiptEmail(params: SendSubscriptionReceiptEmailParams): Promise<boolean> {
+    const { recipientEmail, userName, planName, billingPeriod, amount, currency, paymentMethod, receiptNumber } = params;
+    if (!recipientEmail || recipientEmail.trim() === '') {
+      this.lastError = 'No recipient email provided for subscription receipt';
+      return false;
+    }
+
+    const currencySymbol = currency === 'INR' ? '₹' : (currency === 'EUR' ? '€' : (currency === 'GBP' ? '£' : '$'));
+    const subject = `Payment Confirmation & Receipt [${receiptNumber}] - PromptForm Pro`;
+    const cycleText = billingPeriod === 'yearly' ? 'Annual Subscription' : 'Monthly Subscription';
+    const methodText = paymentMethod.toUpperCase();
+    const safeName = escapeHtml(userName || 'Valued Creator');
+    const safeReceipt = escapeHtml(receiptNumber);
+
+    const html = `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border: 1px solid #e4e4e7; border-radius: 16px; padding: 32px; color: #18181b;">
+        <div style="border-bottom: 2px solid #f4f4f5; padding-bottom: 20px; margin-bottom: 24px;">
+          <h2 style="margin: 0; color: #4f46e5; font-size: 24px; font-weight: 800; letter-spacing: -0.5px;">PromptForm AI</h2>
+          <div style="font-size: 12px; color: #71717a; margin-top: 4px;">Subscription Payment Confirmation</div>
+        </div>
+
+        <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 12px; padding: 16px; margin-bottom: 24px;">
+          <h3 style="margin: 0 0 6px 0; color: #15803d; font-size: 16px; font-weight: 700;">Payment Successful!</h3>
+          <p style="margin: 0; font-size: 13px; color: #166534; line-height: 1.5;">
+            Thank you, <strong>${safeName}</strong>. Your account has been upgraded to <strong>${planName}</strong>. All creation limits are unlocked.
+          </p>
+        </div>
+
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 24px; font-size: 13px;">
+          <tr>
+            <td style="padding: 8px 0; color: #71717a; border-bottom: 1px solid #f4f4f5;">Receipt Number:</td>
+            <td style="padding: 8px 0; font-weight: 700; text-align: right; border-bottom: 1px solid #f4f4f5; font-family: monospace;">${safeReceipt}</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px 0; color: #71717a; border-bottom: 1px solid #f4f4f5;">Plan Tier:</td>
+            <td style="padding: 8px 0; font-weight: 700; text-align: right; border-bottom: 1px solid #f4f4f5;">${planName} (${cycleText})</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px 0; color: #71717a; border-bottom: 1px solid #f4f4f5;">Payment Method:</td>
+            <td style="padding: 8px 0; font-weight: 700; text-align: right; border-bottom: 1px solid #f4f4f5;">${methodText}</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px 0; color: #71717a; border-bottom: 1px solid #f4f4f5;">Amount Paid:</td>
+            <td style="padding: 8px 0; font-weight: 800; font-size: 16px; color: #4f46e5; text-align: right; border-bottom: 1px solid #f4f4f5;">${currencySymbol}${amount}</td>
+          </tr>
+        </table>
+
+        <div style="background: #fafafa; border: 1px solid #f4f4f5; border-radius: 12px; padding: 16px; margin-bottom: 24px;">
+          <div style="font-size: 12px; font-weight: 700; color: #3f3f46; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">What's Unlocked in your Account:</div>
+          <ul style="margin: 0; padding-left: 20px; font-size: 13px; color: #52525b; line-height: 1.6;">
+            <li>Unlimited Form &amp; Quiz Creation (No 5-form limit)</li>
+            <li>Full Anti-Cheat Proctoring &amp; Exam Mode</li>
+            <li>Unlimited Team Members &amp; Invitations</li>
+            <li>+500 AI Generation Credits Included</li>
+          </ul>
+        </div>
+
+        <div style="text-align: center; margin-bottom: 24px;">
+          <a href="https://promptform-ai-frontend.vercel.app/dashboard" style="display: inline-block; background: #4f46e5; color: #ffffff; text-decoration: none; font-weight: 700; font-size: 14px; padding: 12px 28px; border-radius: 10px;">
+            Go to Your Dashboard
+          </a>
+        </div>
+
+        <div style="border-top: 1px solid #f4f4f5; padding-top: 16px; text-align: center; font-size: 11px; color: #a1a1aa; line-height: 1.5;">
+          PromptForm AI Inc. &copy; 2026. All rights reserved.<br/>
+          If you have any questions or need billing assistance, contact support@promptform.ai.
+        </div>
+      </div>
+    `;
+
+    const text = `
+Payment Confirmation & Receipt [${receiptNumber}]
+
+Hello ${userName},
+
+Your payment of ${currencySymbol}${amount} for PromptForm ${planName} (${cycleText}) was successful via ${methodText}.
+Receipt Number: ${receiptNumber}
+
+Features Unlocked:
+- Unlimited Form & Quiz Creation
+- Full Anti-Cheat Proctoring
+- Unlimited Team Members
+- +500 AI Credits
+
+Access your dashboard: https://promptform-ai-frontend.vercel.app/dashboard
+
+PromptForm AI Inc. © 2026
+    `.trim();
+
     return this.dispatchEmail(recipientEmail, subject, html, text);
   }
 }

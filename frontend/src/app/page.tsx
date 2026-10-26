@@ -1015,6 +1015,9 @@ export default function LandingPage() {
       <UpgradeModal 
         isOpen={upgradeModalOpen} 
         onClose={() => setUpgradeModalOpen(false)}
+        onSuccess={() => {
+          router.push('/dashboard');
+        }}
         restriction={null}
         currency={currency}
       />

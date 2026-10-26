@@ -141,6 +141,9 @@ function DashboardContent() {
   const [activeCategoryFilter, setActiveCategoryFilter] = useState("all");
 
   useEffect(() => {
+    if (searchParams.get('action') === 'upgrade') {
+      setIsUpgradeModalOpen(true);
+    }
     const tabParam = searchParams.get('tab');
     if (tabParam) {
       if (tabParam === "ai_generator") {
@@ -1561,14 +1564,8 @@ function DashboardContent() {
 
                           {user?.subscriptionPlan === 'free' && (
                             <Button 
-                              onClick={async () => {
-                                try {
-                                  await api.post('/auth/upgrade', { plan: 'pro' });
-                                  alert("Upgraded to Enterprise PRO tier successfully!");
-                                  loadDashboardData();
-                                } catch(e) {}
-                              }} 
-                              className="w-full text-xs h-9"
+                              onClick={() => setIsUpgradeModalOpen(true)} 
+                              className="w-full text-xs h-9 font-bold bg-primary hover:bg-primary/90 text-white"
                             >
                               Upgrade subscription
                             </Button>

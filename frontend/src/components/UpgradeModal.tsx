@@ -22,17 +22,25 @@ export function UpgradeModal({ isOpen, onClose, onSuccess, restriction, currency
   const [error, setError] = useState<string | null>(null);
 
   // Payment states
-  const [paymentStep, setPaymentStep] = useState<'benefits' | 'checkout' | 'otp' | 'success'>('benefits');
+  const [paymentStep, setPaymentStep] = useState<'benefits' | 'checkout' | 'otp' | 'success'>('checkout');
   const [activeTab, setActiveTab] = useState<'card' | 'upi' | 'paypal'>('card');
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
-  const [activeCurrency, setActiveCurrency] = useState<'USD' | 'INR' | 'EUR' | 'GBP'>('USD');
+  const [activeCurrency, setActiveCurrency] = useState<'USD' | 'INR' | 'EUR' | 'GBP'>(currency || 'INR');
   const [transactionData, setTransactionData] = useState<any>(null);
 
   useEffect(() => {
-    if (currency) {
-      setActiveCurrency(currency);
+    if (isOpen) {
+      setPaymentStep('checkout');
+      setError(null);
+      setOtpError(null);
+      setIsSuccess(false);
+      setOtpCode('');
+      setUpiTimer(300);
+      if (currency) {
+        setActiveCurrency(currency);
+      }
     }
-  }, [currency]);
+  }, [isOpen, currency]);
 
   // Card Inputs
   const [cardNumber, setCardNumber] = useState('');
@@ -430,7 +438,7 @@ export function UpgradeModal({ isOpen, onClose, onSuccess, restriction, currency
   };
 
   const handleClose = () => {
-    setPaymentStep('benefits');
+    setPaymentStep('checkout');
     setCardNumber('');
     setCardName('');
     setCardExpiry('');
@@ -576,31 +584,38 @@ export function UpgradeModal({ isOpen, onClose, onSuccess, restriction, currency
             </div>
           </div>
         ) : paymentStep === 'success' ? (
-          <div className="text-center py-8 space-y-6 animate-in fade-in duration-200">
+          <div className="text-center py-8 space-y-5 animate-in fade-in duration-200">
             <div className="w-16 h-16 rounded-full bg-emerald-50 dark:bg-emerald-950/30 flex items-center justify-center mx-auto text-emerald-500 shadow-[0_4px_12px_rgba(16,185,129,0.2)]">
               <CheckCircle2 className="w-10 h-10 animate-bounce" />
             </div>
             <div className="space-y-2">
               <h3 className="text-lg font-bold text-foreground dark:text-foreground">Upgrade Successful!</h3>
-              <p className="text-xs text-muted-foreground dark:text-zinc-450 leading-relaxed max-w-[280px] mx-auto font-semibold">
-                Welcome to PromptForm PRO! Your account features and database limits have been upgraded successfully.
+              <p className="text-xs text-muted-foreground dark:text-zinc-400 leading-relaxed max-w-[320px] mx-auto font-medium">
+                Welcome to PromptForm PRO! All 5-form creation limits are removed, and 500 AI generation credits have been added to your account.
               </p>
+              <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/40 rounded-xl p-3 max-w-[320px] mx-auto text-[11px] text-emerald-700 dark:text-emerald-300 font-semibold text-center space-y-1">
+                <div>✓ Receipt Number: <span className="font-mono font-bold">{transactionData?.receiptNumber || 'REC-PROMPT-AI'}</span></div>
+                <div className="text-[10px] text-emerald-600 dark:text-emerald-400">Confirmation email sent &amp; logged in Billing History.</div>
+              </div>
             </div>
 
-            <div className="flex flex-col gap-2 pt-2 max-w-[240px] mx-auto">
+            <div className="flex flex-col gap-2 pt-2 max-w-[260px] mx-auto">
               <Button
                 onClick={handleDownloadInvoice}
                 className="w-full py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md flex items-center justify-center space-x-1.5"
               >
                 <FileText className="w-4 h-4" />
-                <span>Download Invoice PDF</span>
+                <span>Download / Print Receipt</span>
               </Button>
               <Button
                 variant="outline"
-                onClick={handleClose}
+                onClick={() => {
+                  handleClose();
+                  if (onSuccess) onSuccess();
+                }}
                 className="w-full py-2.5 rounded-lg text-xs font-bold"
               >
-                Done
+                Done / Go to Dashboard
               </Button>
             </div>
           </div>
@@ -610,27 +625,38 @@ export function UpgradeModal({ isOpen, onClose, onSuccess, restriction, currency
               <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-primary/10/20 flex items-center justify-center text-indigo-500 border border-indigo-100 dark:border-indigo-900/30">
                 <Lock className="w-6 h-6" />
               </div>
-              <div>
+              <div className="text-left">
                 <h3 className="text-base font-bold text-foreground dark:text-foreground">3D Secure Checkout</h3>
-                <span className="text-xs text-muted-foreground font-semibold block">Authentication Required</span>
+                <span className="text-xs text-muted-foreground font-semibold block">Card Authentication Required</span>
               </div>
             </div>
 
             <div className="bg-muted dark:bg-zinc-950/50 p-4 border border-border dark:border-border rounded-2xl text-left space-y-2">
-              <p className="text-xs text-muted-foreground dark:text-zinc-350 leading-relaxed font-medium">
-                We've sent a 4-digit verification code via SMS to your registered phone ending in <strong>*4500</strong>.
-              </p>
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-muted-foreground dark:text-zinc-350 leading-relaxed font-medium">
+                  We've sent a 4-digit verification code via SMS to your registered phone ending in <strong>*4500</strong>.
+                </p>
+              </div>
               <p className="text-xs text-muted-foreground font-semibold">
-                (Sandbox mode: Enter any 4-digit code e.g. <strong className="text-indigo-650">1234</strong> to proceed).
+                (Sandbox mode: Enter code <strong className="text-indigo-650 dark:text-primary">1234</strong> or any 4 digits to complete upgrade).
               </p>
             </div>
 
             <div className="space-y-2 text-left">
-              <label htmlFor="otp-input" className="text-xs font-bold text-zinc-450 uppercase">One-Time Password (OTP)</label>
+              <div className="flex justify-between items-center">
+                <label htmlFor="otp-input" className="text-xs font-bold text-zinc-450 uppercase">One-Time Password (OTP)</label>
+                <button
+                  type="button"
+                  onClick={() => setOtpCode('1234')}
+                  className="text-[10px] font-bold text-primary hover:underline px-2 py-0.5 rounded bg-primary/10 border border-primary/20 cursor-pointer"
+                >
+                  ✨ Fill OTP: 1234
+                </button>
+              </div>
               <input
                 id="otp-input"
                 type="text"
-                placeholder="••••"
+                placeholder="1234"
                 maxLength={4}
                 value={otpCode}
                 onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
@@ -666,20 +692,33 @@ export function UpgradeModal({ isOpen, onClose, onSuccess, restriction, currency
         ) : (
           <div className="space-y-5 animate-in fade-in duration-200">
             {/* Header Icon Block */}
-            <div className="flex items-center space-x-3.5 border-b border-border dark:border-border pb-3">
-              <div className="w-11 h-11 rounded-2xl bg-indigo-50 dark:bg-primary/10/20 flex items-center justify-center text-indigo-500 border border-indigo-100 dark:border-indigo-900/30">
-                <CreditCard className="w-5.5 h-5.5" />
-              </div>
-              <div className="text-left">
-                <h3 className="text-sm font-bold text-foreground dark:text-foreground tracking-tight">
-                  PromptForm Secure Checkout
-                </h3>
-                <div className="flex items-center space-x-2 mt-0.5">
-                  <span className="text-xs bg-indigo-50 dark:bg-primary/10/30 text-indigo-650 dark:text-primary font-bold uppercase px-2 py-0.5 rounded-lg border border-indigo-100/50 dark:border-indigo-900/30">
-                    Pro Studio plan
-                  </span>
+            <div className="flex items-center justify-between border-b border-border dark:border-border pb-3">
+              <div className="flex items-center space-x-3.5">
+                <div className="w-11 h-11 rounded-2xl bg-indigo-50 dark:bg-primary/10/20 flex items-center justify-center text-indigo-500 border border-indigo-100 dark:border-indigo-900/30">
+                  <CreditCard className="w-5.5 h-5.5" />
+                </div>
+                <div className="text-left">
+                  <h3 className="text-sm font-bold text-foreground dark:text-foreground tracking-tight">
+                    PromptForm Secure Checkout
+                  </h3>
+                  <div className="flex items-center space-x-2 mt-0.5">
+                    <span className="text-[10px] bg-indigo-50 dark:bg-primary/10/30 text-indigo-650 dark:text-primary font-bold uppercase px-2 py-0.5 rounded-lg border border-indigo-100/50 dark:border-indigo-900/30">
+                      Pro Plan (Unlimited)
+                    </span>
+                    <span className="text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-extrabold px-2 py-0.5 rounded-lg border border-emerald-500/20 flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      Demo Sandbox
+                    </span>
+                  </div>
                 </div>
               </div>
+              <button
+                type="button"
+                onClick={() => setPaymentStep('benefits')}
+                className="text-[11px] font-bold text-primary hover:underline cursor-pointer px-2 py-1 rounded-lg hover:bg-primary/5"
+              >
+                View Features
+              </button>
             </div>
 
             {/* Billing cycle & Currency selection inside checkout */}
@@ -829,11 +868,25 @@ export function UpgradeModal({ isOpen, onClose, onSuccess, restriction, currency
                 {/* Card input forms */}
                 <div className="grid grid-cols-2 gap-3 text-left">
                   <div className="space-y-1 col-span-2">
-                    <label htmlFor="card-number" className="text-[9.5px] font-extrabold text-muted-foreground dark:text-muted-foreground tracking-wider uppercase">Card Number</label>
+                    <div className="flex justify-between items-center">
+                      <label htmlFor="card-number" className="text-[9.5px] font-extrabold text-muted-foreground dark:text-muted-foreground tracking-wider uppercase">Card Number</label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCardNumber('4242 4242 4242 4242');
+                          setCardName(localStorage.getItem('promptform_user_name') || 'DEMO TESTER');
+                          setCardExpiry('12/28');
+                          setCardCvc('888');
+                        }}
+                        className="text-[10px] font-bold text-primary hover:underline flex items-center gap-1 cursor-pointer"
+                      >
+                        ✨ Fill Demo Card
+                      </button>
+                    </div>
                     <input
                       id="card-number"
                       type="text"
-                      placeholder="4111 2222 3333 4444"
+                      placeholder="4242 4242 4242 4242"
                       value={cardNumber}
                       onChange={handleCardNumberChange}
                       className="w-full p-2.5 rounded-lg border border-border dark:border-border/80 bg-muted/50 dark:bg-zinc-950/40 text-xs font-semibold text-foreground dark:text-foreground focus:border-primary/50 focus:ring-1 focus:ring-primary/20 focus:outline-none transition-all duration-200"
@@ -980,16 +1033,22 @@ export function UpgradeModal({ isOpen, onClose, onSuccess, restriction, currency
                     }}
                   />
                   <img 
-                    src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=upi://pay?pa=promptform@bank%26pn=PromptForm%2520AI%26am=${totalBilled.toFixed(2)}%26cu=USD`}
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=upi://pay?pa=promptform@okhdfcbank%26pn=PromptForm%2520AI%26am=${totalBilled.toFixed(2)}%26cu=${activeCurrency}`}
                     alt="Payment QR Code" 
                     className="w-full h-full object-contain filter contrast-125 select-none"
                   />
                 </div>
 
-                {/* Countdown Timer */}
-                <div className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-amber-50/80 dark:bg-amber-950/20 text-xs font-bold text-amber-600 dark:text-amber-400 border border-amber-100/50 dark:border-amber-900/30">
-                  <Clock className="w-3.5 h-3.5 animate-pulse" />
-                  <span>QR Expires in: {formatUpiTime(upiTimer)}</span>
+                <div className="flex flex-col items-center gap-1.5">
+                  <div className="text-[11px] font-mono font-bold text-foreground bg-muted px-2.5 py-1 rounded-lg border border-border">
+                    UPI ID: <span className="text-primary">promptform@okhdfcbank</span>
+                  </div>
+
+                  {/* Countdown Timer */}
+                  <div className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-amber-50/80 dark:bg-amber-950/20 text-xs font-bold text-amber-600 dark:text-amber-400 border border-amber-100/50 dark:border-amber-900/30">
+                    <Clock className="w-3.5 h-3.5 animate-pulse" />
+                    <span>QR Expires in: {formatUpiTime(upiTimer)}</span>
+                  </div>
                 </div>
 
                 {/* Promo Code section */}

@@ -7,6 +7,7 @@ import { db } from '../lib/db';
 import { logger } from '../lib/logger';
 import { authMiddleware, AuthenticatedRequest } from '../middlewares/auth';
 import { registerSchema, loginSchema } from '../lib/validations';
+import { emailService } from '../services/emailService';
 
 const router = Router();
 
@@ -536,6 +537,24 @@ router.post('/upgrade', authMiddleware, async (req: AuthenticatedRequest, res: R
       });
     } catch (dbErr) {
       console.error('Failed to log transaction in database:', dbErr);
+    }
+
+    // Dispatch receipt confirmation email asynchronously (never blocks response)
+    try {
+      emailService.sendSubscriptionReceiptEmail({
+        recipientEmail: updatedUser.email,
+        userName: updatedUser.name || 'Valued Creator',
+        planName: selectedPlan === 'pro' ? 'Pro Studio' : selectedPlan,
+        billingPeriod: billingPeriod || 'monthly',
+        amount: parseFloat(amount || '99.00').toFixed(2),
+        currency: currency || 'INR',
+        paymentMethod: paymentMethod || 'card',
+        receiptNumber
+      }).catch((emailErr) => {
+        console.warn('Subscription receipt email delivery note:', emailErr?.message || emailErr);
+      });
+    } catch (e) {
+      console.warn('Failed to initiate subscription receipt email:', e);
     }
 
     const tokens = generateTokens(updatedUser);
