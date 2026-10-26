@@ -25,6 +25,7 @@ model User {
   activities       Activity[]
   collaborations   FormCollaborator[]
   formInvitationsSent FormInvitation[] @relation("FormInvitationsSent")
+  teamInvitesSent  TeamInvite[] @relation("TeamInvitesSent")
 }
 
 model Form {
@@ -126,8 +127,13 @@ model TeamInvite {
   team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
   email     String
   role      String   @default("editor") // "admin", "editor", "viewer"
-  token     String   @unique
+  token     String?  @unique // legacy raw token of invitations sent before tokens were hashed
+  tokenHash String?  @unique // SHA-256 of the emailed token; the raw token is never stored
   status    String   @default("pending") // "pending", "accepted", "expired", "revoked"
+  invitedById String?
+  invitedBy User?    @relation("TeamInvitesSent", fields: [invitedById], references: [id], onDelete: SetNull)
+  lastSentAt DateTime @default(now())
+  acceptedAt DateTime?
   expiresAt DateTime
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -135,6 +141,7 @@ model TeamInvite {
   @@index([token])
   @@index([teamId])
   @@index([email])
+  @@index([invitedById])
 }
 
 model Workflow {

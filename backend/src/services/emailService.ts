@@ -557,34 +557,67 @@ class EmailService {
       return false;
     }
 
-    const subject = `Team Invitation: ${inviterName} invited you to join "${teamName}" on PromptForm AI`;
+    const subject = `You're invited to join PromptForm AI`;
     const roleCapitalized = role.charAt(0).toUpperCase() + role.slice(1);
+    const safeTeam = escapeHtml(teamName);
+    const safeInviter = escapeHtml(inviterName);
+    const safeUrl = escapeHtml(inviteUrl);
+    const detailRow = (label: string, value: string) => `
+          <tr>
+            <td style="padding: 10px 14px; font-size: 13px; color: #71717a; width: 38%; border-bottom: 1px solid #f4f4f5;">${label}</td>
+            <td style="padding: 10px 14px; font-size: 14px; color: #18181b; font-weight: 600; border-bottom: 1px solid #f4f4f5;">${value}</td>
+          </tr>`;
 
     const html = `
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border: 1px solid #e4e4e7; border-radius: 16px; padding: 32px; color: #18181b;">
         <div style="margin-bottom: 24px;">
-          <h2 style="margin: 0; color: #4f46e5; font-size: 22px; font-weight: 800; letter-spacing: -0.5px;">PromptForm AI</h2>
+          <h2 style="margin: 0; color: #8B6B55; font-size: 22px; font-weight: 800; letter-spacing: -0.5px;">PromptForm AI</h2>
         </div>
-        <h3 style="font-size: 18px; color: #0f172a; margin-top: 0; font-weight: 700;">You've been invited to join a team workspace!</h3>
-        <p style="font-size: 15px; color: #3f3f46; line-height: 1.6;">
-          <strong>${inviterName}</strong> has invited you to join and collaborate on the team workspace <strong>"${teamName}"</strong> as a <strong>${roleCapitalized}</strong>.
-        </p>
-        <div style="margin: 28px 0; text-align: center;">
-          <a href="${inviteUrl}" target="_blank" style="background-color: #4f46e5; background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); color: #ffffff; font-weight: 700; text-decoration: none; padding: 14px 28px; border-radius: 12px; display: inline-block; font-size: 14px;">
-            Accept Invitation &amp; Access Workspace
+        <p style="font-size: 15px; color: #3f3f46; line-height: 1.6; margin: 0 0 8px;">Hello,</p>
+        <p style="font-size: 15px; color: #3f3f46; line-height: 1.6; margin: 0 0 20px;">You have been invited to join PromptForm AI.</p>
+        <table role="presentation" style="width: 100%; border-collapse: collapse; background: #fafaf9; border: 1px solid #f4f4f5; border-radius: 12px;">
+          ${detailRow('Role Assigned', roleCapitalized)}
+          ${detailRow('Workspace', safeTeam)}
+          ${detailRow('Invited By', safeInviter)}
+        </table>
+        <p style="font-size: 15px; color: #3f3f46; line-height: 1.6; margin: 24px 0 0;">Click below to accept your invitation.</p>
+        <div style="margin: 24px 0; text-align: center;">
+          <a href="${safeUrl}" target="_blank" style="background-color: #8B6B55; color: #ffffff; font-weight: 700; text-decoration: none; padding: 14px 32px; border-radius: 12px; display: inline-block; font-size: 14px;">
+            Accept Invitation
           </a>
         </div>
-        <p style="font-size: 13px; color: #71717a; line-height: 1.5;">
+        <p style="font-size: 13px; color: #71717a; line-height: 1.5; margin: 0 0 12px;">Invitation expires in 7 days.</p>
+        <p style="font-size: 12px; color: #a1a1aa; line-height: 1.5; margin: 0;">
           If the button above doesn't work, copy and paste this link into your browser:<br/>
-          <a href="${inviteUrl}" style="color: #6366f1; word-break: break-all;">${inviteUrl}</a>
+          <a href="${safeUrl}" style="color: #8B6B55; word-break: break-all;">${safeUrl}</a>
         </p>
-        <div style="margin-top: 32px; padding-top: 20px; border-top: 1px solid #f4f4f5; text-align: center; font-size: 12px; color: #a1a1aa;">
-          PromptForm AI Team Collaboration
+        <div style="margin-top: 28px; padding-top: 20px; border-top: 1px solid #f4f4f5; font-size: 13px; color: #3f3f46; font-weight: 600;">
+          PromptForm AI Team
         </div>
+        <p style="font-size: 11px; color: #a1a1aa; margin: 8px 0 0;">If you weren't expecting this invitation, you can ignore this email.</p>
       </div>
     `;
 
-    const text = `${inviterName} has invited you to join team "${teamName}" as ${roleCapitalized}.\n\nAccess Workspace: ${inviteUrl}`;
+    const text = [
+      'Hello,',
+      '',
+      'You have been invited to join PromptForm AI.',
+      '',
+      `Role Assigned: ${roleCapitalized}`,
+      '',
+      'Workspace:',
+      teamName,
+      '',
+      `Invited By: ${inviterName}`,
+      '',
+      'Click below to accept your invitation.',
+      '',
+      `Accept Invitation: ${inviteUrl}`,
+      '',
+      'Invitation expires in 7 days.',
+      '',
+      'PromptForm AI Team'
+    ].join('\n');
     return this.dispatchEmail(recipientEmail, subject, html, text);
   }
 

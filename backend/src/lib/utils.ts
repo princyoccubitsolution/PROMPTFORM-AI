@@ -61,7 +61,8 @@ export async function hasFormAccess(
 }
 
 /**
- * Returns the effective role of a user for a given form ('owner', 'admin', 'editor', 'viewer', or null)
+ * Returns the effective role of a user for a given form ('owner', 'admin', 'editor', 'viewer', or null):
+ * the higher of their direct-collaborator role and their role in the form's team, matching hasFormAccess.
  */
 export async function getFormUserRole(
   formId: string,
@@ -74,23 +75,24 @@ export async function getFormUserRole(
   if (!form) return null;
   if (form.ownerId === userId) return 'owner';
 
-  // Direct collaborator takes priority or combines with team
+  const rank: Record<string, number> = { viewer: 1, editor: 2, admin: 3 };
+  const candidates: string[] = [];
+
   const directCollab = await db.formCollaborator.findUnique({
     where: { formId_userId: { formId: form.id, userId } }
   });
-  if (directCollab) {
-    return directCollab.role as any;
-  }
+  if (directCollab) candidates.push(directCollab.role);
 
   if (form.teamId) {
+    const team = await db.team.findUnique({ where: { id: form.teamId }, select: { ownerId: true } });
+    if (team?.ownerId === userId) return 'admin';
     const membership = await db.teamMember.findUnique({
       where: { teamId_userId: { teamId: form.teamId, userId } }
     });
-    if (membership) {
-      return membership.role as any;
-    }
+    if (membership) candidates.push(membership.role);
   }
 
-  return null;
+  const best = candidates.filter((r) => rank[r]).sort((a, b) => rank[b] - rank[a])[0];
+  return (best as 'admin' | 'editor' | 'viewer' | undefined) || null;
 }
 

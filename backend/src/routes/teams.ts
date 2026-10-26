@@ -1,10 +1,21 @@
-import crypto from 'crypto';
 import { Router, Response, Request } from 'express';
 import { z } from 'zod';
+import { TeamInvite } from '@prisma/client';
 import { db } from '../lib/db';
 import { authMiddleware, AuthenticatedRequest } from '../middlewares/auth';
+import { requireTeamRole, teamRoleAtLeast, TeamAccessRequest, TeamRole } from '../middlewares/teamAccess';
 import { logActivity } from '../lib/activity';
-import { emailService } from '../services/emailService';
+import { emailService, checkRecipientDomain } from '../services/emailService';
+import {
+  INVITE_TTL_MS,
+  INVITE_RESEND_COOLDOWN_MS,
+  INVITES_PER_HOUR,
+  createInviteToken,
+  hashInviteToken,
+  isInviteTokenFormat,
+  frontendBaseUrl,
+  effectiveInviteStatus
+} from '../lib/invitations';
 
 const router = Router();
 
@@ -19,13 +30,93 @@ const updateTeamSchema = z.object({
 });
 
 const inviteMemberSchema = z.object({
-  email: z.string().email(),
+  email: z.string().trim().max(254).email(),
   role: z.enum(["admin", "editor", "viewer"]).default("editor"),
 });
 
 const updateRoleSchema = z.object({
   role: z.enum(["admin", "editor", "viewer"]),
 });
+
+// ==================== INVITATION HELPERS ====================
+
+type TeamInviteWithInviter = TeamInvite & { invitedBy?: { name: string | null; email: string } | null };
+
+const serializeTeamInvite = (invite: TeamInviteWithInviter) => ({
+  id: invite.id,
+  email: invite.email,
+  role: invite.role,
+  status: effectiveInviteStatus(invite),
+  invitedBy: invite.invitedBy ? { name: invite.invitedBy.name, email: invite.invitedBy.email } : null,
+  expiresAt: invite.expiresAt,
+  lastSentAt: invite.lastSentAt,
+  acceptedAt: invite.acceptedAt,
+  createdAt: invite.createdAt
+});
+
+const inviteLimitReached = async (userId: string) => {
+  const sentLastHour = await db.teamInvite.count({
+    where: { invitedById: userId, lastSentAt: { gt: new Date(Date.now() - 60 * 60 * 1000) } }
+  });
+  return sentLastHour >= INVITES_PER_HOUR;
+};
+
+/** Finds an invitation by the token from its link (hashed; raw for links emailed before hashing). */
+const findTeamInviteByToken = async (token: string) => {
+  if (!isInviteTokenFormat(token)) return null;
+  return db.teamInvite.findFirst({
+    where: { OR: [{ tokenHash: hashInviteToken(token) }, { token, tokenHash: null }] },
+    include: {
+      team: { select: { id: true, name: true, description: true, ownerId: true, owner: { select: { name: true, email: true } } } },
+      invitedBy: { select: { name: true, email: true } }
+    }
+  });
+};
+
+/** Returns why an invitation can no longer be used (marking overdue ones expired), or null if it is usable. */
+const inviteUnusableReason = async (invite: { id: string; status: string; expiresAt: Date }) => {
+  if (invite.status === 'accepted') return 'This invitation has already been accepted.';
+  if (invite.status === 'revoked') return 'This invitation was cancelled by a workspace admin.';
+  if (effectiveInviteStatus(invite) === 'expired') {
+    if (invite.status === 'pending') {
+      await db.teamInvite.updateMany({ where: { id: invite.id, status: 'pending' }, data: { status: 'expired' } });
+    }
+    return 'This invitation link has expired. Please ask the workspace admin for a new invitation.';
+  }
+  return null;
+};
+
+/** Emails the invitation link and builds the API response shared by invite and resend. */
+const deliverTeamInvite = async (req: AuthenticatedRequest, teamName: string, invite: TeamInviteWithInviter, token: string) => {
+  const inviteUrl = `${frontendBaseUrl(req)}/accept-invite?token=${token}`;
+  const emailSent = await emailService.sendTeamInvitation({
+    teamName,
+    recipientEmail: invite.email,
+    inviterName: req.user!.name || req.user!.email,
+    role: invite.role,
+    inviteUrl
+  });
+  const emailError = emailSent ? null : emailService.getLastError();
+  const deliveryInfo = emailService.getLastDeliveryInfo();
+
+  return {
+    success: true,
+    pending: true,
+    inviteId: invite.id,
+    invitation: serializeTeamInvite(invite),
+    emailSent,
+    emailError,
+    deliveryStatus: emailSent ? 'accepted' : 'rejected',
+    messageId: deliveryInfo?.messageId || null,
+    // Returned only when the email failed, so the admin can share the link another way
+    inviteUrl: emailSent ? null : inviteUrl,
+    message: emailSent
+      ? `Invitation sent to ${invite.email}.`
+      : `The invitation was created, but the email could not be delivered${emailError ? ` (${emailError})` : ''}. Share the invitation link with them directly.`
+  };
+};
+
+const ROLE_RANK: Record<string, number> = { viewer: 1, editor: 2, admin: 3 };
 
 // GET: Recent activities across all user's teams (For Team landing page)
 router.get('/activity/recent', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
@@ -212,47 +303,31 @@ router.post('/', authMiddleware, async (req: AuthenticatedRequest, res: Response
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
-// GET: Verify Invitation Token details (Public endpoint for /accept-invite page)
+// GET: Verify Invitation Token details (Public endpoint for /accept-invite page; the token is the credential)
 router.get('/invitations/verify/:token', async (req: Request, res: Response) => {
   try {
-    const { token } = req.params;
-    const invite = await db.teamInvite.findUnique({
-      where: { token },
-      include: {
-        team: {
-          select: {
-            id: true,
-            name: true,
-            description: true,
-            owner: { select: { name: true, email: true } }
-          }
-        }
-      }
-    });
-
+    const invite = await findTeamInviteByToken(req.params.token);
     if (!invite) return res.status(404).json({ error: 'Invitation not found or invalid token.' });
 
-    if (invite.status !== 'pending') {
-      return res.status(400).json({ error: `This invitation has already been ${invite.status}.` });
-    }
+    const unusable = await inviteUnusableReason(invite);
+    if (unusable) return res.status(400).json({ error: unusable });
 
-    if (invite.expiresAt < new Date()) {
-      await db.teamInvite.update({ where: { id: invite.id }, data: { status: 'expired' } });
-      return res.status(400).json({ error: 'This invitation link has expired. Please ask the team owner for a new invitation.' });
-    }
+    const existingAccount = await db.user.findUnique({ where: { email: invite.email }, select: { id: true } });
+    const inviter = invite.invitedBy || invite.team.owner;
 
     return res.json({
       id: invite.id,
       email: invite.email,
       role: invite.role,
-      token: invite.token,
       teamId: invite.teamId,
       teamName: invite.team.name,
       teamDescription: invite.team.description,
-      inviterName: invite.team.owner.name || invite.team.owner.email,
+      inviterName: inviter.name || inviter.email,
+      hasAccount: Boolean(existingAccount),
       expiresAt: invite.expiresAt
     });
   } catch (error) {
+    console.error('[Teams] Verify invitation failed:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -261,27 +336,33 @@ router.get('/invitations/verify/:token', async (req: Request, res: Response) => 
 router.post('/invitations/accept/:token', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   try {
     if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
-    const { token } = req.params;
+    const userId = req.user.id;
 
-    const invite = await db.teamInvite.findUnique({
-      where: { token },
-      include: { team: true }
-    });
-
+    const invite = await findTeamInviteByToken(req.params.token);
     if (!invite) return res.status(404).json({ error: 'Invitation not found or invalid token.' });
 
-    if (invite.status !== 'pending') {
-      return res.status(400).json({ error: `This invitation has already been ${invite.status}.` });
+    const emailMatches = (req.user.email || '').trim().toLowerCase() === invite.email.trim().toLowerCase();
+    const alreadyMember = await db.teamMember.findUnique({
+      where: { teamId_userId: { teamId: invite.teamId, userId } }
+    });
+
+    // Opening the link again after accepting just leads back to the workspace
+    if (invite.status === 'accepted' && emailMatches && alreadyMember) {
+      return res.json({
+        success: true,
+        teamId: invite.teamId,
+        role: alreadyMember.role,
+        teamName: invite.team.name,
+        message: `You are already a member of "${invite.team.name}".`
+      });
     }
 
-    if (invite.expiresAt < new Date()) {
-      await db.teamInvite.update({ where: { id: invite.id }, data: { status: 'expired' } });
-      return res.status(400).json({ error: 'This invitation has expired.' });
-    }
+    const unusable = await inviteUnusableReason(invite);
+    if (unusable) return res.status(400).json({ error: unusable });
 
     // The invitation belongs to one email address; a different signed-in account
     // (e.g. the team owner testing the link in their own browser) must not consume it.
-    if ((req.user.email || '').trim().toLowerCase() !== invite.email.trim().toLowerCase()) {
+    if (!emailMatches) {
       return res.status(403).json({
         error: `This invitation was sent to ${invite.email}, but you are signed in as ${req.user.email}. Please sign in with ${invite.email} to accept it.`,
         code: 'INVITE_EMAIL_MISMATCH',
@@ -289,50 +370,47 @@ router.post('/invitations/accept/:token', authMiddleware, async (req: Authentica
       });
     }
 
-    const userId = req.user.id;
-    const alreadyMember = await db.teamMember.findUnique({
-      where: { teamId_userId: { teamId: invite.teamId, userId } }
-    });
-
     // Claim the invite and create the membership atomically: the conditional update only
-    // succeeds for a still-pending invite, so concurrent/duplicate accepts cannot both win.
-    const claimed = await db.$transaction(async (tx) => {
+    // succeeds for a still-pending, unexpired invite, so concurrent/duplicate accepts cannot both win.
+    const now = new Date();
+    const grantedRole = await db.$transaction(async (tx) => {
       const { count } = await tx.teamInvite.updateMany({
-        where: { id: invite.id, status: 'pending' },
-        data: { status: 'accepted' }
+        where: { id: invite.id, status: 'pending', expiresAt: { gt: now } },
+        data: { status: 'accepted', acceptedAt: now }
       });
-      if (count !== 1) return false;
+      if (count !== 1) return null;
 
-      if (alreadyMember) {
-        // Never downgrade an existing member (or the owner) through an invitation
-        if (invite.team.ownerId !== userId && alreadyMember.role !== 'admin') {
-          await tx.teamMember.update({ where: { id: alreadyMember.id }, data: { role: invite.role } });
-        }
-      } else {
+      if (!alreadyMember) {
         await tx.teamMember.create({ data: { teamId: invite.teamId, userId, role: invite.role } });
+        return invite.role;
       }
-      return true;
+      // Never downgrade an existing member (or the owner) through an invitation
+      if (invite.team.ownerId !== userId && (ROLE_RANK[invite.role] || 0) > (ROLE_RANK[alreadyMember.role] || 0)) {
+        await tx.teamMember.update({ where: { id: alreadyMember.id }, data: { role: invite.role } });
+        return invite.role;
+      }
+      return alreadyMember.role;
     });
 
-    if (!claimed) {
+    if (!grantedRole) {
       return res.status(409).json({ error: 'This invitation has already been accepted.' });
     }
 
-    // Log Activity
     await logActivity({
-      userId: req.user.id,
+      userId,
       action: 'MEMBER_JOINED',
       teamId: invite.teamId,
       targetTitle: req.user.email,
-      details: `${req.user.name || req.user.email} accepted invitation and joined "${invite.team.name}" as ${invite.role}`
+      details: `${req.user.name || req.user.email} accepted the invitation and joined "${invite.team.name}" as ${grantedRole}`,
+      metadata: { inviteId: invite.id, email: invite.email, role: grantedRole }
     });
 
     return res.json({
       success: true,
       teamId: invite.teamId,
-      role: invite.role,
+      role: grantedRole,
       teamName: invite.team.name,
-      message: `Successfully joined "${invite.team.name}" as ${invite.role}!`
+      message: `Successfully joined "${invite.team.name}" as ${grantedRole}!`
     });
   } catch (error) {
     console.error('[Teams] Accept invitation failed:', error);
@@ -341,10 +419,11 @@ router.post('/invitations/accept/:token', authMiddleware, async (req: Authentica
 });
 
 // GET: Team Detail Workspace (Overview + stats + members)
-router.get('/:id', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+router.get('/:id', authMiddleware, requireTeamRole('viewer'), async (req: TeamAccessRequest, res: Response) => {
   try {
     if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
     const { id } = req.params;
+    const { role: userRole, isOwner } = req.teamAccess!;
 
     const team = await db.team.findUnique({
       where: { id },
@@ -383,17 +462,8 @@ router.get('/:id', authMiddleware, async (req: AuthenticatedRequest, res: Respon
 
     if (!team) return res.status(404).json({ error: 'Team not found' });
 
-    // Check membership authorization
-    const isOwner = team.ownerId === req.user.id;
-    const membership = team.members.find(m => m.userId === req.user!.id);
-
-    if (!isOwner && !membership) {
-      return res.status(403).json({ error: 'Forbidden. You are not a member of this workspace.' });
-    }
-
-    const userRole = isOwner ? 'owner' : (membership?.role || 'viewer');
-    const canManageMembers = isOwner || userRole === 'admin';
-    const canEditForms = isOwner || userRole === 'admin' || userRole === 'editor';
+    const canManageMembers = teamRoleAtLeast(userRole, 'admin');
+    const canEditForms = teamRoleAtLeast(userRole, 'editor');
     const canDeleteTeam = isOwner;
 
     const totalResponses = team.forms.reduce((acc, f) => acc + (f._count?.responses || 0), 0);
@@ -434,7 +504,11 @@ router.get('/:id', authMiddleware, async (req: AuthenticatedRequest, res: Respon
         userRole,
         isOwner,
         canManageMembers,
+        // Only the owner can invite, promote, demote or remove admins
+        canManageAdmins: isOwner,
         canEditForms,
+        canCreateForms: canEditForms,
+        canEditSettings: canManageMembers,
         canDeleteTeam
       },
       createdAt: team.createdAt,
@@ -447,23 +521,11 @@ router.get('/:id', authMiddleware, async (req: AuthenticatedRequest, res: Respon
 });
 
 // GET: Team Forms with search, filter, and sorting
-router.get('/:id/forms', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+router.get('/:id/forms', authMiddleware, requireTeamRole('viewer'), async (req: TeamAccessRequest, res: Response) => {
   try {
     if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
     const { id } = req.params;
     const { search, status, sort } = req.query;
-
-    const team = await db.team.findUnique({
-      where: { id },
-      include: { members: true }
-    });
-
-    if (!team) return res.status(404).json({ error: 'Team not found' });
-
-    const isMember = team.ownerId === req.user.id || team.members.some(m => m.userId === req.user!.id);
-    if (!isMember) {
-      return res.status(403).json({ error: 'Forbidden. You are not a member of this workspace.' });
-    }
 
     const whereClause: any = {
       teamId: id
@@ -518,23 +580,11 @@ router.get('/:id/forms', authMiddleware, async (req: AuthenticatedRequest, res: 
   }
 });
 
-// GET: Team Activity History
-router.get('/:id/activity', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+// GET: Team Activity History (the workspace audit log)
+router.get('/:id/activity', authMiddleware, requireTeamRole('viewer'), async (req: TeamAccessRequest, res: Response) => {
   try {
     if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
     const { id } = req.params;
-
-    const team = await db.team.findUnique({
-      where: { id },
-      include: { members: true }
-    });
-
-    if (!team) return res.status(404).json({ error: 'Team not found' });
-
-    const isMember = team.ownerId === req.user.id || team.members.some(m => m.userId === req.user!.id);
-    if (!isMember) {
-      return res.status(403).json({ error: 'Forbidden' });
-    }
 
     const activities = await db.activity.findMany({
       where: { teamId: id },
@@ -559,85 +609,132 @@ router.get('/:id/activity', authMiddleware, async (req: AuthenticatedRequest, re
 
 
 
-// GET: List pending invitations for a team (Owner/Admin only)
-router.get('/:id/invitations', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+// GET: Workspace invitations with their status (Owner/Admin only). ?status=pending|accepted|expired|revoked
+router.get('/:id/invitations', authMiddleware, requireTeamRole('admin'), async (req: TeamAccessRequest, res: Response) => {
   try {
     if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
     const { id } = req.params;
-
-    const team = await db.team.findUnique({
-      where: { id },
-      include: { members: true }
-    });
-
-    if (!team) return res.status(404).json({ error: 'Team not found' });
-    const isUserAdmin = team.ownerId === req.user.id || team.members.some(m => m.userId === req.user!.id && m.role === 'admin');
-
-    if (!isUserAdmin) {
-      return res.status(403).json({ error: 'Forbidden' });
-    }
+    const statusFilter = typeof req.query.status === 'string' ? req.query.status : null;
 
     const invites = await db.teamInvite.findMany({
-      where: { teamId: id, status: 'pending' },
-      orderBy: { createdAt: 'desc' }
+      where: { teamId: id },
+      include: { invitedBy: { select: { name: true, email: true } } },
+      orderBy: { createdAt: 'desc' },
+      take: 500
     });
 
-    return res.json(invites);
+    const serialized = invites.map(serializeTeamInvite);
+    return res.json(statusFilter ? serialized.filter(i => i.status === statusFilter) : serialized);
   } catch (error) {
+    console.error('[Teams] List invitations failed:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// DELETE: Cancel/Revoke pending invitation
-router.delete('/:id/invitations/:inviteId', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+/** Loads an open (pending or expired) invitation of the team in :id; admin invitations need the owner. */
+const loadManageableInvite = async (req: TeamAccessRequest, res: Response) => {
+  const { team, role } = req.teamAccess!;
+  const invite = await db.teamInvite.findFirst({
+    where: { id: req.params.inviteId, teamId: team.id, status: { in: ['pending', 'expired'] } },
+    include: { invitedBy: { select: { name: true, email: true } } }
+  });
+  if (!invite) {
+    res.status(404).json({ error: 'Invitation not found.' });
+    return null;
+  }
+  if (invite.role === 'admin' && role !== 'owner') {
+    res.status(403).json({ error: 'Only the workspace owner can manage admin invitations.' });
+    return null;
+  }
+  return invite;
+};
+
+// POST: Resend an invitation with a fresh link and a new 7-day expiry (the previous link stops working)
+router.post('/:id/invitations/:inviteId/resend', authMiddleware, requireTeamRole('admin'), async (req: TeamAccessRequest, res: Response) => {
   try {
     if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
-    const { id, inviteId } = req.params;
+    const { team } = req.teamAccess!;
+    const invite = await loadManageableInvite(req, res);
+    if (!invite) return;
 
-    const team = await db.team.findUnique({
-      where: { id },
-      include: { members: true }
-    });
-
-    if (!team) return res.status(404).json({ error: 'Team not found' });
-    const isUserAdmin = team.ownerId === req.user.id || team.members.some(m => m.userId === req.user!.id && m.role === 'admin');
-
-    if (!isUserAdmin) {
-      return res.status(403).json({ error: 'Forbidden' });
+    if (Date.now() - invite.lastSentAt.getTime() < INVITE_RESEND_COOLDOWN_MS) {
+      return res.status(429).json({ error: 'This invitation was just sent. Please wait a minute before resending it.' });
+    }
+    if (await inviteLimitReached(req.user.id)) {
+      return res.status(429).json({ error: 'You have sent too many invitations in the last hour. Please try again later.' });
     }
 
-    await db.teamInvite.update({
-      where: { id: inviteId },
+    const { token, tokenHash } = createInviteToken();
+    const now = new Date();
+    const { count } = await db.teamInvite.updateMany({
+      where: { id: invite.id, status: { in: ['pending', 'expired'] } },
+      data: { tokenHash, token: null, status: 'pending', invitedById: req.user.id, lastSentAt: now, expiresAt: new Date(now.getTime() + INVITE_TTL_MS) }
+    });
+    if (count !== 1) return res.status(404).json({ error: 'Invitation not found.' });
+
+    const refreshed = await db.teamInvite.findUniqueOrThrow({
+      where: { id: invite.id },
+      include: { invitedBy: { select: { name: true, email: true } } }
+    });
+    const result = await deliverTeamInvite(req, team.name, refreshed, token);
+
+    await logActivity({
+      userId: req.user.id,
+      action: 'TEAM_INVITE_RESENT',
+      teamId: team.id,
+      targetTitle: invite.email,
+      details: `${req.user.name || req.user.email} resent the invitation to ${invite.email}`,
+      metadata: { inviteId: invite.id, email: invite.email, role: invite.role, emailSent: result.emailSent }
+    });
+
+    return res.json(result);
+  } catch (error) {
+    console.error('[Teams] Resend invitation failed:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DELETE: Cancel/Revoke an open invitation (its link stops working)
+router.delete('/:id/invitations/:inviteId', authMiddleware, requireTeamRole('admin'), async (req: TeamAccessRequest, res: Response) => {
+  try {
+    if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
+    const { team } = req.teamAccess!;
+    const invite = await loadManageableInvite(req, res);
+    if (!invite) return;
+
+    await db.teamInvite.updateMany({
+      where: { id: invite.id, teamId: team.id, status: { in: ['pending', 'expired'] } },
       data: { status: 'revoked' }
+    });
+
+    await logActivity({
+      userId: req.user.id,
+      action: 'TEAM_INVITE_REVOKED',
+      teamId: team.id,
+      targetTitle: invite.email,
+      details: `${req.user.name || req.user.email} cancelled the invitation to ${invite.email}`,
+      metadata: { inviteId: invite.id, email: invite.email, role: invite.role }
     });
 
     return res.json({ message: 'Invitation revoked successfully.' });
   } catch (error) {
+    console.error('[Teams] Revoke invitation failed:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// POST: Add/Invite member to team
-router.post('/:id/members', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+// POST: Invite a member to the team by email (they join after accepting)
+router.post('/:id/members', authMiddleware, requireTeamRole('admin'), async (req: TeamAccessRequest, res: Response) => {
   try {
     if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
     const { id } = req.params;
+    const { team, role: requesterRole } = req.teamAccess!;
     const { email, role } = inviteMemberSchema.parse(req.body);
+    const recipientEmail = email.toLowerCase();
 
-    const team = await db.team.findUnique({
-      where: { id },
-      include: { members: true }
-    });
-
-    if (!team) return res.status(404).json({ error: 'Team not found' });
-    const isUserAdmin = team.ownerId === req.user.id || 
-      team.members.some((m: any) => m.userId === req.user?.id && m.role === 'admin');
-
-    if (!isUserAdmin) {
-      return res.status(403).json({ error: 'Forbidden. Admin privileges required.' });
+    if (role === 'admin' && requesterRole !== 'owner') {
+      return res.status(403).json({ error: 'Only the workspace owner can invite admins.' });
     }
-
-    const recipientEmail = email.toLowerCase().trim();
 
     // Check if user is already a team member
     const userToInvite = await db.user.findUnique({ where: { email: recipientEmail } });
@@ -645,75 +742,65 @@ router.post('/:id/members', authMiddleware, async (req: AuthenticatedRequest, re
       const existingMember = await db.teamMember.findUnique({
         where: { teamId_userId: { teamId: id, userId: userToInvite.id } }
       });
-      if (existingMember) {
+      if (existingMember || userToInvite.id === team.ownerId) {
         return res.status(400).json({ error: 'This user is already a member of this team.' });
       }
     }
 
-    // Generate secure 32-byte token and 7-day expiration
-    const token = crypto.randomBytes(32).toString('hex');
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    const domainError = await checkRecipientDomain(recipientEmail);
+    if (domainError) {
+      return res.status(400).json({ error: `${domainError}. Please check the email address.` });
+    }
 
-    // Cancel old pending invites for this email + teamId
-    await db.teamInvite.deleteMany({
-      where: { teamId: id, email: recipientEmail, status: 'pending' }
+    if (await inviteLimitReached(req.user.id)) {
+      return res.status(429).json({ error: 'You have sent too many invitations in the last hour. Please try again later.' });
+    }
+
+    const { token, tokenHash } = createInviteToken();
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + INVITE_TTL_MS);
+
+    // Serialize invites per (team, email) so concurrent requests can't create two live invitations
+    const invite = await db.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`team-invite:${id}:${recipientEmail}`}))`;
+      const live = await tx.teamInvite.findFirst({
+        where: { teamId: id, email: recipientEmail, status: 'pending', expiresAt: { gt: now } }
+      });
+      if (live) return null;
+
+      await tx.teamInvite.updateMany({
+        where: { teamId: id, email: recipientEmail, status: 'pending' },
+        data: { status: 'expired' }
+      });
+      return tx.teamInvite.create({
+        data: { teamId: id, email: recipientEmail, role, tokenHash, status: 'pending', invitedById: req.user!.id, lastSentAt: now, expiresAt },
+        include: { invitedBy: { select: { name: true, email: true } } }
+      });
     });
 
-    // Create TeamInvite record
-    const invite = await db.teamInvite.create({
-      data: {
-        teamId: id,
-        email: recipientEmail,
-        role,
-        token,
-        status: 'pending',
-        expiresAt
-      }
-    });
+    if (!invite) {
+      return res.status(409).json({ error: 'An invitation is already pending for this email address. You can resend it from Pending invitations.' });
+    }
 
-    // Send invitation email with token accept link
-    const reqOrigin = typeof req.headers.origin === 'string' && req.headers.origin.startsWith('http')
-      ? req.headers.origin.replace(/\/+$/, '')
-      : '';
-    const frontendUrl = (reqOrigin || process.env.FRONTEND_URL || 'https://promptform-ai-frontend.vercel.app').replace(/\/+$/, '');
-    const inviteUrl = `${frontendUrl}/accept-invite?token=${token}`;
+    const result = await deliverTeamInvite(req, team.name, invite, token);
 
-    const emailSent = await emailService.sendTeamInvitation({
-      teamName: team.name,
-      recipientEmail,
-      inviterName: req.user.name || req.user.email,
-      role,
-      inviteUrl
-    });
-    const emailError = emailSent ? null : emailService.getLastError();
-    const deliveryInfo = emailService.getLastDeliveryInfo();
-
-    // Log Activity
     await logActivity({
       userId: req.user.id,
       action: 'TEAM_INVITE_SENT',
       teamId: id,
       targetTitle: recipientEmail,
-      details: `${req.user.name || req.user.email} invited ${recipientEmail} to join "${team.name}" as ${role}`
+      details: `${req.user.name || req.user.email} invited ${recipientEmail} to join "${team.name}" as ${role}`,
+      metadata: { inviteId: invite.id, email: recipientEmail, role, emailSent: result.emailSent }
     });
 
-    return res.status(201).json({
-      success: true,
-      pending: true,
-      inviteId: invite.id,
-      token: invite.token,
-      inviteUrl,
-      emailSent,
-      emailError,
-      deliveryStatus: emailSent ? 'accepted' : 'rejected',
-      messageId: deliveryInfo?.messageId || null,
-      message: emailSent
-        ? `Invitation email accepted by the mail server for ${recipientEmail} as ${role.toUpperCase()}. Ask them to check Inbox and Spam.`
-        : `Invitation created for ${recipientEmail}, but email delivery failed (${emailError || 'SMTP error'}). Please share the invitation link manually.`
-    });
+    return res.status(201).json(result);
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return res.status(400).json({ error: 'Validation failed', details: error.errors });
+      const invalidEmail = error.errors.some((e) => e.path[0] === 'email');
+      return res.status(400).json({
+        error: invalidEmail ? 'Please enter a valid email address.' : 'Validation failed',
+        details: error.errors
+      });
     }
     console.error('[Teams] Invite member error:', error);
     return res.status(500).json({ error: 'Internal server error' });
@@ -721,28 +808,17 @@ router.post('/:id/members', authMiddleware, async (req: AuthenticatedRequest, re
 });
 
 // PUT: Change member role
-router.put('/:id/members/:memberId', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+router.put('/:id/members/:memberId', authMiddleware, requireTeamRole('admin'), async (req: TeamAccessRequest, res: Response) => {
   try {
     if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
     const { id, memberId } = req.params;
+    const { team, role: requesterRole } = req.teamAccess!;
     const { role } = updateRoleSchema.parse(req.body);
 
-    const team = await db.team.findUnique({
-      where: { id },
-      include: { members: { include: { user: true } } }
+    const targetMember = await db.teamMember.findFirst({
+      where: { id: memberId, teamId: id },
+      include: { user: true }
     });
-
-    if (!team) return res.status(404).json({ error: 'Team not found' });
-
-    const requesterMember = team.members.find(m => m.userId === req.user!.id);
-    const isOwner = team.ownerId === req.user.id;
-    const isAdmin = requesterMember?.role === 'admin';
-
-    if (!isOwner && !isAdmin) {
-      return res.status(403).json({ error: 'Forbidden. Admin privileges required.' });
-    }
-
-    const targetMember = team.members.find(m => m.id === memberId);
     if (!targetMember) {
       return res.status(404).json({ error: 'Member not found.' });
     }
@@ -750,6 +826,12 @@ router.put('/:id/members/:memberId', authMiddleware, async (req: AuthenticatedRe
     // Cannot change owner's role through this endpoint
     if (targetMember.userId === team.ownerId) {
       return res.status(400).json({ error: 'Workspace owner role cannot be changed.' });
+    }
+    if (targetMember.userId === req.user.id) {
+      return res.status(400).json({ error: 'You cannot change your own role.' });
+    }
+    if ((targetMember.role === 'admin' || role === 'admin') && requesterRole !== 'owner') {
+      return res.status(403).json({ error: 'Only the workspace owner can grant or change the admin role.' });
     }
 
     const updated = await db.teamMember.update({
@@ -766,7 +848,8 @@ router.put('/:id/members/:memberId', authMiddleware, async (req: AuthenticatedRe
       action: 'ROLE_CHANGED',
       teamId: id,
       targetTitle: targetMember.user.email,
-      details: `Role of ${targetMember.user.name || targetMember.user.email} changed to ${role}`
+      details: `Role of ${targetMember.user.name || targetMember.user.email} changed to ${role}`,
+      metadata: { memberId, email: targetMember.user.email, from: targetMember.role, to: role }
     });
 
     return res.json(updated);
@@ -779,36 +862,32 @@ router.put('/:id/members/:memberId', authMiddleware, async (req: AuthenticatedRe
   }
 });
 
-// DELETE: Remove member from team
-router.delete('/:id/members/:memberId', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+// DELETE: Remove member from team (any member may remove themselves, i.e. leave)
+router.delete('/:id/members/:memberId', authMiddleware, requireTeamRole('viewer'), async (req: TeamAccessRequest, res: Response) => {
   try {
     if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
     const { id, memberId } = req.params;
+    const { team, role: requesterRole } = req.teamAccess!;
 
-    const team = await db.team.findUnique({
-      where: { id },
-      include: { members: { include: { user: true } } }
+    const targetMember = await db.teamMember.findFirst({
+      where: { id: memberId, teamId: id },
+      include: { user: true }
     });
-
-    if (!team) return res.status(404).json({ error: 'Team not found' });
-
-    const requesterMember = team.members.find(m => m.userId === req.user?.id);
-    const targetMember = team.members.find(m => m.id === memberId);
 
     if (!targetMember) {
       return res.status(404).json({ error: 'Member not found in team.' });
     }
 
-    const isOwner = team.ownerId === req.user.id;
-    const isAdmin = requesterMember?.role === 'admin';
     const isSelf = targetMember.userId === req.user.id;
-
-    if (!isOwner && !isAdmin && !isSelf) {
-      return res.status(403).json({ error: 'Forbidden' });
-    }
 
     if (targetMember.userId === team.ownerId) {
       return res.status(400).json({ error: 'Workspace owner cannot be removed.' });
+    }
+    if (!isSelf && !teamRoleAtLeast(requesterRole, 'admin')) {
+      return res.status(403).json({ error: 'Forbidden. Admin privileges required to remove members.' });
+    }
+    if (!isSelf && targetMember.role === 'admin' && requesterRole !== 'owner') {
+      return res.status(403).json({ error: 'Only the workspace owner can remove admins.' });
     }
 
     await db.teamMember.delete({ where: { id: memberId } });
@@ -816,10 +895,13 @@ router.delete('/:id/members/:memberId', authMiddleware, async (req: Authenticate
     // Log Activity
     await logActivity({
       userId: req.user.id,
-      action: 'MEMBER_REMOVED',
+      action: isSelf ? 'MEMBER_LEFT' : 'MEMBER_REMOVED',
       teamId: id,
       targetTitle: targetMember.user.email,
-      details: `${targetMember.user.name || targetMember.user.email} left or was removed from ${team.name}`
+      details: isSelf
+        ? `${targetMember.user.name || targetMember.user.email} left ${team.name}`
+        : `${targetMember.user.name || targetMember.user.email} was removed from ${team.name}`,
+      metadata: { memberId, email: targetMember.user.email, role: targetMember.role }
     });
 
     return res.json({ message: 'Member removed successfully.' });
@@ -830,25 +912,11 @@ router.delete('/:id/members/:memberId', authMiddleware, async (req: Authenticate
 });
 
 // PUT: Update team settings (name / description)
-router.put('/:id', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+router.put('/:id', authMiddleware, requireTeamRole('admin'), async (req: TeamAccessRequest, res: Response) => {
   try {
     if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
     const { id } = req.params;
     const { name, description } = updateTeamSchema.parse(req.body);
-
-    const team = await db.team.findUnique({
-      where: { id },
-      include: { members: true }
-    });
-
-    if (!team) return res.status(404).json({ error: 'Team not found' });
-
-    const isUserAdmin = team.ownerId === req.user.id || 
-      team.members.some((m: any) => m.userId === req.user?.id && m.role === 'admin');
-
-    if (!isUserAdmin) {
-      return res.status(403).json({ error: 'Forbidden. Admin privileges required to update workspace settings.' });
-    }
 
     const updated = await db.team.update({
       where: { id },
@@ -877,17 +945,10 @@ router.put('/:id', authMiddleware, async (req: AuthenticatedRequest, res: Respon
 });
 
 // DELETE: Delete team (Owner only)
-router.delete('/:id', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+router.delete('/:id', authMiddleware, requireTeamRole('owner'), async (req: TeamAccessRequest, res: Response) => {
   try {
     if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
     const { id } = req.params;
-
-    const team = await db.team.findUnique({ where: { id } });
-    if (!team) return res.status(404).json({ error: 'Team not found' });
-
-    if (team.ownerId !== req.user.id) {
-      return res.status(403).json({ error: 'Forbidden. Only the workspace owner can delete the team.' });
-    }
 
     await db.team.delete({ where: { id } });
     return res.json({ message: 'Team deleted successfully.' });

@@ -1,18 +1,23 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { 
-  Users, FileText, BarChart3, Plus, ArrowLeft, Search, Filter, 
-  Settings, UserPlus, MoreVertical, ExternalLink, Edit3, Trash2, 
-  Activity, Shield, CheckCircle2, AlertCircle, Clock, Eye, MessageSquare, Loader2
+import {
+  Users, FileText, BarChart3, Plus, ArrowLeft, Search, Filter,
+  Settings, UserPlus, MoreVertical, ExternalLink, Edit3, Trash2,
+  Activity, Shield, CheckCircle2, AlertCircle, Clock, Eye, MessageSquare, Loader2, Copy, Check
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { CustomSelect } from '@/components/ui/CustomSelect';
 import { Modal } from '@/components/ui/Modal';
+import { Toaster, useToasts } from '@/components/ui/Toaster';
+import { TeamPeoplePanel, TeamInvitation } from './TeamPeoplePanel';
 import { api } from '@/lib/api';
+
+// Members, roles and invitations refresh this often while the workspace is open and visible
+const LIVE_REFRESH_MS = 5000;
 
 interface TeamDetailWorkspaceProps {
   teamId: string;
@@ -43,6 +48,17 @@ export function TeamDetailWorkspace({ teamId, onBack, currentUser }: TeamDetailW
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<'admin' | 'editor' | 'viewer'>('editor');
   const [isInviting, setIsInviting] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  // Set when an invitation was created but its email could not be delivered
+  const [undelivered, setUndelivered] = useState<{ message: string; url: string } | null>(null);
+  const [linkCopied, setLinkCopied] = useState(false);
+
+  // Invitations (owners and admins)
+  const [invitations, setInvitations] = useState<TeamInvitation[]>([]);
+  const [busyInviteId, setBusyInviteId] = useState<string | null>(null);
+
+  const { toasts, notify, dismiss } = useToasts();
+  const refreshInFlight = useRef(false);
 
   // Settings Modal
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -68,21 +84,63 @@ export function TeamDetailWorkspace({ teamId, onBack, currentUser }: TeamDetailW
     }
   }, [activeSubTab, formSearch, statusFilter, sortBy]);
 
-  const loadTeamDetail = async () => {
-    setIsLoading(true);
-    setErrorMessage(null);
+  /** Loads the workspace; `silent` refreshes in place (live updates) without the full-page spinner. */
+  const loadTeamDetail = async (silent = false) => {
+    if (!silent) {
+      setIsLoading(true);
+      setErrorMessage(null);
+    }
     try {
       const data = await api.get(`/teams/${teamId}`);
       setTeam(data);
-      setEditName(data.name || '');
-      setEditDescription(data.description || '');
-      setForms(data.forms || []);
+      if (!silent) {
+        setEditName(data.name || '');
+        setEditDescription(data.description || '');
+        setForms(data.forms || []);
+      }
+      if (data.permissions?.canManageMembers) {
+        const invites = await api.get(`/teams/${teamId}/invitations`).catch(() => null);
+        if (Array.isArray(invites)) setInvitations(invites);
+      } else {
+        setInvitations([]);
+      }
     } catch (err: any) {
-      setErrorMessage(err.message || 'Failed to load team workspace.');
+      const msg: string = err.message || 'Failed to load team workspace.';
+      // During live refresh only a lost membership is surfaced; transient errors retry on the next tick
+      if (!silent || /not a member|not found/i.test(msg)) {
+        setErrorMessage(/not a member/i.test(msg) ? 'You no longer have access to this workspace.' : msg);
+      }
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
   };
+
+  const liveRefresh = useCallback(async () => {
+    if (refreshInFlight.current || document.visibilityState !== 'visible') return;
+    refreshInFlight.current = true;
+    try {
+      await loadTeamDetail(true);
+      if (activeSubTab === 'activity') {
+        const data = await api.get(`/teams/${teamId}/activity`).catch(() => null);
+        if (Array.isArray(data)) setActivities(data);
+      }
+    } finally {
+      refreshInFlight.current = false;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [teamId, activeSubTab]);
+
+  // Live updates: joins, role changes, removals and invitation status appear without reloading
+  useEffect(() => {
+    if (isLoading || errorMessage) return;
+    const interval = setInterval(liveRefresh, LIVE_REFRESH_MS);
+    const onVisible = () => { if (document.visibilityState === 'visible') liveRefresh(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [liveRefresh, isLoading, errorMessage]);
 
   const loadTeamForms = async () => {
     setIsFormsLoading(true);
@@ -113,57 +171,117 @@ export function TeamDetailWorkspace({ teamId, onBack, currentUser }: TeamDetailW
     }
   };
 
+  const openInviteModal = () => {
+    setInviteEmail('');
+    setInviteRole('editor');
+    setInviteError(null);
+    setUndelivered(null);
+    setIsInviteOpen(true);
+  };
+
   const handleInviteSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inviteEmail.trim()) return;
 
     setIsInviting(true);
+    setInviteError(null);
+    setUndelivered(null);
     try {
       const res = await api.post(`/teams/${teamId}/members`, {
         email: inviteEmail.trim(),
         role: inviteRole
       });
-      setIsInviteOpen(false);
       setInviteEmail('');
-      await loadTeamDetail();
-      const copiedNote = res?.inviteUrl && navigator.clipboard
-        ? (() => {
-            navigator.clipboard.writeText(res.inviteUrl).catch(() => {});
-            return '\n\nInvitation link has been copied to your clipboard.';
-          })()
-        : '';
-
+      await loadTeamDetail(true);
       if (res?.emailSent === false) {
-        alert(
-          `⚠️ ${res.message || `Invitation created, but email delivery failed (${res?.emailError || 'SMTP error'}).`}${copiedNote}`
-        );
+        // Keep the modal open so the link can be copied and shared another way
+        setUndelivered({ message: res.message, url: res.inviteUrl });
       } else {
-        alert(`${res?.message || 'Invitation email sent successfully!'}${copiedNote}`);
+        setIsInviteOpen(false);
+        notify(res?.message || 'Invitation sent.');
       }
     } catch (err: any) {
-      alert(err.message || 'Failed to invite member.');
+      setInviteError(err.message || 'Failed to invite member.');
     } finally {
       setIsInviting(false);
     }
   };
 
-  const handleChangeMemberRole = async (memberId: string, role: string) => {
+  const handleCopyInviteLink = async () => {
+    if (!undelivered) return;
     try {
-      await api.put(`/teams/${teamId}/members/${memberId}`, { role });
-      await loadTeamDetail();
-    } catch (err: any) {
-      alert(err.message || 'Failed to update member role.');
+      await navigator.clipboard.writeText(undelivered.url);
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+    } catch {
+      // Clipboard unavailable: the link stays visible and selectable
     }
   };
 
-  const handleRemoveMember = async (memberId: string, email: string) => {
-    if (!confirm(`Are you sure you want to remove ${email} from this workspace?`)) return;
+  const handleChangeMemberRole = async (memberId: string, role: string) => {
+    try {
+      const updated = await api.put(`/teams/${teamId}/members/${memberId}`, { role });
+      await loadTeamDetail(true);
+      notify(`${updated?.user?.name || updated?.user?.email || 'Member'} is now ${role === 'admin' ? 'an' : 'a'} ${role}.`);
+    } catch (err: any) {
+      notify(err.message || 'Failed to update member role.', 'error');
+    }
+  };
+
+  const handleRemoveMember = async (member: any) => {
+    if (!confirm(`Remove ${member.user.email} from this workspace? They will lose access to its forms.`)) return;
 
     try {
-      await api.delete(`/teams/${teamId}/members/${memberId}`);
-      await loadTeamDetail();
+      await api.delete(`/teams/${teamId}/members/${member.id}`);
+      await loadTeamDetail(true);
+      notify(`${member.user.email} was removed from the workspace.`);
     } catch (err: any) {
-      alert(err.message || 'Failed to remove member.');
+      notify(err.message || 'Failed to remove member.', 'error');
+    }
+  };
+
+  const handleLeaveWorkspace = async (member: any) => {
+    if (!confirm(`Leave "${team?.name}"? You will lose access to its forms unless you are invited again.`)) return;
+
+    try {
+      await api.delete(`/teams/${teamId}/members/${member.id}`);
+      onBack();
+    } catch (err: any) {
+      notify(err.message || 'Failed to leave workspace.', 'error');
+    }
+  };
+
+  const handleResendInvite = async (invite: TeamInvitation) => {
+    setBusyInviteId(invite.id);
+    try {
+      const res = await api.post(`/teams/${teamId}/invitations/${invite.id}/resend`);
+      setInvitations(prev => prev.map(i => (i.id === invite.id ? res.invitation : i)));
+      if (res.emailSent === false) {
+        setUndelivered({ message: res.message, url: res.inviteUrl });
+        setInviteError(null);
+        setIsInviteOpen(true);
+      } else {
+        notify(res.message || `Invitation resent to ${invite.email}.`);
+      }
+    } catch (err: any) {
+      notify(err.message || 'Failed to resend invitation.', 'error');
+    } finally {
+      setBusyInviteId(null);
+    }
+  };
+
+  const handleCancelInvite = async (invite: TeamInvitation) => {
+    if (!confirm(`Cancel the invitation for ${invite.email}? Their invitation link will stop working.`)) return;
+
+    setBusyInviteId(invite.id);
+    try {
+      await api.delete(`/teams/${teamId}/invitations/${invite.id}`);
+      setInvitations(prev => prev.map(i => (i.id === invite.id ? { ...i, status: 'revoked' } : i)));
+      notify(`Invitation for ${invite.email} cancelled.`);
+    } catch (err: any) {
+      notify(err.message || 'Failed to cancel invitation.', 'error');
+    } finally {
+      setBusyInviteId(null);
     }
   };
 
@@ -178,10 +296,10 @@ export function TeamDetailWorkspace({ teamId, onBack, currentUser }: TeamDetailW
         description: editDescription.trim() || null
       });
       setIsSettingsOpen(false);
-      await loadTeamDetail();
-      alert('Team workspace updated successfully!');
+      await loadTeamDetail(true);
+      notify('Team workspace updated successfully.');
     } catch (err: any) {
-      alert(err.message || 'Failed to update team.');
+      notify(err.message || 'Failed to update team.', 'error');
     } finally {
       setIsSavingSettings(false);
     }
@@ -192,10 +310,9 @@ export function TeamDetailWorkspace({ teamId, onBack, currentUser }: TeamDetailW
 
     try {
       await api.delete(`/teams/${teamId}`);
-      alert('Team workspace deleted.');
       onBack();
     } catch (err: any) {
-      alert(err.message || 'Failed to delete team.');
+      notify(err.message || 'Failed to delete team.', 'error');
     }
   };
 
@@ -215,7 +332,7 @@ export function TeamDetailWorkspace({ teamId, onBack, currentUser }: TeamDetailW
       setNewFormDescription('');
       router.push(`/builder/${newForm.id}`);
     } catch (err: any) {
-      alert(err.message || 'Failed to create form in team.');
+      notify(err.message || 'Failed to create form in team.', 'error');
     } finally {
       setIsCreatingForm(false);
     }
@@ -255,9 +372,13 @@ export function TeamDetailWorkspace({ teamId, onBack, currentUser }: TeamDetailW
   }
 
   const { permissions, stats } = team;
+  // Viewers are read-only: they can open forms and responses but not create or edit forms
+  const canCreateForms = Boolean(permissions.canCreateForms ?? permissions.canEditForms);
+  const canEditForms = Boolean(permissions.canEditForms);
 
   return (
     <div className="space-y-6">
+      <Toaster toasts={toasts} onDismiss={dismiss} />
       {/* Top Header & Breadcrumb */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border/80">
         <div className="space-y-1">
@@ -282,18 +403,20 @@ export function TeamDetailWorkspace({ teamId, onBack, currentUser }: TeamDetailW
         </div>
 
         <div className="flex items-center space-x-2 shrink-0">
-          <Button
-            onClick={() => setIsCreateFormOpen(true)}
-            size="sm"
-            className="text-xs space-x-1.5 h-9"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Create Form</span>
-          </Button>
+          {canCreateForms && (
+            <Button
+              onClick={() => setIsCreateFormOpen(true)}
+              size="sm"
+              className="text-xs space-x-1.5 h-9"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Create Form</span>
+            </Button>
+          )}
 
           {permissions.canManageMembers && (
             <Button
-              onClick={() => setIsInviteOpen(true)}
+              onClick={openInviteModal}
               variant="outline"
               size="sm"
               className="text-xs space-x-1.5 h-9 border-border"
@@ -412,10 +535,16 @@ export function TeamDetailWorkspace({ teamId, onBack, currentUser }: TeamDetailW
                 <div className="p-8 text-center text-xs text-muted-foreground space-y-2">
                   <FileText className="w-8 h-8 mx-auto text-muted-foreground/40" />
                   <p className="font-semibold text-foreground">No forms in this workspace yet.</p>
-                  <p className="text-xs">Create your first collaborative form to get started.</p>
-                  <Button onClick={() => setIsCreateFormOpen(true)} size="sm" className="mt-2 text-xs">
-                    <Plus className="w-3.5 h-3.5 mr-1" /> Create Form
-                  </Button>
+                  {canCreateForms ? (
+                    <>
+                      <p className="text-xs">Create your first collaborative form to get started.</p>
+                      <Button onClick={() => setIsCreateFormOpen(true)} size="sm" className="mt-2 text-xs">
+                        <Plus className="w-3.5 h-3.5 mr-1" /> Create Form
+                      </Button>
+                    </>
+                  ) : (
+                    <p className="text-xs">Forms created by editors and admins will appear here.</p>
+                  )}
                 </div>
               ) : (
                 <div className="divide-y divide-border/60">
@@ -450,8 +579,8 @@ export function TeamDetailWorkspace({ teamId, onBack, currentUser }: TeamDetailW
                           onClick={() => router.push(`/builder/${f.id}`)}
                           className="h-8 text-xs font-semibold"
                         >
-                          <Edit3 className="w-3.5 h-3.5 mr-1" />
-                          <span>Open</span>
+                          {canEditForms ? <Edit3 className="w-3.5 h-3.5 mr-1" /> : <Eye className="w-3.5 h-3.5 mr-1" />}
+                          <span>{canEditForms ? 'Open' : 'View'}</span>
                         </Button>
                         {f.uniqueShareId && (
                           <Button
@@ -517,14 +646,16 @@ export function TeamDetailWorkspace({ teamId, onBack, currentUser }: TeamDetailW
                 />
               </div>
 
-              <Button
-                onClick={() => setIsCreateFormOpen(true)}
-                size="sm"
-                className="h-9 text-xs font-semibold whitespace-nowrap space-x-1"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>New Form</span>
-              </Button>
+              {canCreateForms && (
+                <Button
+                  onClick={() => setIsCreateFormOpen(true)}
+                  size="sm"
+                  className="h-9 text-xs font-semibold whitespace-nowrap space-x-1"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>New Form</span>
+                </Button>
+              )}
             </div>
           </div>
 
@@ -542,11 +673,15 @@ export function TeamDetailWorkspace({ teamId, onBack, currentUser }: TeamDetailW
                 <p className="text-xs text-muted-foreground max-w-sm mx-auto">
                   {formSearch || statusFilter !== 'ALL'
                     ? 'Try clearing your filters or search terms.'
-                    : 'Start building collaborative dynamic forms for this workspace.'}
+                    : canCreateForms
+                    ? 'Start building collaborative dynamic forms for this workspace.'
+                    : 'Forms created by editors and admins will appear here.'}
                 </p>
-                <Button onClick={() => setIsCreateFormOpen(true)} size="sm" className="text-xs">
-                  <Plus className="w-3.5 h-3.5 mr-1" /> Create First Form
-                </Button>
+                {canCreateForms && (
+                  <Button onClick={() => setIsCreateFormOpen(true)} size="sm" className="text-xs">
+                    <Plus className="w-3.5 h-3.5 mr-1" /> Create First Form
+                  </Button>
+                )}
               </CardContent>
             </Card>
           ) : (
@@ -586,7 +721,8 @@ export function TeamDetailWorkspace({ teamId, onBack, currentUser }: TeamDetailW
                       size="sm"
                       className="w-full text-xs font-semibold h-8"
                     >
-                      <Edit3 className="w-3 h-3 mr-1" /> Edit
+                      {canEditForms ? <Edit3 className="w-3 h-3 mr-1" /> : <Eye className="w-3 h-3 mr-1" />}
+                      {canEditForms ? 'Edit' : 'View'}
                     </Button>
                     <Button
                       onClick={() => router.push(`/responses/${f.id}`)}
@@ -606,84 +742,18 @@ export function TeamDetailWorkspace({ teamId, onBack, currentUser }: TeamDetailW
 
       {/* ================= TAB 3: PEOPLE ================= */}
       {activeSubTab === 'people' && (
-        <div className="space-y-4 animate-fade-in">
-          <div className="flex items-center justify-between bg-card p-4 rounded-xl border border-border">
-            <div>
-              <h3 className="text-sm font-bold text-foreground">Workspace Members</h3>
-              <p className="text-xs text-muted-foreground">Collaborators who can build forms and view results in this team.</p>
-            </div>
-            {permissions.canManageMembers && (
-              <Button onClick={() => setIsInviteOpen(true)} size="sm" className="text-xs space-x-1.5">
-                <UserPlus className="w-3.5 h-3.5" />
-                <span>Invite People</span>
-              </Button>
-            )}
-          </div>
-
-          <div className="border border-border rounded-xl divide-y divide-border bg-card overflow-hidden">
-            {team.members.map((m: any) => {
-              const displayName = m.user.name || m.user.email.split('@')[0];
-              const isSelf = m.userId === currentUser?.id;
-              const isOwner = m.role === 'owner';
-
-              return (
-                <div key={m.id} className="p-4 flex items-center justify-between gap-4">
-                  <div className="flex items-center space-x-3 min-w-0">
-                    <div className="w-9 h-9 rounded-full bg-primary/10 border border-primary/20 text-primary flex items-center justify-center font-bold text-xs shrink-0">
-                      {displayName[0].toUpperCase()}
-                    </div>
-                    <div className="truncate">
-                      <div className="flex items-center space-x-2">
-                        <span className="text-xs font-bold text-foreground truncate">{displayName}</span>
-                        {isSelf && (
-                          <span className="text-[10px] px-1.5 py-0.2 rounded bg-muted text-muted-foreground font-semibold">You</span>
-                        )}
-                        {isOwner && (
-                          <span className="text-[10px] px-2 py-0.5 rounded-full font-extrabold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 uppercase">
-                            Owner
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-[11px] text-muted-foreground truncate">{m.user.email}</p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center space-x-2 shrink-0">
-                    {permissions.canManageMembers && !isOwner && !isSelf ? (
-                      <>
-                        <div className="w-28">
-                          <CustomSelect
-                            value={m.role}
-                            onChange={(val) => handleChangeMemberRole(m.id, val)}
-                            options={[
-                              { value: "editor", label: "Editor" },
-                              { value: "admin", label: "Admin" },
-                              { value: "viewer", label: "Viewer" }
-                            ]}
-                            size="sm"
-                          />
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleRemoveMember(m.id, m.user.email)}
-                          className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                          title="Remove member"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </Button>
-                      </>
-                    ) : (
-                      <span className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-secondary border border-border capitalize">
-                        {m.role}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+        <TeamPeoplePanel
+          team={team}
+          currentUserId={currentUser?.id}
+          invitations={invitations}
+          busyInviteId={busyInviteId}
+          onInvite={openInviteModal}
+          onChangeRole={handleChangeMemberRole}
+          onRemoveMember={handleRemoveMember}
+          onLeave={handleLeaveWorkspace}
+          onResendInvite={handleResendInvite}
+          onCancelInvite={handleCancelInvite}
+        />
       )}
 
       {/* ================= TAB 4: ACTIVITY ================= */}
@@ -738,6 +808,10 @@ export function TeamDetailWorkspace({ teamId, onBack, currentUser }: TeamDetailW
         title={`Invite to ${team.name}`}
       >
         <form onSubmit={handleInviteSubmit} className="space-y-4">
+          <p className="text-xs text-muted-foreground">
+            Invite anyone by email. They'll get a link to join this workspace, which expires after 7 days.
+          </p>
+
           <Input
             label="Email Address"
             placeholder="colleague@example.com"
@@ -753,21 +827,52 @@ export function TeamDetailWorkspace({ teamId, onBack, currentUser }: TeamDetailW
               value={inviteRole}
               onChange={(val) => setInviteRole(val as any)}
               options={[
-                { value: "editor", label: "Editor (Can create and edit forms)" },
-                { value: "admin", label: "Admin (Can manage members and forms)" },
-                { value: "viewer", label: "Viewer (Read-only access)" }
+                { value: "viewer", label: "Viewer (Read-only: view forms and responses)" },
+                { value: "editor", label: "Editor (Create, edit and share forms)" },
+                ...(permissions.canManageAdmins
+                  ? [{ value: "admin", label: "Admin (Manage members, forms and settings)" }]
+                  : [])
               ]}
               size="md"
             />
           </div>
 
+          {inviteError && (
+            <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-xs flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{inviteError}</span>
+            </div>
+          )}
+
+          {undelivered && (
+            <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs space-y-2">
+              <p className="text-amber-700 dark:text-amber-400 flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{undelivered.message}</span>
+              </p>
+              <div className="flex items-center gap-2">
+                <Input
+                  readOnly
+                  value={undelivered.url}
+                  onFocus={(e) => e.currentTarget.select()}
+                  className="text-xs h-8"
+                  aria-label="Invitation link"
+                />
+                <Button type="button" size="sm" variant="outline" onClick={handleCopyInviteLink} className="h-8 text-xs shrink-0">
+                  {linkCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span className="ml-1">{linkCopied ? 'Copied' : 'Copy link'}</span>
+                </Button>
+              </div>
+            </div>
+          )}
+
           <div className="flex justify-end space-x-2 pt-2">
             <Button type="button" variant="outline" onClick={() => setIsInviteOpen(false)}>
-              Cancel
+              {undelivered ? 'Done' : 'Cancel'}
             </Button>
-            <Button type="submit" disabled={isInviting}>
+            <Button type="submit" disabled={isInviting || !inviteEmail.trim()}>
               {isInviting ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : null}
-              <span>Send Invitation</span>
+              <span>Send Invite</span>
             </Button>
           </div>
         </form>

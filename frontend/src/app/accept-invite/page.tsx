@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, useRef, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { 
@@ -24,50 +24,31 @@ function AcceptInviteContent() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
   const [mismatch, setMismatch] = useState(false);
+  // Guards against accepting twice (React strict mode runs effects twice in development)
+  const acceptStarted = useRef(false);
+
+  const invitePath = `/accept-invite?token=${token}`;
+
+  const goToAuth = (page: 'login' | 'register') => {
+    router.push(`/${page}?redirect=${encodeURIComponent(invitePath)}`);
+  };
 
   const switchAccount = () => {
     ['promptform_access_token', 'promptform_refresh_token', 'promptform_user_email', 'promptform_user_name'].forEach((k) => {
       try { localStorage.removeItem(k); } catch {}
     });
-    window.location.href = `/login?redirect=${encodeURIComponent(`/accept-invite?token=${token}`)}`;
+    window.location.href = `/login?redirect=${encodeURIComponent(invitePath)}`;
   };
 
-  useEffect(() => {
-    const userToken = localStorage.getItem('promptform_access_token');
-    setIsLoggedIn(Boolean(userToken));
-
-    if (!token) {
-      setErrorMessage("No invitation token provided in the URL.");
-      setIsLoading(false);
-      return;
-    }
-
-    const verifyToken = async () => {
-      try {
-        const data = await api.get(`/teams/invitations/verify/${token}`);
-        setInviteDetails(data);
-        // Remember the invite so sign-up / onboarding can return here to finish accepting it
-        try { localStorage.setItem('promptform_pending_invite', token); } catch {}
-      } catch (err: any) {
-        try { localStorage.removeItem('promptform_pending_invite'); } catch {}
-        setErrorMessage(err.message || "Invalid or expired invitation token.");
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    verifyToken();
-  }, [token]);
-
   const handleAccept = async () => {
-    if (!token) return;
+    if (!token || acceptStarted.current) return;
 
-    if (!isLoggedIn) {
-      const currentUrl = `/accept-invite?token=${token}`;
-      router.push(`/login?redirect=${encodeURIComponent(currentUrl)}`);
+    if (!localStorage.getItem('promptform_access_token')) {
+      goToAuth(inviteDetails?.hasAccount === false ? 'register' : 'login');
       return;
     }
 
+    acceptStarted.current = true;
     setIsAccepting(true);
     setErrorMessage(null);
 
@@ -80,10 +61,12 @@ function AcceptInviteContent() {
         window.location.href = `/dashboard?tab=team&teamId=${res.teamId}`;
       }, 1500);
     } catch (err: any) {
+      acceptStarted.current = false;
       const msg: string = err.message || "Failed to accept invitation.";
-      if (/signed in as/i.test(msg)) {
+      // Wrong account or an ended session: offer to sign in; the pending invite brings the user back here
+      if (/signed in as|log in again/i.test(msg)) {
         setMismatch(true);
-      } else if (/already been|expired|not found/i.test(msg)) {
+      } else if (/already been|expired|not found|cancelled/i.test(msg)) {
         try { localStorage.removeItem('promptform_pending_invite'); } catch {}
       }
       setErrorMessage(msg);
@@ -91,6 +74,45 @@ function AcceptInviteContent() {
       setIsAccepting(false);
     }
   };
+
+  useEffect(() => {
+    const loggedIn = Boolean(localStorage.getItem('promptform_access_token'));
+    setIsLoggedIn(loggedIn);
+
+    if (!token) {
+      setErrorMessage("No invitation token provided in the URL.");
+      setIsLoading(false);
+      return;
+    }
+
+    // Returning here from sign-up / sign-in for this same invite continues it without another click
+    let resumingAfterAuth = false;
+    try { resumingAfterAuth = loggedIn && localStorage.getItem('promptform_pending_invite') === token; } catch {}
+
+    const verifyToken = async () => {
+      try {
+        const data = await api.get(`/teams/invitations/verify/${token}`);
+        setInviteDetails(data);
+        // Remember the invite so sign-up / onboarding can return here to finish accepting it
+        try { localStorage.setItem('promptform_pending_invite', token); } catch {}
+        setIsLoading(false);
+        if (resumingAfterAuth) handleAccept();
+      } catch (err: any) {
+        const msg: string = err.message || "Invalid or expired invitation token.";
+        setIsLoading(false);
+        // A member reopening an accepted link is taken straight to the workspace
+        if (loggedIn && /already been accepted/i.test(msg)) {
+          handleAccept();
+          return;
+        }
+        try { localStorage.removeItem('promptform_pending_invite'); } catch {}
+        setErrorMessage(msg);
+      }
+    };
+
+    verifyToken();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background via-muted/30 to-background flex flex-col items-center justify-center p-4 sm:p-6">
@@ -106,7 +128,7 @@ function AcceptInviteContent() {
       >
         <Card className="p-6 sm:p-8 backdrop-blur-xl bg-card/90 dark:bg-zinc-950/90 border border-border/80 shadow-2xl rounded-3xl relative overflow-hidden">
           
-          {isLoading ? (
+          {isLoading || (isAccepting && !inviteDetails) ? (
             <div className="py-12 text-center space-y-4">
               <div className="w-10 h-10 border-3 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
               <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">
@@ -213,11 +235,11 @@ function AcceptInviteContent() {
                   <span className="capitalize">{inviteDetails.role} Permissions</span>
                 </div>
                 <p className="text-[11px] text-muted-foreground leading-relaxed">
-                  {inviteDetails.role === 'editor' 
-                    ? 'You can view, create, and edit forms in this team workspace.' 
+                  {inviteDetails.role === 'editor'
+                    ? 'You can create, edit and share forms, and view responses in this workspace.'
                     : inviteDetails.role === 'admin'
-                    ? 'You have full admin access to manage forms and invite team members.'
-                    : 'You have read-only access to view forms, submissions, and analytics.'}
+                    ? 'You can invite and remove users, manage forms and settings, and view analytics.'
+                    : 'Read-only access: you can view forms and responses but cannot edit anything.'}
                 </p>
               </div>
 
@@ -243,14 +265,24 @@ function AcceptInviteContent() {
               ) : (
                 <div className="space-y-2">
                   <Button
-                    onClick={handleAccept}
+                    onClick={() => goToAuth(inviteDetails.hasAccount === false ? 'register' : 'login')}
                     className="w-full h-11 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs shadow-lg shadow-primary/20 flex items-center justify-center gap-2 cursor-pointer"
                   >
-                    <LogIn className="w-4 h-4" />
-                    <span>Log In to Accept Invitation</span>
+                    {inviteDetails.hasAccount === false ? <UserPlus className="w-4 h-4" /> : <LogIn className="w-4 h-4" />}
+                    <span>{inviteDetails.hasAccount === false ? 'Create Account to Accept Invitation' : 'Log In to Accept Invitation'}</span>
                   </Button>
                   <p className="text-[11px] text-center text-muted-foreground">
-                    Don't have an account? Click login to create one and auto-join.
+                    {inviteDetails.hasAccount === false ? 'Already have an account? ' : 'Need a new account? '}
+                    <button
+                      type="button"
+                      onClick={() => goToAuth(inviteDetails.hasAccount === false ? 'login' : 'register')}
+                      className="text-primary font-semibold hover:opacity-80 cursor-pointer"
+                    >
+                      {inviteDetails.hasAccount === false ? 'Log in' : 'Create one'}
+                    </button>
+                  </p>
+                  <p className="text-[11px] text-center text-muted-foreground">
+                    Use <span className="font-semibold text-foreground">{inviteDetails.email}</span>; you'll join the workspace as soon as you're signed in.
                   </p>
                 </div>
               )}

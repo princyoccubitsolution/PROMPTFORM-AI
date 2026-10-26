@@ -18,15 +18,17 @@ interface TeamDashboardProps {
   user: any;
   forms: any[];
   onOpenMyForms?: () => void;
+  // Opens this workspace directly, e.g. right after accepting an invitation
+  initialTeamId?: string | null;
 }
 
-export function TeamDashboard({ user, forms, onOpenMyForms }: TeamDashboardProps) {
+export function TeamDashboard({ user, forms, onOpenMyForms, initialTeamId }: TeamDashboardProps) {
   const router = useRouter();
 
   // State
   const [teams, setTeams] = useState<any[]>([]);
   const [recentActivities, setRecentActivities] = useState<any[]>([]);
-  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(initialTeamId || null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 

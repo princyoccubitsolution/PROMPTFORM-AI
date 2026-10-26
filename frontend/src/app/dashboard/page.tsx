@@ -1140,6 +1140,7 @@ function DashboardContent() {
                   user={user}
                   forms={forms}
                   onOpenMyForms={() => setActiveTab("my_forms")}
+                  initialTeamId={searchParams.get('teamId')}
                 />
               )}
 

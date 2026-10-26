@@ -52,6 +52,9 @@ export default function BuilderPage() {
   const [selectedQuestionId, setSelectedQuestionId] = useState<string | null>(null);
   const [isCopied, setIsCopied] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
+  // Workspace/collaborator viewers get a read-only builder (the API rejects their edits too)
+  const [accessRole, setAccessRole] = useState<string | null>(null);
+  const isReadOnly = accessRole === 'viewer';
   
   // Tab mode & Analytics states
   const { theme, setTheme } = useTheme();
@@ -326,6 +329,7 @@ export default function BuilderPage() {
       if (form.questions?.length > 0) {
         setSelectedQuestionId(form.questions[0].id);
       }
+      api.get(`/forms/${formId}/access`).then((access) => setAccessRole(access?.role || null)).catch(() => {});
     } catch (err: any) {
       alert("Failed to load form details.");
       router.push('/dashboard/ai');
@@ -373,6 +377,10 @@ export default function BuilderPage() {
   };
 
   const handleSaveForm = async () => {
+    if (isReadOnly) {
+      alert("You have view-only access to this form. Ask an editor or admin for edit access.");
+      return;
+    }
     store.setSaving(true);
     try {
       const expiresAtRaw = store.settings.expires_at;
@@ -412,6 +420,10 @@ export default function BuilderPage() {
   };
 
   const handlePublishToggle = async () => {
+    if (isReadOnly) {
+      alert("You have view-only access to this form. Ask an editor or admin for edit access.");
+      return;
+    }
     setIsPublishing(true);
     const newStatus = store.status === 'PUBLISHED' ? 'CLOSED' : 'PUBLISHED';
     try {
@@ -1033,8 +1045,9 @@ export default function BuilderPage() {
             <Button 
               variant="outline" 
               size="sm" 
-              onClick={handleSaveForm} 
-              disabled={store.isSaving}
+              onClick={handleSaveForm}
+              disabled={store.isSaving || isReadOnly}
+              title={isReadOnly ? 'View-only access' : undefined}
               className="h-9 px-2.5 sm:px-3.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold cursor-pointer shadow-sm flex items-center justify-center border-none"
             >
               <Save className="w-4 h-4 sm:mr-1.5" />
@@ -1076,8 +1089,9 @@ export default function BuilderPage() {
             </Button>
 
             <button 
-              onClick={handlePublishToggle} 
-              disabled={isPublishing}
+              onClick={handlePublishToggle}
+              disabled={isPublishing || isReadOnly}
+              title={isReadOnly ? 'View-only access' : undefined}
               className={`h-9 px-2.5 sm:px-4 rounded-lg text-xs font-semibold transition-all shadow-md active:scale-95 disabled:opacity-60 disabled:pointer-events-none flex items-center justify-center ${
                 store.status === 'PUBLISHED' 
                   ? 'bg-destructive hover:bg-rose-700 text-white shadow-md' 
@@ -1090,6 +1104,13 @@ export default function BuilderPage() {
           </div>
         </div>
       </header>
+
+      {isReadOnly && (
+        <div className="bg-amber-500/10 border-b border-amber-500/20 px-6 py-2 text-xs text-amber-700 dark:text-amber-400 flex items-center gap-2 flex-shrink-0" role="status">
+          <Eye className="w-4 h-4 shrink-0" />
+          <span><span className="font-bold">View only.</span> You have viewer access: you can look at this form and its responses, but changes can't be saved.</span>
+        </div>
+      )}
 
       {/* Mode Navigation Tabs (Edit Form vs Analytics View) */}
       <div className="bg-card dark:bg-background border-b border-border dark:border-border px-6 py-2 flex items-center justify-between flex-shrink-0 select-none">

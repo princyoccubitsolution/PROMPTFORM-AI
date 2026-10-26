@@ -1,11 +1,21 @@
-import crypto from 'crypto';
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { db } from '../lib/db';
 import { cache } from '../lib/cache';
 import { authMiddleware, AuthenticatedRequest } from '../middlewares/auth';
 import { subscriptionMiddleware } from '../middlewares/subscription';
-import { isUUID, generateUniqueShareId, hasFormAccess } from '../lib/utils';
+import { isUUID, generateUniqueShareId, hasFormAccess, getFormUserRole } from '../lib/utils';
+import {
+  INVITE_TTL_MS,
+  INVITE_RESEND_COOLDOWN_MS,
+  INVITES_PER_HOUR,
+  createInviteToken,
+  hashInviteToken,
+  isInviteTokenFormat,
+  frontendBaseUrl,
+  effectiveInviteStatus
+} from '../lib/invitations';
+import { getTeamRole, teamRoleAtLeast } from '../middlewares/teamAccess';
 import { logActivity } from '../lib/activity';
 import { FormsService } from '../services/formsService';
 import { AnalyticsService } from '../services/analyticsService';
@@ -521,10 +531,6 @@ router.get('/collaborations/shared-with-me', authMiddleware, async (req: Authent
 
 // ==================== FORM INVITATIONS (must precede /:id) ====================
 
-const FORM_INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-const FORM_INVITE_RESEND_COOLDOWN_MS = 60 * 1000;
-const FORM_INVITES_PER_HOUR = 50;
-
 type FormInvitationRecord = {
   id: string;
   email: string;
@@ -535,24 +541,7 @@ type FormInvitationRecord = {
   createdAt: Date;
 };
 
-const hashInviteToken = (token: string) => crypto.createHash('sha256').update(token).digest('hex');
-
-const createInviteToken = () => {
-  const token = crypto.randomBytes(32).toString('hex');
-  return { token, tokenHash: hashInviteToken(token) };
-};
-
-const buildFormInviteUrl = (req: Request, token: string) => {
-  const reqOrigin = typeof req.headers.origin === 'string' && req.headers.origin.startsWith('http')
-    ? req.headers.origin.replace(/\/+$/, '')
-    : '';
-  const frontendUrl = (reqOrigin || process.env.FRONTEND_URL || 'https://promptform-ai-frontend.vercel.app').replace(/\/+$/, '');
-  return `${frontendUrl}/form-invite?token=${token}`;
-};
-
-// A pending invitation past its expiry is reported as expired even before its row is updated
-const effectiveInviteStatus = (invite: { status: string; expiresAt: Date }) =>
-  invite.status === 'pending' && invite.expiresAt <= new Date() ? 'expired' : invite.status;
+const buildFormInviteUrl = (req: Request, token: string) => `${frontendBaseUrl(req)}/form-invite?token=${token}`;
 
 const serializeInvitation = (invite: FormInvitationRecord) => ({
   id: invite.id,
@@ -564,16 +553,15 @@ const serializeInvitation = (invite: FormInvitationRecord) => ({
   createdAt: invite.createdAt
 });
 
-// Caps invitation emails per sender so the form invite endpoint can't be used to spam addresses
 const inviteLimitReached = async (userId: string) => {
   const sentLastHour = await db.formInvitation.count({
     where: { invitedById: userId, lastSentAt: { gt: new Date(Date.now() - 60 * 60 * 1000) } }
   });
-  return sentLastHour >= FORM_INVITES_PER_HOUR;
+  return sentLastHour >= INVITES_PER_HOUR;
 };
 
 const findInvitationByToken = async (token: string) => {
-  if (!/^[a-f0-9]{64}$/i.test(token)) return null;
+  if (!isInviteTokenFormat(token)) return null;
   return db.formInvitation.findUnique({
     where: { tokenHash: hashInviteToken(token) },
     include: {
@@ -735,6 +723,19 @@ router.post('/invitations/accept/:token', authMiddleware, async (req: Authentica
     });
   } catch (error) {
     console.error('[Forms] Accept invitation error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET: The caller's effective role on a form ('owner' | 'admin' | 'editor' | 'viewer'), for read-only UI
+router.get('/:id/access', authMiddleware, validateUuidMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
+    const role = await getFormUserRole(req.params.id, req.user.id);
+    if (!role) return res.status(403).json({ error: 'Forbidden. You do not have access to this form.' });
+    return res.json({ role, canEdit: role !== 'viewer' });
+  } catch (error) {
+    console.error('[Forms] Access lookup error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -915,6 +916,11 @@ router.post('/', authMiddleware, subscriptionMiddleware, async (req: Authenticat
     if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
     const body = createFormSchema.parse(req.body);
 
+    // Workspace isolation: only editors and above may create forms inside a team
+    if (body.teamId && !teamRoleAtLeast(await getTeamRole(body.teamId, req.user.id), 'editor')) {
+      return res.status(403).json({ error: 'Forbidden. You need the editor role or higher in this workspace to create forms in it.' });
+    }
+
     const form = await FormsService.createForm(req.user.id, body);
 
     await logActivity({
@@ -947,6 +953,16 @@ const updateFormHandler = async (req: AuthenticatedRequest, res: Response) => {
 
     if (!(await hasFormAccess(id, req.user.id, ['admin', 'editor']))) {
       return res.status(403).json({ error: 'Forbidden. You do not have edit rights.' });
+    }
+
+    // Moving a form between workspaces: the target needs editor+, taking it out of a team needs its owner or a team admin
+    if (body.teamId !== undefined && (body.teamId || null) !== form.teamId) {
+      if (body.teamId && !teamRoleAtLeast(await getTeamRole(body.teamId, req.user.id), 'editor')) {
+        return res.status(403).json({ error: 'Forbidden. You need the editor role or higher in the target workspace.' });
+      }
+      if (form.teamId && form.ownerId !== req.user.id && !teamRoleAtLeast(await getTeamRole(form.teamId, req.user.id), 'admin')) {
+        return res.status(403).json({ error: 'Forbidden. Only the form owner or a workspace admin can move this form out of its workspace.' });
+      }
     }
 
     // Auto-generate uniqueShareId and publicUrl if status changes to PUBLISHED and it doesn't exist yet
@@ -1202,7 +1218,7 @@ router.post('/:id/collaborators', authMiddleware, validateUuidMiddleware, async 
       }
 
       const { token, tokenHash } = createInviteToken();
-      const expiresAt = new Date(now.getTime() + FORM_INVITE_TTL_MS);
+      const expiresAt = new Date(now.getTime() + INVITE_TTL_MS);
       const inviteData = { role, tokenHash, status: 'pending', invitedById: req.user.id, lastSentAt: now, expiresAt, acceptedAt: null };
 
       let invitation;
@@ -1403,7 +1419,7 @@ router.post('/:id/invitations/:invitationId/resend', authMiddleware, validateUui
     if (!loaded) return;
     const { form, invitation } = loaded;
 
-    if (Date.now() - invitation.lastSentAt.getTime() < FORM_INVITE_RESEND_COOLDOWN_MS) {
+    if (Date.now() - invitation.lastSentAt.getTime() < INVITE_RESEND_COOLDOWN_MS) {
       return res.status(429).json({ error: 'This invitation was just sent. Please wait a minute before resending it.' });
     }
     if (await inviteLimitReached(req.user.id)) {
@@ -1414,7 +1430,7 @@ router.post('/:id/invitations/:invitationId/resend', authMiddleware, validateUui
     const now = new Date();
     const { count } = await db.formInvitation.updateMany({
       where: { id: invitation.id, status: { in: ['pending', 'expired'] } },
-      data: { tokenHash, status: 'pending', invitedById: req.user.id, lastSentAt: now, expiresAt: new Date(now.getTime() + FORM_INVITE_TTL_MS) }
+      data: { tokenHash, status: 'pending', invitedById: req.user.id, lastSentAt: now, expiresAt: new Date(now.getTime() + INVITE_TTL_MS) }
     });
     if (count !== 1) return res.status(404).json({ error: 'Invitation not found.' });
 
